@@ -141,3 +141,23 @@
   .bk-sec-photo-grid[data-photo-side="right"] .bk-sec-photo { order: 0; }
   .bk-sec-photo img { aspect-ratio: 4 / 3; }
 }
+
+/* Button looks (webButtonStyles), set per button in the web editor. Solid is each template's own style. */
+[data-cta-key][data-bk-btn-style="pill"] { border-radius: 999px !important; }
+[data-cta-key][data-bk-btn-style="outline"] {
+  background: transparent !important;
+  border: 1.5px solid currentColor !important;
+  box-shadow: none !important;
+}
+[data-cta-key][data-bk-btn-style="outline"]:not([style*="color"]) { color: var(--bk-accent, currentColor) !important; }
+[data-cta-key][data-bk-btn-style="link"] {
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+  min-height: 0 !important;
+  text-decoration: underline !important;
+  text-underline-offset: 4px;
+}
+[data-cta-key][data-bk-btn-style="link"]:not([style*="color"]) { color: inherit !important; }

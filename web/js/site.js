@@ -1400,6 +1400,7 @@ function mapLoadedTenant(id, data, slug) {
         webTextFontSizes: coerceStyleMap(data.webTextFontSizes),
         webSurfaceColors: coerceStyleMap(data.webSurfaceColors),
         webButtonColors: coerceStyleMap(data.webButtonColors),
+        webButtonStyles: data.webButtonStyles && typeof data.webButtonStyles === 'object' ? data.webButtonStyles : {},
         webSectionLayouts: coerceStyleMap(data.webSectionLayouts),
         webPage: data.webPage && typeof data.webPage === 'object' ? data.webPage : {},
         webBlocks: data.webBlocks && typeof data.webBlocks === 'object' ? data.webBlocks : {},
@@ -3086,6 +3087,27 @@ function applyWebSurfaceColors(tenant) {
   });
 }
 
+var BUTTON_LOOKS = { solid: 1, outline: 1, pill: 1, link: 1 };
+
+/** Button looks chosen in the web editor (`webButtonStyles`: solid, outline, pill, or link), by CTA key. */
+function buttonStylesFrom(tenant) {
+  var raw = tenant && Object.prototype.hasOwnProperty.call(tenant, 'webButtonStyles')
+    ? tenant.webButtonStyles
+    : window.__bkCachedWebButtonStyles;
+  var out = {};
+  if (raw && typeof raw === 'object') {
+    Object.keys(raw).forEach(function (k) { if (BUTTON_LOOKS[raw[k]] && raw[k] !== 'solid') out[k] = raw[k]; });
+  }
+  window.__bkCachedWebButtonStyles = out;
+  return out;
+}
+
+/** Web editor: re-apply button looks from unsaved changes. */
+window.__bkPreviewButtonStyles = function (map) {
+  window.__bkCachedWebButtonStyles = map || {};
+  applyWebButtonColors({ webButtonColors: window.__bkCachedWebButtonColors || {}, webButtonStyles: map || {} });
+};
+
 /** Per-CTA fills from tenant `webButtonColors` (`data-cta-key`). Header keys are shared across pages. */
 function applyWebButtonColors(tenant) {
   if (!tenant) return;
@@ -3105,11 +3127,20 @@ function applyWebButtonColors(tenant) {
     colors = window.__bkCachedWebButtonColors || {};
   }
   window.__bkCachedWebButtonColors = colors;
+  var styles = buttonStylesFrom(tenant);
   [].forEach.call(document.querySelectorAll('[data-cta-key]'), function(el) {
     var key = (el.getAttribute('data-cta-key') || '').trim();
     if (!key) return;
     var col = colors[key];
-    if (col && col.charAt(0) === '#') {
+    var look = styles[key] || '';
+    if (look) el.setAttribute('data-bk-btn-style', look);
+    else el.removeAttribute('data-bk-btn-style');
+    if (look === 'outline' || look === 'link') {
+      // No fill for these looks: the chosen color becomes the text and outline color.
+      el.style.removeProperty('background');
+      if (col && col.charAt(0) === '#') el.style.setProperty('color', col, 'important');
+      else el.style.removeProperty('color');
+    } else if (col && col.charAt(0) === '#') {
       try {
         el.style.setProperty('background', col, 'important');
         // Keep the label readable on light fills (e.g. a white button on a dark section).

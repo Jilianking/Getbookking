@@ -78,6 +78,7 @@ const PUBLIC_SITE_KEYS = [
   "webTextFontSizes",
   "webSurfaceColors",
   "webButtonColors",
+  "webButtonStyles",
   "webSectionLayouts",
   "webPage",
   "webBlocks",

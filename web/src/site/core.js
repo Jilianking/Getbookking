@@ -1266,6 +1266,7 @@ function mapLoadedTenant(id, data, slug) {
         webTextFontSizes: coerceStyleMap(data.webTextFontSizes),
         webSurfaceColors: coerceStyleMap(data.webSurfaceColors),
         webButtonColors: coerceStyleMap(data.webButtonColors),
+        webButtonStyles: data.webButtonStyles && typeof data.webButtonStyles === 'object' ? data.webButtonStyles : {},
         webSectionLayouts: coerceStyleMap(data.webSectionLayouts),
         webPage: data.webPage && typeof data.webPage === 'object' ? data.webPage : {},
         webBlocks: data.webBlocks && typeof data.webBlocks === 'object' ? data.webBlocks : {},

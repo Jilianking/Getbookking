@@ -1275,6 +1275,9 @@
           syncFrames();
         }
         break;
+      case 'button-styles':
+        if (typeof window.__bkPreviewButtonStyles === 'function') window.__bkPreviewButtonStyles((data.payload || {}).webButtonStyles || {});
+        break;
       case 'section-photos':
         if (typeof window.__bkPreviewSectionPhotos === 'function') {
           window.__bkPreviewSectionPhotos((data.payload || {}).webSectionPhotos || {});

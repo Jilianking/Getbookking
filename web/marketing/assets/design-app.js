@@ -166,7 +166,7 @@
     'siteAnnouncementEnabled', 'siteAnnouncementText', 'seoTitle', 'seoDescription',
     'webThemeId', 'webCopyOverrides', 'webSurfaceColors', 'webButtonColors', 'webTextColors', 'webTextFontSizes',
     'bookingFormStyleId', 'formSchema', 'guidedStepTitles', 'guidedStepOrder', 'reviews',
-    'webSectionLayouts', 'webPage', 'webFooter', 'instagramHandle', 'webBlocks', 'webHeaderBrand', 'webTabIcon', 'webLogoHeight', 'logoUrl', 'webSectionPhotos',
+    'webSectionLayouts', 'webPage', 'webFooter', 'instagramHandle', 'webBlocks', 'webHeaderBrand', 'webTabIcon', 'webLogoHeight', 'logoUrl', 'webSectionPhotos', 'webButtonStyles',
     'heroImageUrl', 'heroImagePixelWidth', 'heroImagePixelHeight',
     'featuredWorkImages', 'galleryImages',
     'studio12PhilosophyImageUrl', 'studio12PhilosophyImagePixelWidth', 'studio12PhilosophyImagePixelHeight',
@@ -540,6 +540,7 @@
     postToFrame('color-patch', colorPatchFromTenant(state.tenant));
     postBlocks();
     postSectionPhotos();
+    postToFrame('button-styles', { webButtonStyles: state.tenant.webButtonStyles || {} });
     postHeaderBrand();
     // The preview loads layouts from publicSites, which can lag the tenant; send ours so it always matches.
     postToFrame('layouts', (state.tenant && state.tenant.webSectionLayouts) || {});
@@ -920,6 +921,48 @@
   function postSectionPhotos() {
     if (!state.tenant) return;
     postToFrame('section-photos', { webSectionPhotos: state.tenant.webSectionPhotos || {} });
+  }
+
+  /* ── Button looks: Solid, Outline, Pill, Link for each button in the open section ── */
+
+  var BUTTON_LOOK_OPTIONS = [
+    { id: 'solid', label: 'Solid' }, { id: 'outline', label: 'Outline' },
+    { id: 'pill', label: 'Pill' }, { id: 'link', label: 'Link' }
+  ];
+
+  function buttonStylesHtml(payload) {
+    var buttons = (payload && payload.buttons) || [];
+    if (!buttons.length) return '';
+    var saved = (state.tenant && state.tenant.webButtonStyles) || {};
+    var seen = {};
+    var html = '<h2>' + (buttons.length > 1 ? 'Buttons' : 'Button') + '</h2>';
+    buttons.forEach(function (b) {
+      if (!b.key || seen[b.key]) return;
+      seen[b.key] = 1;
+      if (buttons.length > 1) html += '<p class="design-hint design-btn-look-label">' + escHtml(b.label) + '</p>';
+      html += segmentedHtml('data-button-look', b.key, BUTTON_LOOK_OPTIONS, saved[b.key] || 'solid');
+    });
+    return html;
+  }
+
+  function wireButtonStyles(host, payload) {
+    host.querySelectorAll('[data-button-look]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var key = btn.getAttribute('data-layout-slot');
+        var map = Object.assign({}, state.tenant.webButtonStyles || {});
+        var look = btn.getAttribute('data-button-look');
+        if (look === 'solid') delete map[key];
+        else map[key] = look;
+        queueUpdate({ webButtonStyles: map });
+        postToFrame('button-styles', { webButtonStyles: map });
+        host.querySelectorAll('[data-button-look]').forEach(function (other) {
+          if (other.getAttribute('data-layout-slot') !== key) return;
+          var on = other === btn;
+          other.classList.toggle('is-on', on);
+          other.setAttribute('aria-checked', on ? 'true' : 'false');
+        });
+      });
+    });
   }
 
   function saveSectionPhoto(id, photo) {
@@ -1395,7 +1438,7 @@
     var customFooter = showsFooter && footerSettings().enabled === true;
     // Top to bottom: this section's own settings, then Add section, then the page order.
     var sec = payload.section;
-    var html = (customFooter ? '' : layoutPickerHtml(payload)) + alignControlHtml(payload) +
+    var html = (customFooter ? '' : layoutPickerHtml(payload)) + alignControlHtml(payload) + buttonStylesHtml(payload) +
       (sec && sec.id ? blockControlsHtml(sec, payload) : '');
     if (showsFooter) html += footerEditorHtml();
     var showsHeader = layoutSlotFor(payload) === 'header';
@@ -1471,6 +1514,7 @@
     }
     wireBlockControls(host, payload);
     wireSectionPhotoControls(host, payload);
+    wireButtonStyles(host, payload);
     var sectionToggle = host.querySelector('[data-section-toggle]');
     if (sectionToggle) {
       sectionToggle.addEventListener('click', function () {

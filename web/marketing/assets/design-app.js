@@ -912,7 +912,7 @@
 
   /* ── Photo beside a section's content (sections.js on the site) ── */
 
-  var SECTION_PHOTO_IDS = { promo: 1, about: 1, services: 1, reviews: 1, info: 1, location: 1, philosophy: 1, process: 1, book: 1 };
+  var SECTION_PHOTO_IDS = { promo: 1, about: 1, reviews: 1, info: 1, location: 1, philosophy: 1, process: 1, book: 1 };
 
   function sectionPhotoAllowed(id) {
     return !!SECTION_PHOTO_IDS[id] || /^blk-/.test(id || '');

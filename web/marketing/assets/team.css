@@ -304,62 +304,162 @@
   margin-top: 6px;
 }
 
-/* Member page mock */
-.tm-page-cover {
-  height: 70px;
-  margin: -22px -22px 0;
-  border-radius: 16px 16px 0 0;
-  background: var(--brand-cream);
+/* Desktop + iPhone composite (website section) */
+.tm-devices {
+  position: relative;
+  padding: 0 0 56px;
 }
 
-.tm-page-avatar {
-  width: 64px;
-  height: 64px;
-  margin-top: -32px;
-  border: 3px solid #fff;
+.tm-browser {
+  margin: 0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: #1c1612;
+  box-shadow: 0 24px 64px rgba(44, 32, 24, 0.16);
 }
 
-.tm-page-name {
-  margin-top: 8px;
-  color: var(--text-primary);
-  font-family: "Instrument Serif", serif;
-  font-size: 26px;
-}
-
-.tm-page-bio {
-  margin: 4px 0 12px;
-  color: var(--text-secondary);
-  line-height: 1.55;
-}
-
-.tm-page-gallery {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
+.tm-browser-bar {
+  display: flex;
+  align-items: center;
   gap: 6px;
-  margin-bottom: 12px;
+  padding: 9px 12px;
+  background: #f3ece1;
+  border-bottom: 1px solid var(--border);
 }
 
-.tm-page-gallery span {
-  aspect-ratio: 1;
-  border-radius: 8px;
-  background: var(--brand-cream);
-}
-
-.tm-page-gallery span:nth-child(2) {
-  background: #e6d9bd;
-}
-
-.tm-page-gallery span:nth-child(3) {
+.tm-browser-bar span {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
   background: #d9c9a8;
 }
 
-.tm-page-book {
-  padding: 10px;
-  border-radius: 8px;
-  background: var(--brand-dark);
+.tm-browser-bar em {
+  flex: 1;
+  min-width: 0;
+  margin-left: 10px;
+  padding: 3px 10px;
+  overflow: hidden;
+  border-radius: 6px;
+  background: #fff;
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-style: normal;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tm-browser img,
+.tm-browser video {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.tm-devices .tm-browser {
+  width: 88%;
+}
+
+/* iPhone 16 frame, built in CSS: titanium edge, black bezel, Dynamic Island, side buttons. */
+.tm-iphone {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 34%;
+  max-width: 210px;
+  margin: 0;
+  aspect-ratio: 71.6 / 147.6;
+  padding: 3.2%;
+  border-radius: 18% / 8.7%;
+  background: linear-gradient(135deg, #5b544c 0%, #2a2622 28%, #1a1714 55%, #3d3731 100%);
+  box-shadow:
+    inset 0 0 0 1.5px #8a8279,
+    inset 0 0 0 3px #141110,
+    -2px 2px 0 #0f0d0b,
+    -4px 4px 0 #0c0a09,
+    -20px 30px 50px rgba(26, 20, 16, 0.38);
+  transform: perspective(1200px) rotateY(-16deg) rotateX(5deg) rotateZ(1deg);
+  transform-origin: 50% 60%;
+}
+
+.tm-iphone-screen {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  border-radius: 15% / 7%;
+  background: #0b0908;
+}
+
+.tm-iphone-status {
+  display: flex;
+  align-items: center;
+  height: 6.5%;
+  padding: 0 11%;
+  background: #3b2b22;
   color: #fff;
+  font-size: clamp(7px, 0.75vw, 10px);
   font-weight: 500;
-  text-align: center;
+}
+
+.tm-iphone-screen img {
+  display: block;
+  width: 100%;
+  height: 93.5%;
+  object-fit: cover;
+  object-position: top;
+}
+
+/* Fades out the "portfolio coming soon" line at the bottom of the screenshot. */
+.tm-iphone-screen::after {
+  content: "";
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 16%;
+  background: linear-gradient(to bottom, rgba(11, 9, 8, 0), #0b0908 70%);
+}
+
+.tm-iphone-island {
+  position: absolute;
+  top: 2.2%;
+  left: 50%;
+  width: 32%;
+  height: 4.4%;
+  border-radius: 999px;
+  background: #000;
+  transform: translateX(-50%);
+}
+
+.tm-iphone-btn {
+  position: absolute;
+  width: 3px;
+  border-radius: 2px;
+  background: #4a443d;
+}
+
+.tm-iphone-btn--action { left: -3px; top: 17%; height: 5%; }
+.tm-iphone-btn--up { left: -3px; top: 25%; height: 8%; }
+.tm-iphone-btn--down { left: -3px; top: 35%; height: 8%; }
+.tm-iphone-btn--power { right: -3px; top: 28%; height: 13%; }
+
+/* See it live */
+.tm-reel {
+  box-shadow: 0 24px 64px rgba(44, 32, 24, 0.14);
+}
+
+.tm-live-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 24px;
+  margin: 18px 0 0;
+  font-size: 14px;
+}
+
+.tm-live-links a {
+  color: var(--brand-warm);
 }
 
 /* Calendar mock */
@@ -538,6 +638,18 @@
 }
 
 @media (max-width: 600px) {
+  .tm-devices {
+    padding-bottom: 40px;
+  }
+
+  .tm-devices .tm-browser {
+    width: 92%;
+  }
+
+  .tm-iphone {
+    width: 38%;
+  }
+
   .tm-bento {
     gap: 12px;
   }

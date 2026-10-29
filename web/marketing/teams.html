@@ -39,7 +39,7 @@
   <link rel="stylesheet" href="assets/legal.css" />
   <link rel="stylesheet" href="assets/footer.css?v=2" />
   <link rel="stylesheet" href="assets/messaging.css?v=1" />
-  <link rel="stylesheet" href="assets/team.css?v=1" />
+  <link rel="stylesheet" href="assets/team.css?v=3" />
   <link rel="stylesheet" href="assets/nav.css?v=22" />
 </head>
 <body>
@@ -135,7 +135,7 @@
               <img class="tm-avatar" src="assets/barber/james-ortiz.jpg" alt="" width="38" height="38" />
               <div class="tm-member-info">
                 <div class="tm-member-name">James Ortiz</div>
-                <div class="tm-member-role">Manager</div>
+                <div class="tm-member-role">Barber</div>
               </div>
               <span class="tm-pill">Keeps 60%</span>
             </div>
@@ -151,7 +151,7 @@
           </div>
           <div class="tm-float">
             <div class="tm-float-time">Today · 10:30 AM</div>
-            <div class="tm-float-title">Fade with Diego</div>
+            <div class="tm-float-title">Signature fade with Diego</div>
             <div class="tm-float-note">Paid · studio share sent</div>
           </div>
         </div>
@@ -180,10 +180,10 @@
               <h3>Split pay, done for you</h3>
               <p>Each person gets paid into their own Stripe account. The studio’s share is sent automatically, and it’s reversed if the payment is refunded.</p>
             </div>
-            <div class="tm-split-demo" aria-label="Example split of an $80 service">
-              <div class="tm-split-row"><span>$80 service</span><span>Barber 60 · Studio 40</span></div>
+            <div class="tm-split-demo" aria-label="Example split of a $48 Signature fade">
+              <div class="tm-split-row"><span>$48 Signature fade</span><span>Barber 60 · Studio 40</span></div>
               <div class="tm-split-bar" aria-hidden="true"><span></span><span></span></div>
-              <div class="tm-split-row tm-split-row--muted"><span>$48 to the barber</span><span>$32 to the studio</span></div>
+              <div class="tm-split-row tm-split-row--muted"><span>$28.80 to the barber</span><span>$19.20 to the studio</span></div>
             </div>
           </article>
 
@@ -203,7 +203,7 @@
             <div class="msg-label">Clients</div>
             <h3>A page for each person</h3>
             <p>Bio, portfolio, and their own booking link on your site.</p>
-            <div class="tm-slug">/team/diego/book</div>
+            <div class="tm-slug">/team/james-ortiz</div>
           </article>
 
           <article class="tm-tile">
@@ -239,7 +239,35 @@
       </div>
     </section>
 
-    <section class="msg-section msg-section--alt" id="split-pay">
+    <section class="msg-section msg-section--alt tm-live" id="see-it-live">
+      <div class="msg-inner">
+        <div class="msg-heading">
+          <div class="msg-label">See it live</div>
+          <h2>Stone Cut Barbers runs on Studio.</h2>
+          <p>Three barbers, one site. Clients pick their barber from the team page and book from that barber’s own profile.</p>
+        </div>
+        <figure class="tm-browser tm-reel">
+          <div class="tm-browser-bar" aria-hidden="true"><span></span><span></span><span></span><em>stone-cut-barbers.getbookking.com</em></div>
+          <video
+            autoplay
+            muted
+            loop
+            playsinline
+            preload="none"
+            poster="assets/barber/stone-cut-reel-poster.jpg"
+            data-lazy
+            width="1920"
+            height="1080"
+            aria-label="Stone Cut Barbers team roster and barber profile walkthrough on Get Bookking"
+          >
+            <source data-src="assets/barber/stone-cut-reel.mp4?v=1" type="video/mp4" />
+          </video>
+        </figure>
+        <p class="tm-live-links"><a href="https://stone-cut-barbers.getbookking.com/team" target="_blank" rel="noopener noreferrer">View the team page →</a> <a href="https://stone-cut-barbers.getbookking.com/team/james-ortiz" target="_blank" rel="noopener noreferrer">View James’s profile →</a></p>
+      </div>
+    </section>
+
+    <section class="msg-section" id="split-pay">
       <div class="msg-inner msg-split">
         <div class="msg-split-copy">
           <div class="msg-label">Split pay</div>
@@ -265,15 +293,24 @@
       </div>
     </section>
 
-    <section class="msg-section" id="website">
+    <section class="msg-section msg-section--alt" id="website">
       <div class="msg-inner msg-split">
-        <div class="tm-mock" aria-label="Example team member booking page">
-          <div class="tm-page-cover" aria-hidden="true"></div>
-          <img class="tm-avatar tm-page-avatar" src="assets/barber/diego-cole.jpg" alt="" width="64" height="64" />
-          <div class="tm-page-name">Diego Cole</div>
-          <div class="tm-page-bio">Barber at Stone Cut. Skin fades, tapers, and beard work.</div>
-          <div class="tm-page-gallery" aria-hidden="true"><span></span><span></span><span></span></div>
-          <div class="tm-page-book">Book with Diego</div>
+        <div class="tm-devices">
+          <figure class="tm-browser">
+            <div class="tm-browser-bar" aria-hidden="true"><span></span><span></span><span></span><em>stone-cut-barbers.getbookking.com/team</em></div>
+            <img src="assets/barber/stonecut-team-desktop.jpg" alt="Stone Cut Barbers team page showing Marcus Stone, Diego Cole, and James Ortiz" width="1440" height="834" loading="lazy" decoding="async" />
+          </figure>
+          <figure class="tm-iphone" aria-label="James Ortiz booking page on iPhone">
+            <span class="tm-iphone-btn tm-iphone-btn--action" aria-hidden="true"></span>
+            <span class="tm-iphone-btn tm-iphone-btn--up" aria-hidden="true"></span>
+            <span class="tm-iphone-btn tm-iphone-btn--down" aria-hidden="true"></span>
+            <span class="tm-iphone-btn tm-iphone-btn--power" aria-hidden="true"></span>
+            <div class="tm-iphone-screen">
+              <div class="tm-iphone-status" aria-hidden="true">9:41</div>
+              <img src="assets/barber/stonecut-member-mobile.png" alt="James Ortiz’s booking page with a Book with James button" width="786" height="1704" loading="lazy" decoding="async" />
+              <span class="tm-iphone-island" aria-hidden="true"></span>
+            </div>
+          </figure>
         </div>
         <div class="msg-split-copy">
           <div class="msg-label">Website</div>
@@ -289,7 +326,7 @@
       </div>
     </section>
 
-    <section class="msg-section msg-section--alt" id="texting">
+    <section class="msg-section" id="texting">
       <div class="msg-inner msg-split">
         <div class="msg-split-copy">
           <div class="msg-label">Texting</div>
@@ -312,7 +349,7 @@
       </div>
     </section>
 
-    <section class="msg-section" id="calendar">
+    <section class="msg-section msg-section--alt" id="calendar">
       <div class="msg-inner msg-split">
         <div class="tm-mock" aria-label="Example shared team calendar">
           <div class="tm-cal-filter">
@@ -327,15 +364,15 @@
             <span class="tm-cal-who">James</span>
             <span class="tm-cal-who">Diego</span>
             <span class="tm-cal-time">9:00</span>
-            <span class="tm-cal-slot tm-cal-slot--a">Cut</span>
+            <span class="tm-cal-slot tm-cal-slot--a">Signature fade</span>
             <span class="tm-cal-slot tm-cal-slot--empty"></span>
-            <span class="tm-cal-slot tm-cal-slot--c">Beard</span>
+            <span class="tm-cal-slot tm-cal-slot--c">Beard sculpt</span>
             <span class="tm-cal-time">10:30</span>
             <span class="tm-cal-slot tm-cal-slot--empty"></span>
-            <span class="tm-cal-slot tm-cal-slot--b">Taper</span>
-            <span class="tm-cal-slot tm-cal-slot--c">Fade</span>
+            <span class="tm-cal-slot tm-cal-slot--b">Hot towel shave</span>
+            <span class="tm-cal-slot tm-cal-slot--c">Signature fade</span>
             <span class="tm-cal-time">12:00</span>
-            <span class="tm-cal-slot tm-cal-slot--a">Cut + beard</span>
+            <span class="tm-cal-slot tm-cal-slot--a">The Full Stone Cut</span>
             <span class="tm-cal-slot tm-cal-slot--b">Kids cut</span>
             <span class="tm-cal-slot tm-cal-slot--empty"></span>
           </div>
@@ -354,7 +391,7 @@
       </div>
     </section>
 
-    <section class="msg-section msg-section--alt" id="roles">
+    <section class="msg-section" id="roles">
       <div class="msg-inner">
         <div class="msg-heading">
           <div class="msg-label">Roles and permissions</div>
@@ -392,7 +429,7 @@
       </div>
     </section>
 
-    <section class="msg-section" id="how-it-works">
+    <section class="msg-section msg-section--alt" id="how-it-works">
       <div class="msg-inner">
         <div class="msg-heading">
           <div class="msg-label">How it works</div>
@@ -418,7 +455,7 @@
       </div>
     </section>
 
-    <section class="msg-section msg-section--alt" id="plans">
+    <section class="msg-section" id="plans">
       <div class="msg-inner">
         <div class="msg-heading">
           <div class="msg-label">Team plans</div>
@@ -524,5 +561,6 @@
   <script src="js/firebase-config.js"></script>
   <script src="assets/nav.js"></script>
   <script src="assets/nav-auth.js?v=4"></script>
+  <script src="assets/lazy-video.js?v=1" defer></script>
 </body>
 </html>

@@ -708,8 +708,11 @@
   function applyHeaderBrand(payload) {
     var mode = payload.mode === 'logo' || payload.mode === 'both' ? payload.mode : 'name';
     var logo = String(payload.logoUrl || '');
+    var h = parseInt(payload.height, 10);
     document.querySelectorAll('[data-bk-nav-brand]').forEach(function (el) {
       el.setAttribute('data-mode', mode);
+      if (h >= 24 && h <= 96) el.style.setProperty('--bk-logo-h', h + 'px');
+      else el.style.removeProperty('--bk-logo-h');
       var img = el.querySelector('.bk-nav-logo');
       if (!logo) {
         el.removeAttribute('data-has-logo');

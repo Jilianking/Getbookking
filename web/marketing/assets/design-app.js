@@ -166,7 +166,7 @@
     'siteAnnouncementEnabled', 'siteAnnouncementText', 'seoTitle', 'seoDescription',
     'webThemeId', 'webCopyOverrides', 'webSurfaceColors', 'webButtonColors', 'webTextColors', 'webTextFontSizes',
     'bookingFormStyleId', 'formSchema', 'guidedStepTitles', 'guidedStepOrder', 'reviews',
-    'webSectionLayouts', 'webPage', 'webFooter', 'instagramHandle', 'webBlocks', 'webHeaderBrand', 'webTabIcon', 'logoUrl',
+    'webSectionLayouts', 'webPage', 'webFooter', 'instagramHandle', 'webBlocks', 'webHeaderBrand', 'webTabIcon', 'webLogoHeight', 'logoUrl',
     'heroImageUrl', 'heroImagePixelWidth', 'heroImagePixelHeight',
     'featuredWorkImages', 'galleryImages',
     'studio12PhilosophyImageUrl', 'studio12PhilosophyImagePixelWidth', 'studio12PhilosophyImagePixelHeight',
@@ -1019,7 +1019,11 @@
 
   function postHeaderBrand() {
     if (!state.tenant) return;
-    postToFrame('header-brand', { mode: state.tenant.webHeaderBrand || 'name', logoUrl: state.tenant.logoUrl || '' });
+    postToFrame('header-brand', {
+      mode: state.tenant.webHeaderBrand || 'name',
+      logoUrl: state.tenant.logoUrl || '',
+      height: state.tenant.webLogoHeight || 0
+    });
   }
 
   /** Same logo controls as the Photos panel, shown when the header is selected. */
@@ -1033,6 +1037,7 @@
       '<button type="button" role="radio" class="design-seg-opt" data-header-brand="name">Name</button>' +
       '<button type="button" role="radio" class="design-seg-opt" data-header-brand="logo">Logo</button>' +
       '<button type="button" role="radio" class="design-seg-opt" data-header-brand="both">Both</button></div></div>' +
+      '<div class="design-field"><label>Logo size</label><input type="range" class="design-range" min="24" max="96" step="2" value="40" data-logo-height aria-label="Logo size"></div>' +
       '<div class="design-field"><label>Browser tab icon</label><div class="design-seg" role="radiogroup">' +
       '<button type="button" role="radio" class="design-seg-opt" data-tab-icon="logo">Logo</button>' +
       '<button type="button" role="radio" class="design-seg-opt" data-tab-icon="letter">First letter</button></div></div>';
@@ -1053,6 +1058,10 @@
       b.classList.toggle('is-on', on);
       b.setAttribute('aria-checked', on ? 'true' : 'false');
       b.disabled = !t.logoUrl && b.getAttribute('data-header-brand') !== 'name';
+    });
+    document.querySelectorAll('[data-logo-height]').forEach(function (r) {
+      r.value = String(t.webLogoHeight || 40);
+      r.disabled = !t.logoUrl || brand === 'name';
     });
     document.querySelectorAll('[data-tab-icon]').forEach(function (b) {
       var on = b.getAttribute('data-tab-icon') === tab;
@@ -1081,6 +1090,19 @@
 
   /** One listener for every copy of the logo controls (Photos panel and the header's panel). */
   function wireLogoControls() {
+    // Size slider: the preview follows while dragging; the change is saved when it's let go.
+    document.addEventListener('input', function (ev) {
+      var r = ev.target;
+      if (!r || !r.hasAttribute || !r.hasAttribute('data-logo-height')) return;
+      postToFrame('header-brand', { mode: state.tenant.webHeaderBrand || 'name', logoUrl: state.tenant.logoUrl || '', height: Number(r.value) });
+    });
+    document.addEventListener('change', function (ev) {
+      var r = ev.target;
+      if (!r || !r.hasAttribute || !r.hasAttribute('data-logo-height')) return;
+      queueUpdate({ webLogoHeight: Number(r.value) });
+      fillLogo();
+      postHeaderBrand();
+    });
     document.addEventListener('click', function (ev) {
       var el = ev.target && ev.target.closest && ev.target.closest('[data-logo-upload],[data-logo-remove],[data-header-brand],[data-tab-icon]');
       if (!el || el.disabled) return;

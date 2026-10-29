@@ -101,12 +101,12 @@
   position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap;
 }
 .bk-nav-logo {
-  height: 40px;
+  height: var(--bk-logo-h, 40px);
   width: auto;
-  max-width: 160px;
+  max-width: calc(var(--bk-logo-h, 40px) * 4);
   object-fit: contain;
   vertical-align: middle;
 }
 @media (max-width: 720px) {
-  .bk-nav-logo { height: 32px; max-width: 120px; }
+  .bk-nav-logo { height: calc(var(--bk-logo-h, 40px) * 0.75); max-width: min(calc(var(--bk-logo-h, 40px) * 3), 45vw); }
 }

@@ -733,10 +733,18 @@ function siteNameSpan(tenant, fallback, styleKey) {
  * Header brand: the shop name, its logo, or both, as chosen in the web editor (webHeaderBrand).
  * Without a logo it's always the name.
  */
+/** Logo height chosen in the editor (24–96 px), or 0 for the default. */
+function logoHeightPx(v) {
+  var n = parseInt(v, 10);
+  return isNaN(n) ? 0 : Math.max(24, Math.min(n, 96));
+}
+
 function navBrandHtml(tenant, nameHtml) {
   var mode = tenant && (tenant.webHeaderBrand === 'logo' || tenant.webHeaderBrand === 'both') ? tenant.webHeaderBrand : 'name';
   var logo = tenant && tenant.logoUrl ? String(tenant.logoUrl) : '';
-  return '<span class="bk-nav-brand" data-bk-nav-brand data-mode="' + mode + '"' + (logo ? ' data-has-logo="1"' : '') + '>' +
+  var h = logoHeightPx(tenant && tenant.webLogoHeight);
+  return '<span class="bk-nav-brand" data-bk-nav-brand data-mode="' + mode + '"' + (logo ? ' data-has-logo="1"' : '') +
+    (h ? ' style="--bk-logo-h:' + h + 'px"' : '') + '>' +
     (logo ? '<img class="bk-nav-logo" src="' + esc(logo) + '" alt="">' : '') +
     '<span class="bk-nav-name">' + nameHtml + '</span></span>';
 }
@@ -1263,6 +1271,7 @@ function mapLoadedTenant(id, data, slug) {
         webBlocks: data.webBlocks && typeof data.webBlocks === 'object' ? data.webBlocks : {},
         webHeaderBrand: (data.webHeaderBrand || '').toString(),
         webTabIcon: (data.webTabIcon || '').toString(),
+        webLogoHeight: typeof data.webLogoHeight === 'number' ? data.webLogoHeight : 0,
         webFooter: data.webFooter && typeof data.webFooter === 'object' ? data.webFooter : {},
         bookingFormStyleId: data.bookingFormStyleId || '',
         // Prefer calendar when either field says so (see bookingModeResolved).

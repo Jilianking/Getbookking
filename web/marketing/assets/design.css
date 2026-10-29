@@ -1803,3 +1803,9 @@ button.design-sec-row {
 .design-add-section-opt span { color: var(--bk-muted); font-size: 12px; }
 .design-add-section-opt:hover,
 .design-add-section-opt:focus-visible { border-color: var(--bk-ink); }
+.design-range {
+  width: 100%;
+  accent-color: var(--bk-ink);
+  margin: 4px 0 14px;
+}
+.design-range:disabled { opacity: 0.4; }

@@ -158,14 +158,19 @@ html[data-bk-layout-services="cards"] .luxe-home-service-row {
   background: rgba(255, 255, 255, 0.35);
 }
 
-/* Blade, Stonecut and Studio 12 show services as cards by default; list puts one per row. */
+/* Blade, Stonecut and Studio 12 show services as cards by default. List is a centered column,
+   and with 4 or more services it splits into two columns on wide screens (6 → 3 and 3). */
 html[data-bk-layout-services="list"] :is(.blade-services-grid, .stonecut-services, .s12-svc-grid) {
   grid-template-columns: 1fr !important;
   max-width: 760px;
-}
-html[data-bk-layout-services="list"] .s12-svc-grid {
   margin-left: auto;
   margin-right: auto;
+}
+@media (min-width: 900px) {
+  html[data-bk-layout-services="list"] :is(.blade-services-grid, .stonecut-services, .s12-svc-grid):has(> :nth-child(4)) {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    max-width: 1100px;
+  }
 }
 
 html[data-bk-layout-shop="list"] :is(.luxe-shop-grid, .stonecut-shop-grid) {

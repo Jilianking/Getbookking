@@ -1807,3 +1807,19 @@ button.design-sec-row {
   margin: 4px 0 14px;
 }
 .design-range:disabled { opacity: 0.4; }
+
+/* Photo left / Photo right layout cards: a photo block beside lines of text. */
+.design-layout-thumb--photoLeft {
+  background:
+    linear-gradient(#2c2018, #2c2018) 58% 12px / 30% 3px no-repeat,
+    linear-gradient(#b9ab96, #b9ab96) 58% 20px / 22% 3px no-repeat,
+    linear-gradient(135deg, #a8977f, #cbbca5) 8px 5px / 36% 26px no-repeat,
+    #f4efe6;
+}
+.design-layout-thumb--photoRight {
+  background:
+    linear-gradient(#2c2018, #2c2018) 8px 12px / 30% 3px no-repeat,
+    linear-gradient(#b9ab96, #b9ab96) 8px 20px / 22% 3px no-repeat,
+    linear-gradient(135deg, #a8977f, #cbbca5) calc(100% - 8px) 5px / 36% 26px no-repeat,
+    #f4efe6;
+}

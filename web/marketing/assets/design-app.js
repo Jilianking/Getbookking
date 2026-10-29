@@ -723,7 +723,41 @@
     return '';
   }
 
+  /** Photo left / Photo right cards at the end of the Layout grid, for sections without a photo of their own. */
+  function photoLayoutCardsHtml(sec) {
+    var photo = sec && ((state.tenant && state.tenant.webSectionPhotos) || {})[sec.id];
+    var side = photo && photo.url ? (photo.side === 'right' ? 'right' : 'left') : '';
+    return [['left', 'Photo left', 'photoLeft'], ['right', 'Photo right', 'photoRight']].map(function (o) {
+      return '<button type="button" class="design-layout-opt' + (side === o[0] ? ' is-on' : '') + '" data-sec-photo-side="' + o[0] + '">' +
+        '<span class="design-layout-thumb design-layout-thumb--' + o[2] + '" aria-hidden="true"></span>' + o[1] + '</button>';
+    }).join('');
+  }
+
+  function photoLayoutExtrasHtml(sec) {
+    var photo = sec && ((state.tenant && state.tenant.webSectionPhotos) || {})[sec.id];
+    if (!photo || !photo.url) return '';
+    return '<div class="design-logo-row"><div class="design-logo-thumb" style="background-image:url(&quot;' +
+      escHtml(String(photo.url)) + '&quot;)"></div><div class="design-logo-actions">' +
+      '<button type="button" class="design-btn design-btn--ghost design-btn--small" data-sec-photo-upload>Replace photo</button></div></div>';
+  }
+
   function layoutPickerHtml(payload) {
+    var sec = payload.section;
+    var withPhoto = sec && sec.id && sectionPhotoAllowed(sec.id);
+    var html = layoutCardsHtml(payload, withPhoto);
+    if (!html && !withPhoto) return '';
+    if (!html) {
+      // No template layouts here: plain, or a photo on either side.
+      var on = !((state.tenant.webSectionPhotos || {})[sec.id] || {}).url;
+      html = '<h2>Layout</h2><div class="design-layout-grid">' +
+        '<button type="button" class="design-layout-opt' + (on ? ' is-on' : '') + '" data-sec-photo-side="none">' +
+        '<span class="design-layout-thumb design-layout-thumb--stack" aria-hidden="true"></span>No photo</button>' +
+        photoLayoutCardsHtml(sec) + '</div>';
+    }
+    return html + (withPhoto ? photoLayoutExtrasHtml(sec) : '');
+  }
+
+  function layoutCardsHtml(payload, withPhoto) {
     var slot = layoutSlotFor(payload);
     var options = slot && LAYOUT_OPTIONS[slot];
     if (!options) return '';
@@ -733,13 +767,15 @@
     options = options.filter(function (opt) { return hiddenOptions.indexOf(opt.id) === -1; });
     var saved = state.tenant && state.tenant.webSectionLayouts;
     var current = (saved && saved[slot]) || layoutDefault(slot, payload);
+    var sec = payload.section;
+    var hasPhoto = withPhoto && !!(((state.tenant.webSectionPhotos || {})[sec.id] || {}).url);
     var html = '<h2>Layout</h2><div class="design-layout-grid">';
     options.forEach(function (opt) {
-      html += '<button type="button" class="design-layout-opt' + (opt.id === current ? ' is-on' : '') + '" data-layout-slot="' + slot + '" data-layout-value="' + opt.id + '">' +
+      html += '<button type="button" class="design-layout-opt' + (opt.id === current && !hasPhoto ? ' is-on' : '') + '" data-layout-slot="' + slot + '" data-layout-value="' + opt.id + '"' + (withPhoto ? ' data-clears-photo' : '') + '>' +
         '<span class="design-layout-thumb design-layout-thumb--' + (opt.thumb || opt.id) + '" aria-hidden="true"></span>' +
         escHtml(opt.label) + '</button>';
     });
-    return html + '</div>';
+    return html + (withPhoto ? photoLayoutCardsHtml(sec) : '') + '</div>';
   }
 
   var ALIGN_SLOTS = ['hero', 'gallery', 'services', 'about', 'team', 'shop', 'promo'];
@@ -884,20 +920,6 @@
   function postSectionPhotos() {
     if (!state.tenant) return;
     postToFrame('section-photos', { webSectionPhotos: state.tenant.webSectionPhotos || {} });
-  }
-
-  function sectionPhotoControlHtml(sec) {
-    if (!sec || !sec.id || !sectionPhotoAllowed(sec.id)) return '';
-    var photo = ((state.tenant && state.tenant.webSectionPhotos) || {})[sec.id] || null;
-    var side = photo && photo.url ? (photo.side === 'right' ? 'right' : 'left') : 'none';
-    return '<h2>Photo</h2>' + segmentedHtml('data-sec-photo-side', sec.id, [
-      { id: 'none', label: 'None' }, { id: 'left', label: 'Left' }, { id: 'right', label: 'Right' }
-    ], side) +
-      (photo && photo.url
-        ? '<div class="design-logo-row"><div class="design-logo-thumb design-sec-photo-thumb" style="background-image:url(&quot;' +
-          escHtml(String(photo.url)) + '&quot;)"></div><div class="design-logo-actions">' +
-          '<button type="button" class="design-btn design-btn--ghost design-btn--small" data-sec-photo-upload>Replace photo</button></div></div>'
-        : '<p class="design-hint">Pick Left or Right to add a photo beside this section.</p>');
   }
 
   function saveSectionPhoto(id, photo) {
@@ -1373,7 +1395,7 @@
     var customFooter = showsFooter && footerSettings().enabled === true;
     // Top to bottom: this section's own settings, then Add section, then the page order.
     var sec = payload.section;
-    var html = (customFooter ? '' : layoutPickerHtml(payload)) + sectionPhotoControlHtml(sec) + alignControlHtml(payload) +
+    var html = (customFooter ? '' : layoutPickerHtml(payload)) + alignControlHtml(payload) +
       (sec && sec.id ? blockControlsHtml(sec, payload) : '');
     if (showsFooter) html += footerEditorHtml();
     var showsHeader = layoutSlotFor(payload) === 'header';
@@ -1427,6 +1449,11 @@
         map[slot] = value;
         queueUpdate({ webSectionLayouts: map });
         postToFrame('layouts', map);
+        if (btn.hasAttribute('data-clears-photo') && payload.section && ((state.tenant.webSectionPhotos || {})[payload.section.id] || {}).url) {
+          saveSectionPhoto(payload.section.id, null);
+          renderSectionBody(payload);
+          return;
+        }
         host.querySelectorAll('[data-layout-value][data-layout-slot="' + slot + '"]').forEach(function (other) {
           other.classList.toggle('is-on', other === btn);
         });

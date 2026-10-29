@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap" rel="stylesheet" />
   <base href="/" />
-  <link rel="stylesheet" href="/assets/app.css?v=50" />
+  <link rel="stylesheet" href="/assets/app.css?v=52" />
 </head>
 <body>
   <div id="gateLoading" class="app-gate">
@@ -53,6 +53,7 @@
           <div class="app-rail-label">Main</div>
           <div class="app-rail-tree">
             <a class="app-nav" data-route="dashboard" href="/app">Dashboard</a>
+            <a class="app-nav" data-route="requests" href="/app/requests">Requests <span class="app-badge app-nav-badge hidden" id="navRequestsBadge">0</span></a>
             <a class="app-nav" data-route="calendar" href="/app/calendar">Calendar</a>
             <a class="app-nav" data-route="clients" href="/app/clients">Clients</a>
           </div>
@@ -168,6 +169,20 @@
                 </div>
                 <div id="upcomingList"></div>
                 <p class="app-empty" id="upcomingEmpty">Nothing on the books after today. Next 7 days are open.</p>
+              </article>
+              <article class="app-card app-chart-card hidden" id="dashRevenue">
+                <div class="app-card-head">
+                  <h2>Revenue</h2>
+                  <span class="app-chart-range">Last 8 weeks</span>
+                </div>
+                <div id="dashRevenueBody"></div>
+              </article>
+              <article class="app-card app-chart-card" id="dashBookings">
+                <div class="app-card-head">
+                  <h2>Bookings</h2>
+                  <span class="app-chart-range">Last 8 weeks</span>
+                </div>
+                <div id="dashBookingsBody"></div>
               </article>
               <article class="app-card app-dash-setup hidden" id="dashSetup">
                 <div class="app-card-head">
@@ -289,6 +304,32 @@
         <div class="app-sheet-actions">
           <button type="button" class="app-btn app-btn--ghost" id="calDetailDone">Close</button>
         </div>
+      </div>
+
+      <section id="viewRequests" class="app-view hidden" data-view="requests">
+        <div class="app-greeting app-pay-head">
+          <div>
+            <h1>Requests</h1>
+            <p>Bookings from your website. Confirm a time, ask for a deposit, or decline.</p>
+          </div>
+        </div>
+        <div class="app-toolbar">
+          <div class="app-seg" role="tablist" aria-label="Request status" id="reqTabs"></div>
+        </div>
+        <article class="app-card">
+          <div id="reqList"></div>
+          <p class="app-empty hidden" id="reqEmpty"></p>
+        </article>
+      </section>
+
+      <div class="app-sheet-scrim hidden" id="reqDetailScrim"></div>
+      <div class="app-sheet hidden" id="reqDetailSheet" role="dialog" aria-modal="true" aria-labelledby="reqDetailTitle">
+        <div class="app-sheet-top">
+          <h2 id="reqDetailTitle">Request</h2>
+          <button type="button" class="app-icon-btn" id="reqDetailClose" aria-label="Close">×</button>
+        </div>
+        <div id="reqDetailBody"></div>
+        <div class="app-sheet-actions" id="reqDetailActions"></div>
       </div>
 
       <section id="viewClients" class="app-view hidden" data-view="clients">
@@ -624,12 +665,14 @@
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-functions-compat.js"></script>
   <script src="/js/firebase-config.js"></script>
-  <script src="/assets/app-session.js?v=2"></script>
-  <script src="/assets/app-dashboard.js?v=16"></script>
+  <script src="/assets/app-session.js?v=3"></script>
+  <script src="/assets/app-dashboard.js?v=18"></script>
+  <script src="/assets/app-requests.js?v=1"></script>
+  <script src="/assets/app-dash-charts.js?v=2"></script>
   <script src="/assets/app-payments.js?v=6"></script>
   <script src="/assets/app-payouts.js?v=2"></script>
   <script src="/assets/app-clients.js?v=2"></script>
   <script src="/assets/app-shop.js?v=1"></script>
-  <script src="/assets/app.js?v=18"></script>
+  <script src="/assets/app.js?v=20"></script>
 </body>
 </html>

@@ -71,6 +71,8 @@
         data.canSendClientSms != null
           ? !!data.canSendClientSms
           : fallback.canSendClientSms,
+      accessRole: String(data.accessRole || "").trim().toLowerCase(),
+      managerPermissions: data.managerPermissions || {},
     };
   }
 

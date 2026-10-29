@@ -19,6 +19,7 @@
 
   var ROUTES = [
     "dashboard",
+    "requests",
     "calendar",
     "clients",
     "shop",
@@ -61,6 +62,7 @@
       if (ROUTES.indexOf(q) !== -1) return q;
       return "dashboard";
     }
+    if (path.indexOf("/app/requests") !== -1) return "requests";
     if (path.indexOf("/app/calendar") !== -1) return "calendar";
     if (path.indexOf("/app/clients") !== -1) return "clients";
     if (path.indexOf("/app/shop") !== -1) return "shop";
@@ -154,6 +156,7 @@
     }
     var titles = {
       dashboard: "Dashboard",
+      requests: "Requests",
       calendar: "Calendar",
       clients: "Clients",
       shop: "Shop",
@@ -170,6 +173,9 @@
     }
     if (route === "payouts" && window.ShopAppPayouts) {
       ShopAppPayouts.load(session);
+    }
+    if (route === "requests" && window.ShopAppRequests) {
+      ShopAppRequests.load(session);
     }
     if (route === "clients" && window.ShopAppClients) {
       ShopAppClients.load(session);
@@ -260,8 +266,10 @@
         if (window.ShopAppPayments) ShopAppPayments.attach(session);
         if (window.ShopAppClients) ShopAppClients.attach(session);
         if (window.ShopAppShop) ShopAppShop.attach(session);
+        if (window.ShopAppRequests) ShopAppRequests.attach(session);
         setRoute(routeFromLocation(), session);
         if (window.ShopAppDashboard) ShopAppDashboard.load(session);
+        if (window.ShopAppDashCharts) ShopAppDashCharts.load(session);
       })
       .catch(function (err) {
         if (err && err.code === "no-shop") {

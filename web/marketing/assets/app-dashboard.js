@@ -208,6 +208,7 @@
     var startAttr = opts.start
       ? ' data-cal-ms="' + opts.start.getTime() + '"'
       : "";
+    if (opts.reqId) startAttr += ' data-req-id="' + esc(opts.reqId) + '"';
     return (
       '<button type="button" class="app-row' +
       (unread ? "" : " is-read") +
@@ -254,6 +255,15 @@
     root.addEventListener("click", function (ev) {
       var btn = ev.target.closest("[data-open-calendar]");
       if (!btn) return;
+      var reqId = btn.getAttribute("data-req-id");
+      if (reqId && global.ShopAppRequests) {
+        // New requests open on the Requests page, where they can be confirmed or declined.
+        closeInbox();
+        var link = document.querySelector('a.app-nav[data-route="requests"]');
+        if (link) link.click();
+        global.ShopAppRequests.open(reqId);
+        return;
+      }
       var ms = parseInt(btn.getAttribute("data-cal-ms") || "", 10);
       goCalendar(ms ? new Date(ms) : null);
     });
@@ -262,6 +272,7 @@
   function paint(session, bookings) {
     var charter = isCharter(session.tenant);
     var scopedList = scoped(bookings, session);
+    if (global.ShopAppDashCharts) global.ShopAppDashCharts.paintBookings(scopedList);
     var now = new Date();
     var todayStart = startOfDay(now);
     var tomorrow = new Date(todayStart);
@@ -292,6 +303,7 @@
           sub: bits.join(" · "),
           meta: relative(b.createdAt),
           start: b.start,
+          reqId: b.id,
         });
       })
       .join("");
@@ -1759,6 +1771,7 @@
 
   global.ShopAppDashboard = {
     load: load,
+    sendDepositLink: sendDepositLink,
     openNew: openNewSheet,
     goTo: function (date) {
       calState.day = startOfDay(date instanceof Date ? date : new Date(date));

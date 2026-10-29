@@ -748,6 +748,9 @@
     else if (/galleryPage$/.test(key) || surface === 'gallery') label = 'Gallery';
     else if (/\.about$/.test(key)) label = 'About';
     else if (/\.promo$/.test(key)) label = 'Promo';
+    // Meet the team borrows the featured colors on some templates; it is still the team section.
+    else if ((el.getAttribute && el.getAttribute('data-bk-section') === 'team') ||
+      (el.classList && el.classList.contains('bk-team-roster-section'))) label = 'Team';
     else if (/\.featured$/.test(key) || surface === 'featured') label = 'Featured';
     else if (/team/i.test(key)) label = 'Team';
     else if (surface === 'sidebar' || (el.classList && el.classList.contains('tattoo-sidebar-panel'))) label = 'Sidebar';

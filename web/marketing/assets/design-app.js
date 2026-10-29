@@ -1886,6 +1886,7 @@
   }
 
   function renderPhotos() {
+    fillLogo();
     var t = state.tenant;
     setPhotoEl($('heroPhotoPreview'), t.heroImageUrl, 'No hero photo yet');
     setPhotoEl($('philosophyPhotoPreview'), t.studio12PhilosophyImageUrl, 'Philosophy');

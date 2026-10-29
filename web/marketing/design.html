@@ -140,7 +140,33 @@
         </div>
 
         <div id="panelPhotos" class="design-panel-body hidden">
-          <p class="design-panel-lead">Hero, featured, and gallery photos. Cropped, then saved to this site.</p>
+          <p class="design-panel-lead">Logo, hero, featured, and gallery photos. Photos are cropped, then saved to this site.</p>
+          <section class="design-photo-block">
+            <h3>Logo</h3>
+            <div class="design-logo-row">
+              <div class="design-logo-thumb" id="logoThumb" aria-hidden="true"></div>
+              <div class="design-logo-actions">
+                <button type="button" class="design-btn design-btn--ghost design-btn--small" id="uploadLogoBtn">Upload logo</button>
+                <button type="button" class="design-text-btn" id="removeLogoBtn">Remove</button>
+              </div>
+            </div>
+            <p class="design-hint">A PNG with a see-through background looks best.</p>
+            <div class="design-field">
+              <label>Header shows</label>
+              <div class="design-seg" role="radiogroup" id="headerBrandSeg">
+                <button type="button" role="radio" class="design-seg-opt" data-header-brand="name">Name</button>
+                <button type="button" role="radio" class="design-seg-opt" data-header-brand="logo">Logo</button>
+                <button type="button" role="radio" class="design-seg-opt" data-header-brand="both">Both</button>
+              </div>
+            </div>
+            <div class="design-field">
+              <label>Browser tab icon</label>
+              <div class="design-seg" role="radiogroup" id="tabIconSeg">
+                <button type="button" role="radio" class="design-seg-opt" data-tab-icon="logo">Logo</button>
+                <button type="button" role="radio" class="design-seg-opt" data-tab-icon="letter">First letter</button>
+              </div>
+            </div>
+          </section>
           <section class="design-photo-block">
             <h3>Hero</h3>
             <div class="design-photo-hero" id="heroPhotoPreview">
@@ -197,32 +223,6 @@
           <div id="inspectorSheet" class="hidden">
             <p class="design-hint" id="inspectorSheetHint">Double-click the photo in the preview, or upload here.</p>
             <button type="button" class="design-btn design-btn--primary" id="inspectorUploadBtn">Upload photo</button>
-          </div>
-
-          <div class="design-divider"></div>
-          <h2>Logo</h2>
-          <div class="design-logo-row">
-            <div class="design-logo-thumb" id="logoThumb" aria-hidden="true"></div>
-            <div class="design-logo-actions">
-              <button type="button" class="design-btn design-btn--ghost design-btn--small" id="uploadLogoBtn">Upload logo</button>
-              <button type="button" class="design-text-btn" id="removeLogoBtn">Remove</button>
-            </div>
-          </div>
-          <p class="design-hint">A PNG with a see-through background looks best.</p>
-          <div class="design-field">
-            <label>Header shows</label>
-            <div class="design-seg" role="radiogroup" id="headerBrandSeg">
-              <button type="button" role="radio" class="design-seg-opt" data-header-brand="name">Name</button>
-              <button type="button" role="radio" class="design-seg-opt" data-header-brand="logo">Logo</button>
-              <button type="button" role="radio" class="design-seg-opt" data-header-brand="both">Both</button>
-            </div>
-          </div>
-          <div class="design-field">
-            <label>Browser tab icon</label>
-            <div class="design-seg" role="radiogroup" id="tabIconSeg">
-              <button type="button" role="radio" class="design-seg-opt" data-tab-icon="logo">Logo</button>
-              <button type="button" role="radio" class="design-seg-opt" data-tab-icon="letter">First letter</button>
-            </div>
           </div>
 
           <div class="design-divider"></div>
@@ -502,6 +502,6 @@
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-storage-compat.js"></script>
   <script src="js/firebase-config.js"></script>
-  <script src="assets/design-app.js?v=63"></script>
+  <script src="assets/design-app.js?v=64"></script>
 </body>
 </html>

@@ -1827,3 +1827,7 @@ button.design-sec-row {
     linear-gradient(135deg, #a8977f, #cbbca5) calc(100% - 8px) 5px / 36% 26px no-repeat,
     #f4efe6;
 }
+
+/* Photo crop: a compact window so the frame, zoom, and buttons all fit at once. */
+.design-modal-card--crop { width: min(580px, 100%); }
+.design-modal-card--crop .design-crop-stage { display: flex; justify-content: center; }

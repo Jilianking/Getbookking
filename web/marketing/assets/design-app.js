@@ -2306,8 +2306,8 @@
 
   /** Crop frame width that also fits the window's height, so tall frames keep the buttons on screen. */
   function cropFrameWidth(stage, ratio) {
-    var maxH = Math.max(220, (window.innerHeight || 800) - 330);
-    return Math.max(160, Math.min(720, stage.clientWidth || 720, Math.round(maxH * ratio)));
+    var maxH = Math.max(200, Math.min(360, Math.round((window.innerHeight || 800) * 0.42)));
+    return Math.max(160, Math.min(520, stage.clientWidth || 520, Math.round(maxH * ratio)));
   }
 
   function openCrop(file, aspect) {

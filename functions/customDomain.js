@@ -56,6 +56,10 @@ const customDomainTarget = defineString("CUSTOM_DOMAIN_TARGET", {
   default: "domains.getbookking.com",
   description: "Address customer domains point at (Cloudflare fallback origin)",
 });
+const customDomainApexIp = defineString("CUSTOM_DOMAIN_APEX_IP", {
+  default: "35.252.212.83",
+  description: "Fixed address of the small server that forwards bare domains to www (with a certificate)",
+});
 /** Flat USD added on top of Namecheap cost (customer-facing price). */
 const domainMarkupUsd = defineString("DOMAIN_MARKUP_USD", {
   default: "0",
@@ -911,7 +915,7 @@ async function cloudflareRequest(method, path, body) {
 /**
  * Registers a hostname with Cloudflare (or finds the existing one). Cloudflare issues its certificate.
  * Only www is registered: Cloudflare can't approve a bare domain that points at us through
- * Namecheap's ALIAS record, so the bare domain forwards to www at Namecheap instead.
+ * Namecheap's ALIAS record, so the bare domain points at our small forwarding server instead.
  */
 async function ensureCustomHostname(hostname) {
   const found = await cloudflareRequest(
@@ -958,12 +962,17 @@ const APEX_WEB_TYPES = ["A", "AAAA", "CNAME", "ALIAS", "URL", "URL301", "FRAME"]
 /** Leftover Cloudflare approval records from the old bare-domain setup. */
 const OLD_VERIFY_TXT_HOSTS = new Set(["_cf-custom-hostname", "_acme-challenge"]);
 
-function apexForwardRecord(domain) {
-  return { host: "@", type: "URL301", address: `https://${wwwOf(domain)}/` };
+function apexIp() {
+  return (customDomainApexIp.value() || "").trim();
+}
+
+/** The bare domain points at our small forwarding server, which sends visitors to www securely. */
+function apexForwardRecord() {
+  return { host: "@", type: "A", address: apexIp(), ttl: 300 };
 }
 
 /**
- * Domains connected before the bare domain forwarded to www: swap its record for the forward,
+ * Domains set up before the bare domain pointed at the forwarding server: swap its record,
  * keeping every other record (email, verification, www).
  */
 async function forwardApexToWww(domain) {
@@ -971,7 +980,10 @@ async function forwardApexToWww(domain) {
   if (!records.some((r) => r.host === "www")) {
     throw new Error("getHosts returned no www record; not rewriting DNS");
   }
-  const forward = apexForwardRecord(domain);
+  const forward = apexForwardRecord();
+  const apexWeb = records.filter((r) => r.host === "@" && APEX_WEB_TYPES.includes(r.type));
+  const stale = records.some((r) => r.type === "TXT" && OLD_VERIFY_TXT_HOSTS.has(r.host));
+  if (!stale && apexWeb.length === 1 && apexWeb[0].type === "A" && apexWeb[0].address === forward.address) return;
   const kept = records.filter(
     (r) =>
       !(r.host === "@" && APEX_WEB_TYPES.includes(r.type)) &&
@@ -993,6 +1005,17 @@ async function forwardApexToWww(domain) {
   if (!namecheapStatusOk(raw)) {
     throw new Error(`setHosts failed: ${namecheapErrorMessage(raw) || "unknown"}`);
   }
+}
+
+/** Live domains on an older layout (or after the forwarding server moves): repoint the bare domain. */
+async function keepApexPointed(tenantRef, tenant) {
+  const domain = (tenant.customDomain || "").toString().trim().toLowerCase();
+  if (tenant.customDomainStatus !== "active" || !domain || !apexIp()) return false;
+  if (tenant.customDomainApexTarget === apexIp()) return false;
+  await forwardApexToWww(domain);
+  await tenantRef.set({ customDomainApexTarget: apexIp() }, { merge: true });
+  console.log("keepApexPointed", tenantRef.id, domain, apexIp());
+  return true;
 }
 
 async function removeCustomHostnames(ids) {
@@ -1072,7 +1095,7 @@ async function pointDomainAtBookking(domain, keptRecords, { switchToNamecheapDns
     }
   }
   const records = [
-    apexForwardRecord(domain),
+    apexForwardRecord(),
     { host: "www", type: "CNAME", address: target },
     ...(keptRecords || []).filter((r) => !(r.host === "@" && APEX_WEB_TYPES.includes(r.type)) && r.host !== "www"),
   ];
@@ -1110,7 +1133,7 @@ async function connectDomainToBookking(tenantRef, tenant) {
     const kept = afterTransfer ? await readExistingEmailRecords(domain) : [];
     const keptCount = await pointDomainAtBookking(domain, kept, { switchToNamecheapDns: afterTransfer });
     patch.customDomainDnsPointedAt = admin.firestore.FieldValue.serverTimestamp();
-    patch.customDomainApexForwardedAt = admin.firestore.FieldValue.serverTimestamp();
+    patch.customDomainApexTarget = apexIp();
     patch.customDomainKeptRecordCount = keptCount;
   }
   const www = await ensureCustomHostname(wwwOf(domain));
@@ -1148,6 +1171,7 @@ function disconnectedDomainPatch() {
     customDomainCloudflareIds: del,
     customDomainDnsPointedAt: del,
     customDomainApexForwardedAt: del,
+    customDomainApexTarget: del,
     customDomainKeptRecordCount: del,
     customDomainConnectingSince: del,
     customDomainLiveAt: del,
@@ -1273,15 +1297,13 @@ async function advanceCustomDomain(tenantRef, notifyDomainLive) {
     const connected = await connectDomainToBookking(tenantRef, tenant);
     return connected ? "connect-started" : "waiting-for-cloudflare";
   }
-  if (!tenant.customDomainApexForwardedAt) {
-    // Connected under the old setup: forward the bare domain to www and drop its Cloudflare hostname.
+  if (tenant.customDomainApexTarget !== apexIp()) {
+    // Set up under an older layout: point the bare domain at the forwarding server and drop any
+    // Cloudflare hostname for it.
     await forwardApexToWww(domain);
     await removeCustomHostnames(hosts.filter((h) => h && h.id !== wwwHostname.id).map((h) => h.id));
     await tenantRef.set(
-      {
-        customDomainApexForwardedAt: admin.firestore.FieldValue.serverTimestamp(),
-        customDomainCloudflareIds: [wwwHostname.id],
-      },
+      { customDomainApexTarget: apexIp(), customDomainCloudflareIds: [wwwHostname.id] },
       { merge: true }
     );
   }
@@ -2084,6 +2106,11 @@ function registerCustomDomainFunctions(exportsObj, options) {
           console.error("renewCustomDomains", doc.id, e.message || e);
         }
         outcomes[outcome] = (outcomes[outcome] || 0) + 1;
+        try {
+          await keepApexPointed(doc.ref, doc.data() || {});
+        } catch (e) {
+          console.warn("keepApexPointed", doc.id, e.message || e);
+        }
       }
       console.log("renewCustomDomains", JSON.stringify(outcomes));
       return null;
@@ -2887,7 +2914,7 @@ function registerCustomDomainFunctions(exportsObj, options) {
 
   /**
    * Public resolve for Cloudflare worker / SPA fallback.
-   * GET ?host=bleustattoos.com → { slug, status }
+   * GET ?host=bleustattoos.com → { slug, status } (also ?domain=, from the forwarding server)
    * GET ?slug=bleustattoos → { slug, domain } when that shop has a connected domain (subdomain forwarding).
    */
   exportsObj.resolveTenantDomain = functions.https.onRequest(async (req, res) => {
@@ -2922,7 +2949,8 @@ function registerCustomDomainFunctions(exportsObj, options) {
       return;
     }
 
-    let host = ((req.query && req.query.host) || "").toString().trim().toLowerCase();
+    // `domain` is how the forwarding server asks before getting a certificate.
+    let host = ((req.query && (req.query.host || req.query.domain)) || "").toString().trim().toLowerCase();
     host = host.replace(/^https?:\/\//, "").replace(/\/.*$/, "");
     if (!host || host.length > 253) {
       res.status(400).json({ error: "host required" });

@@ -9,8 +9,8 @@
  *   Response: { ok, host, slug, status } — no tenantId.
  *   Only status=active domains are served. While a domain is still connecting, page visits are
  *   sent to {slug}.getbookking.com so the shop's site works meanwhile. No hardcoded domain map.
- *   Every address ends at https://www.{domain}. The bare domain forwards to www at Namecheap
- *   (Cloudflare can't approve a bare domain on an ALIAS record). Page visits are forwarded with a
+ *   Every address ends at https://www.{domain}. The bare domain points at a small forwarding server
+ *   that sends it to www (Cloudflare can't approve a bare domain on an ALIAS record). Page visits are forwarded with a
  *   temporary redirect (302) so a lapsed domain falls back to the subdomain at once:
  *     http://… → https://…
  *     {domain}/x → www.{domain}/x   (if a request for the bare domain reaches us)

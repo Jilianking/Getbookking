@@ -1022,15 +1022,30 @@
     postToFrame('header-brand', { mode: state.tenant.webHeaderBrand || 'name', logoUrl: state.tenant.logoUrl || '' });
   }
 
+  /** Same logo controls as the Photos panel, shown when the header is selected. */
+  function logoControlsHtml() {
+    return '<h2>Logo</h2>' +
+      '<div class="design-logo-row"><div class="design-logo-thumb" data-logo-thumb aria-hidden="true"></div>' +
+      '<div class="design-logo-actions">' +
+      '<button type="button" class="design-btn design-btn--ghost design-btn--small" data-logo-upload>Upload logo</button>' +
+      '<button type="button" class="design-text-btn" data-logo-remove>Remove</button></div></div>' +
+      '<div class="design-field"><label>Header shows</label><div class="design-seg" role="radiogroup">' +
+      '<button type="button" role="radio" class="design-seg-opt" data-header-brand="name">Name</button>' +
+      '<button type="button" role="radio" class="design-seg-opt" data-header-brand="logo">Logo</button>' +
+      '<button type="button" role="radio" class="design-seg-opt" data-header-brand="both">Both</button></div></div>' +
+      '<div class="design-field"><label>Browser tab icon</label><div class="design-seg" role="radiogroup">' +
+      '<button type="button" role="radio" class="design-seg-opt" data-tab-icon="logo">Logo</button>' +
+      '<button type="button" role="radio" class="design-seg-opt" data-tab-icon="letter">First letter</button></div></div>';
+  }
+
   function fillLogo() {
     var t = state.tenant || {};
-    var thumb = $('logoThumb');
-    if (thumb) {
+    document.querySelectorAll('[data-logo-thumb]').forEach(function (thumb) {
       thumb.style.backgroundImage = t.logoUrl ? 'url("' + String(t.logoUrl).replace(/"/g, '%22') + '")' : '';
       thumb.classList.toggle('is-empty', !t.logoUrl);
-    }
-    if ($('uploadLogoBtn')) $('uploadLogoBtn').textContent = t.logoUrl ? 'Replace logo' : 'Upload logo';
-    if ($('removeLogoBtn')) $('removeLogoBtn').classList.toggle('hidden', !t.logoUrl);
+    });
+    document.querySelectorAll('[data-logo-upload]').forEach(function (b) { b.textContent = t.logoUrl ? 'Replace logo' : 'Upload logo'; });
+    document.querySelectorAll('[data-logo-remove]').forEach(function (b) { b.classList.toggle('hidden', !t.logoUrl); });
     var brand = t.webHeaderBrand === 'logo' || t.webHeaderBrand === 'both' ? t.webHeaderBrand : 'name';
     var tab = t.webTabIcon === 'letter' ? 'letter' : 'logo';
     document.querySelectorAll('[data-header-brand]').forEach(function (b) {
@@ -1064,10 +1079,14 @@
     setStatus('Logo uploaded', 'is-ok');
   }
 
+  /** One listener for every copy of the logo controls (Photos panel and the header's panel). */
   function wireLogoControls() {
-    if ($('uploadLogoBtn')) $('uploadLogoBtn').addEventListener('click', function () { beginUpload({ type: 'logo' }); });
-    if ($('removeLogoBtn')) {
-      $('removeLogoBtn').addEventListener('click', function () {
+    document.addEventListener('click', function (ev) {
+      var el = ev.target && ev.target.closest && ev.target.closest('[data-logo-upload],[data-logo-remove],[data-header-brand],[data-tab-icon]');
+      if (!el || el.disabled) return;
+      if (el.hasAttribute('data-logo-upload')) {
+        beginUpload({ type: 'logo' });
+      } else if (el.hasAttribute('data-logo-remove')) {
         openConfirmModal({
           title: 'Remove logo',
           body: 'Remove your logo from your website and app? The header will show your business name.',
@@ -1078,20 +1097,14 @@
             postHeaderBrand();
           }
         });
-      });
-    }
-    document.querySelectorAll('[data-header-brand]').forEach(function (b) {
-      b.addEventListener('click', function () {
-        queueUpdate({ webHeaderBrand: b.getAttribute('data-header-brand') });
+      } else if (el.hasAttribute('data-header-brand')) {
+        queueUpdate({ webHeaderBrand: el.getAttribute('data-header-brand') });
         fillLogo();
         postHeaderBrand();
-      });
-    });
-    document.querySelectorAll('[data-tab-icon]').forEach(function (b) {
-      b.addEventListener('click', function () {
-        queueUpdate({ webTabIcon: b.getAttribute('data-tab-icon') });
+      } else {
+        queueUpdate({ webTabIcon: el.getAttribute('data-tab-icon') });
         fillLogo();
-      });
+      }
     });
   }
 
@@ -1275,6 +1288,8 @@
     var customFooter = showsFooter && footerSettings().enabled === true;
     var html = (customFooter ? '' : layoutPickerHtml(payload)) + alignControlHtml(payload) + sectionControlsHtml(payload);
     if (showsFooter) html += footerEditorHtml();
+    var showsHeader = layoutSlotFor(payload) === 'header';
+    if (showsHeader) html = logoControlsHtml() + html;
     if (showsServices) {
       html += '<h2>Services</h2><p class="design-hint">Name, price, and length. These save right away.</p>' +
         '<div id="sectionServices"></div>' +
@@ -1299,6 +1314,7 @@
       bookingBtn.addEventListener('click', function () { setPanel('booking'); });
     }
     if (showsFooter) wireFooterEditor(host, payload);
+    if (showsHeader) fillLogo();
     if (showsProducts) {
       renderProducts();
       $('sectionAddProductBtn').addEventListener('click', startProductDraft);

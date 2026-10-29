@@ -377,7 +377,7 @@ html[data-bk-layout-hero-align="right"] :is(.classic-hero-left, .blade-hero-left
 html[data-bk-layout-gallery-align="left"] :is([data-bk-surface-key$=".featured"], [data-bk-surface-key$=".gallery"], [data-bk-surface-key$=".galleryPage"]),
 html[data-bk-layout-services-align="left"] [data-bk-surface-key$=".services"],
 html[data-bk-layout-about-align="left"] [data-bk-surface-key$=".about"],
-html[data-bk-layout-team-align="left"] :is([data-bk-surface-key$=".team"], [data-bk-surface-key$=".teamPage"]),
+html[data-bk-layout-team-align="left"] :is([data-bk-surface-key$=".team"], [data-bk-surface-key$=".teamPage"], .bk-team-roster-section),
 html[data-bk-layout-shop-align="left"] :is([data-bk-surface-key$=".shop"], [data-bk-surface-key$=".shopPage"]) {
   --bk-align: left;
   --bk-justify: flex-start;
@@ -387,7 +387,7 @@ html[data-bk-layout-shop-align="left"] :is([data-bk-surface-key$=".shop"], [data
 html[data-bk-layout-gallery-align="center"] :is([data-bk-surface-key$=".featured"], [data-bk-surface-key$=".gallery"], [data-bk-surface-key$=".galleryPage"]),
 html[data-bk-layout-services-align="center"] [data-bk-surface-key$=".services"],
 html[data-bk-layout-about-align="center"] [data-bk-surface-key$=".about"],
-html[data-bk-layout-team-align="center"] :is([data-bk-surface-key$=".team"], [data-bk-surface-key$=".teamPage"]),
+html[data-bk-layout-team-align="center"] :is([data-bk-surface-key$=".team"], [data-bk-surface-key$=".teamPage"], .bk-team-roster-section),
 html[data-bk-layout-shop-align="center"] :is([data-bk-surface-key$=".shop"], [data-bk-surface-key$=".shopPage"]) {
   --bk-align: center;
   --bk-justify: center;
@@ -397,7 +397,7 @@ html[data-bk-layout-shop-align="center"] :is([data-bk-surface-key$=".shop"], [da
 html[data-bk-layout-gallery-align="right"] :is([data-bk-surface-key$=".featured"], [data-bk-surface-key$=".gallery"], [data-bk-surface-key$=".galleryPage"]),
 html[data-bk-layout-services-align="right"] [data-bk-surface-key$=".services"],
 html[data-bk-layout-about-align="right"] [data-bk-surface-key$=".about"],
-html[data-bk-layout-team-align="right"] :is([data-bk-surface-key$=".team"], [data-bk-surface-key$=".teamPage"]),
+html[data-bk-layout-team-align="right"] :is([data-bk-surface-key$=".team"], [data-bk-surface-key$=".teamPage"], .bk-team-roster-section),
 html[data-bk-layout-shop-align="right"] :is([data-bk-surface-key$=".shop"], [data-bk-surface-key$=".shopPage"]) {
   --bk-align: right;
   --bk-justify: flex-end;
@@ -407,14 +407,14 @@ html[data-bk-layout-shop-align="right"] :is([data-bk-surface-key$=".shop"], [dat
 html[data-bk-layout-gallery-align] :is([data-bk-surface-key$=".featured"], [data-bk-surface-key$=".gallery"], [data-bk-surface-key$=".galleryPage"]) :is(h1, h2, h3, p, div, ul, li, address, [class*="eyebrow"], [class*="label"], [class*="heading"], [class*="title"]),
 html[data-bk-layout-services-align] [data-bk-surface-key$=".services"] :is(h1, h2, h3, p, div, ul, li, address, [class*="eyebrow"], [class*="label"], [class*="heading"], [class*="title"]),
 html[data-bk-layout-about-align] [data-bk-surface-key$=".about"] :is(h1, h2, h3, p, div, ul, li, address, [class*="eyebrow"], [class*="label"], [class*="heading"], [class*="title"]),
-html[data-bk-layout-team-align] :is([data-bk-surface-key$=".team"], [data-bk-surface-key$=".teamPage"]) :is(h1, h2, h3, p, div, ul, li, address, [class*="eyebrow"], [class*="label"], [class*="heading"], [class*="title"]),
+html[data-bk-layout-team-align] :is([data-bk-surface-key$=".team"], [data-bk-surface-key$=".teamPage"], .bk-team-roster-section) :is(h1, h2, h3, p, div, ul, li, address, [class*="eyebrow"], [class*="label"], [class*="heading"], [class*="title"]),
 html[data-bk-layout-shop-align] :is([data-bk-surface-key$=".shop"], [data-bk-surface-key$=".shopPage"]) :is(h1, h2, h3, p, div, ul, li, address, [class*="eyebrow"], [class*="label"], [class*="heading"], [class*="title"]) {
   text-align: var(--bk-align) !important;
 }
 html[data-bk-layout-gallery-align] :is([data-bk-surface-key$=".featured"], [data-bk-surface-key$=".gallery"], [data-bk-surface-key$=".galleryPage"]) :is([class*="section-header"], [class*="-head"]:not(h1, h2, h3), [class*="stats"], [class*="actions"], [class*="-cta"]),
 html[data-bk-layout-services-align] [data-bk-surface-key$=".services"] :is([class*="section-header"], [class*="-head"]:not(h1, h2, h3), [class*="stats"], [class*="actions"], [class*="-cta"]),
 html[data-bk-layout-about-align] [data-bk-surface-key$=".about"] :is([class*="section-header"], [class*="-head"]:not(h1, h2, h3), [class*="stats"], [class*="actions"], [class*="-cta"]),
-html[data-bk-layout-team-align] :is([data-bk-surface-key$=".team"], [data-bk-surface-key$=".teamPage"]) :is([class*="section-header"], [class*="-head"]:not(h1, h2, h3), [class*="stats"], [class*="actions"], [class*="-cta"]),
+html[data-bk-layout-team-align] :is([data-bk-surface-key$=".team"], [data-bk-surface-key$=".teamPage"], .bk-team-roster-section) :is([class*="section-header"], [class*="-head"]:not(h1, h2, h3), [class*="stats"], [class*="actions"], [class*="-cta"]),
 html[data-bk-layout-shop-align] :is([data-bk-surface-key$=".shop"], [data-bk-surface-key$=".shopPage"]) :is([class*="section-header"], [class*="-head"]:not(h1, h2, h3), [class*="stats"], [class*="actions"], [class*="-cta"]) {
   justify-content: var(--bk-justify) !important;
 }
@@ -595,7 +595,7 @@ html[data-bk-layout-shop-align] :is([data-bk-surface-key$=".shop"], [data-bk-sur
 html[data-bk-layout-gallery-align] :is([data-bk-surface-key$=".featured"], [data-bk-surface-key$=".gallery"], [data-bk-surface-key$=".galleryPage"]) :is(h1, h2, h3, p),
 html[data-bk-layout-services-align] [data-bk-surface-key$=".services"] :is(h1, h2, h3, p),
 html[data-bk-layout-about-align] [data-bk-surface-key$=".about"] :is(h1, h2, h3, p),
-html[data-bk-layout-team-align] :is([data-bk-surface-key$=".team"], [data-bk-surface-key$=".teamPage"]) :is(h1, h2, h3, p),
+html[data-bk-layout-team-align] :is([data-bk-surface-key$=".team"], [data-bk-surface-key$=".teamPage"], .bk-team-roster-section) :is(h1, h2, h3, p),
 html[data-bk-layout-shop-align] :is([data-bk-surface-key$=".shop"], [data-bk-surface-key$=".shopPage"]) :is(h1, h2, h3, p) {
   margin-left: var(--bk-block-left) !important;
   margin-right: var(--bk-block-right) !important;

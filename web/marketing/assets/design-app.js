@@ -2304,6 +2304,12 @@
     { label: 'Cinema',    ratio: 21 / 9  }
   ];
 
+  /** Crop frame width that also fits the window's height, so tall frames keep the buttons on screen. */
+  function cropFrameWidth(stage, ratio) {
+    var maxH = Math.max(220, (window.innerHeight || 800) - 330);
+    return Math.max(160, Math.min(720, stage.clientWidth || 720, Math.round(maxH * ratio)));
+  }
+
   function openCrop(file, aspect) {
     return new Promise(function (resolve, reject) {
       var isUrl = (typeof file === 'string');
@@ -2327,7 +2333,7 @@
         // ── canvas resize helper ──────────────────────────────────────────
         var cw, ch;
         function resizeCanvas(ratio) {
-          cw = Math.min(720, stage.clientWidth || 720);
+          cw = cropFrameWidth(stage, ratio);
           ch = Math.round(cw / ratio);
           canvas.width  = cw;
           canvas.height = ch;
@@ -2346,7 +2352,7 @@
           draw();
         }
 
-        cw = Math.min(720, stage.clientWidth || 720);
+        cw = cropFrameWidth(stage, activeRatio);
         ch = Math.round(cw / activeRatio);
         canvas.width  = cw;
         canvas.height = ch;

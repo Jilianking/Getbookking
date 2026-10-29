@@ -11,7 +11,7 @@
 
   var TEMPLATES = [
     { family: 'classic',  name: 'Classic',   subtitle: 'Balanced portfolio with hero, gallery, and about',    tags: ['Hero', 'Featured', 'About', 'Gallery', 'Booking'],        s1: '#F5EDD8', s2: '#2C2018', thumb: 'assets/brand/previews/classic-thumb.jpg' },
-    { family: 'luxe',     id: 'luxe-v1',     name: 'Luxe',     subtitle: 'Elegant cream palette, refined sections',               tags: ['Hero', 'Services', 'Gallery', 'Promo', 'Shop'],           s1: '#FFFDF9', s2: '#C9A96E', thumb: 'assets/brand/previews/luxe-thumb.jpg' },
+    { family: 'luxe',     id: 'luxe-v1',     name: 'Luxe',     subtitle: 'Elegant cream palette, refined sections',               tags: ['Hero', 'Services', 'Gallery', 'Promo', 'Shop'],           s1: '#FFFDF9', s2: '#C9A96E', thumb: 'assets/brand/previews/luxe-thumb.jpg?v=2' },
     { family: 'blade',    id: 'blade-v1',    name: 'Blade',    subtitle: 'Dark luxury, gold accents',                             tags: ['Hero', 'Services', 'Gallery', 'Reviews', 'Shop'],         s1: '#1a1f28', s2: '#C9A96E', thumb: 'assets/brand/previews/blade-thumb.jpg' },
     { family: 'stonecut', id: 'stonecut-v1', name: 'Stonecut', subtitle: 'Moody editorial with bold contrast',                    tags: ['Hero', 'Artists', 'Portfolio', 'Process', 'Booking'],     s1: '#060604', s2: '#c0221a', thumb: 'assets/brand/previews/stonecut-thumb.jpg' },
     { family: 'studio12', id: 'studio-12-v1',name: 'Studio 12',subtitle: 'Ivory editorial, marquee, horizontal gallery',          tags: ['Hero', 'Marquee', 'Philosophy', 'Gallery', 'Booking'],    s1: '#faf7f2', s2: '#b08060', thumb: 'assets/brand/previews/studio12-thumb.jpg' },

@@ -143,6 +143,16 @@
     return d.toLocaleString("en-US", { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
   }
 
+  function initials(name) {
+    var parts = String(name || "?").trim().split(/\s+/);
+    return ((parts[0] || "?").charAt(0) + (parts.length > 1 ? parts[parts.length - 1].charAt(0) : "")).toUpperCase();
+  }
+
+  function chip(status) {
+    var tone = status === "confirmed" ? "ok" : status === "declined" || status === "cancelled" ? "off" : status === "new" || status === "pending" ? "new" : "wait";
+    return '<span class="app-req-chip is-' + tone + '">' + esc(STATUS_LABEL[status] || status) + "</span>";
+  }
+
   function money(cents) {
     return "$" + (cents / 100).toFixed(2);
   }
@@ -175,9 +185,13 @@
     var rows = visible(state.list).filter(function (r) { return tabFor(r.status) === state.tab; });
     var empty = $("reqEmpty");
     if (empty) {
-      empty.textContent = state.tab === "new"
-        ? "No new requests. When clients book from your website, they show up here."
-        : "Nothing here yet.";
+      var copy = {
+        new: ["You're all caught up", "New bookings from your website show up here."],
+        waiting: ["Nothing waiting", "Requests waiting on a deposit or payment show up here."],
+        confirmed: ["No confirmed requests", "Requests you confirm move here."],
+        closed: ["Nothing declined", "Declined and cancelled requests show up here."],
+      }[state.tab];
+      empty.innerHTML = '<i class="app-req-empty-icon" aria-hidden="true"></i><strong>' + esc(copy[0]) + "</strong><span>" + esc(copy[1]) + "</span>";
       empty.classList.toggle("hidden", rows.length > 0);
     }
     host.innerHTML = rows.map(function (r) {
@@ -186,10 +200,10 @@
       if (r.start) bits.push(when(r.start));
       else if (r.preferredTime) bits.push(r.preferredTime);
       if (r.assignedName) bits.push(r.assignedName);
-      return '<button type="button" class="app-row' + (r.readAt ? " is-read" : "") + '" data-req-open="' + esc(r.id) + '">' +
-        '<span class="app-row-dot" aria-hidden="true"></span>' +
-        '<span class="app-row-copy"><strong>' + esc(r.name) + "</strong><span>" + esc(bits.join(" · ")) + "</span></span>" +
-        '<span class="app-row-meta">' + esc(state.tab === "new" ? relative(r.createdAt) : (STATUS_LABEL[r.status] || "")) + "</span>" +
+      return '<button type="button" class="app-req-row' + (r.readAt ? "" : " is-unread") + (r.id === state.openId ? " is-active" : "") + '" data-req-open="' + esc(r.id) + '">' +
+        '<span class="app-req-avatar" aria-hidden="true">' + esc(initials(r.name)) + "</span>" +
+        '<span class="app-req-copy"><strong>' + esc(r.name) + "</strong><span>" + esc(bits.join(" · ")) + "</span></span>" +
+        '<span class="app-req-side"><time>' + esc(relative(r.createdAt)) + "</time>" + (state.tab === "new" ? (r.readAt ? "" : '<span class="app-req-new" aria-label="Unread"></span>') : chip(r.status)) + "</span>" +
         "</button>";
     }).join("");
   }
@@ -286,6 +300,8 @@
     var body = $("reqDetailBody");
     if (!r || !body) return;
     $("reqDetailTitle").textContent = r.name;
+    var st = $("reqDetailStatus");
+    if (st) st.outerHTML = chip(r.status).replace('class="app-req-chip', 'id="reqDetailStatus" class="app-req-chip');
     var charter = isCharter(state.session.tenant);
     var open = ["new", "pending", "pending_consultation"].indexOf(r.status) !== -1;
     var waiting = r.status === "pending_deposit" || r.status === "pending_payment";
@@ -302,9 +318,10 @@
     if (r.paidCents) facts.push(["Paid", money(r.paidCents)]);
     if (r.createdAt) facts.push(["Requested", when(r.createdAt)]);
 
+    facts = facts.filter(function (f) { return f[0] !== "Status"; });
     var html = contactHtml(r) +
       '<div class="app-req-facts">' + facts.map(function (f) {
-        return '<div class="app-req-answer"><span>' + esc(f[0]) + "</span><strong>" + esc(f[1]) + "</strong></div>";
+        return '<div class="app-req-fact"><span>' + esc(f[0]) + "</span><strong>" + esc(f[1]) + "</strong></div>";
       }).join("") + "</div>" +
       (r.notes ? '<h3 class="app-req-h">Notes</h3><p class="app-req-notes">' + esc(r.notes).replace(/\n/g, "<br>") + "</p>" : "") +
       answersHtml(r);
@@ -337,8 +354,11 @@
     state.openId = id || "";
     var sheet = $("reqDetailSheet");
     var scrim = $("reqDetailScrim");
+    var ph = $("reqPlaceholder");
     if (sheet) sheet.classList.toggle("hidden", !id);
     if (scrim) scrim.classList.toggle("hidden", !id);
+    if (ph) ph.classList.toggle("hidden", !!id);
+    paintList();
     if (!id) return;
     paintDetail();
     var r = byId(id);

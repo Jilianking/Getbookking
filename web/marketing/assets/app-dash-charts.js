@@ -216,10 +216,15 @@
     });
     var top = Object.keys(counts).sort(function (a, b) { return counts[b] - counts[a]; }).slice(0, 3);
     var count = function (v) { return v === 1 ? "1 booking" : v + " bookings"; };
+    var total = pts.reduce(function (a, p) { return a + p.value; }, 0);
+    if (!total) {
+      body.innerHTML = '<div class="app-chart-empty"><strong>No bookings yet</strong><span>This fills in as clients book. Share your booking link to get started.</span></div>';
+      return;
+    }
     body.innerHTML =
       '<div class="app-chart-stats">' +
       '<div><span>This week</span><strong>' + thisWeek + "</strong>" + changeHtml(pct(thisWeek, lastWeek)) + "</div>" +
-      '<div><span>Last 8 weeks</span><strong>' + pts.reduce(function (a, p) { return a + p.value; }, 0) + "</strong></div>" +
+      '<div><span>Last 8 weeks</span><strong>' + total + "</strong></div>" +
       "</div>" +
       barsSvg(pts, count, "Bookings by week, last 8 weeks") +
       (top.length

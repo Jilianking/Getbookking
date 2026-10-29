@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap" rel="stylesheet" />
   <base href="/" />
-  <link rel="stylesheet" href="/assets/app.css?v=52" />
+  <link rel="stylesheet" href="/assets/app.css?v=53" />
 </head>
 <body>
   <div id="gateLoading" class="app-gate">
@@ -316,21 +316,26 @@
         <div class="app-toolbar">
           <div class="app-seg" role="tablist" aria-label="Request status" id="reqTabs"></div>
         </div>
-        <article class="app-card">
-          <div id="reqList"></div>
-          <p class="app-empty hidden" id="reqEmpty"></p>
-        </article>
-      </section>
-
-      <div class="app-sheet-scrim hidden" id="reqDetailScrim"></div>
-      <div class="app-sheet hidden" id="reqDetailSheet" role="dialog" aria-modal="true" aria-labelledby="reqDetailTitle">
-        <div class="app-sheet-top">
-          <h2 id="reqDetailTitle">Request</h2>
-          <button type="button" class="app-icon-btn" id="reqDetailClose" aria-label="Close">×</button>
+        <div class="app-req-layout">
+          <article class="app-card app-req-listcard">
+            <div id="reqList"></div>
+            <div class="app-req-empty hidden" id="reqEmpty"></div>
+          </article>
+          <div class="app-sheet-scrim hidden" id="reqDetailScrim"></div>
+          <aside class="app-sheet app-req-panel hidden" id="reqDetailSheet" role="dialog" aria-labelledby="reqDetailTitle">
+            <div class="app-sheet-top">
+              <h2 id="reqDetailTitle">Request</h2>
+              <span class="app-req-chip" id="reqDetailStatus"></span>
+              <button type="button" class="app-icon-btn" id="reqDetailClose" aria-label="Close">×</button>
+            </div>
+            <div id="reqDetailBody"></div>
+            <div class="app-sheet-actions" id="reqDetailActions"></div>
+          </aside>
+          <div class="app-req-placeholder" id="reqPlaceholder">
+            <p><strong>Pick a request</strong>Its details, photos, and actions show here.</p>
+          </div>
         </div>
-        <div id="reqDetailBody"></div>
-        <div class="app-sheet-actions" id="reqDetailActions"></div>
-      </div>
+      </section>
 
       <section id="viewClients" class="app-view hidden" data-view="clients">
         <div class="app-greeting app-pay-head">
@@ -404,7 +409,7 @@
         </div>
         <div id="shopCatalogPanel">
           <div class="app-product-grid" id="shopProductGrid"></div>
-          <p class="app-empty" id="shopProductEmpty">No products yet. Add them in the Get Bookking iPhone app.</p>
+          <p class="app-empty" id="shopProductEmpty">No products yet. Add them from Website → Shop, or in the iPhone app.</p>
         </div>
         <article class="app-card hidden" id="shopOrdersPanel">
           <div id="shopOrderList"></div>
@@ -667,12 +672,12 @@
   <script src="/js/firebase-config.js"></script>
   <script src="/assets/app-session.js?v=3"></script>
   <script src="/assets/app-dashboard.js?v=18"></script>
-  <script src="/assets/app-requests.js?v=1"></script>
-  <script src="/assets/app-dash-charts.js?v=2"></script>
+  <script src="/assets/app-requests.js?v=2"></script>
+  <script src="/assets/app-dash-charts.js?v=3"></script>
   <script src="/assets/app-payments.js?v=6"></script>
   <script src="/assets/app-payouts.js?v=2"></script>
   <script src="/assets/app-clients.js?v=2"></script>
-  <script src="/assets/app-shop.js?v=1"></script>
+  <script src="/assets/app-shop.js?v=2"></script>
   <script src="/assets/app.js?v=20"></script>
 </body>
 </html>

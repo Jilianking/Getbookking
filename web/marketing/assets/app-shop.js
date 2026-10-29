@@ -131,7 +131,13 @@
           "</div></article>"
         );
       })
-      .join("");
+      .join("") + addTile();
+  }
+
+  /** Products are added and edited in the website editor's Shop section. */
+  function addTile() {
+    return '<a class="app-product-add" href="/design">' +
+      '<span aria-hidden="true">+</span><strong>Add product</strong><em>Opens the website editor</em></a>';
   }
 
   function renderOrders() {

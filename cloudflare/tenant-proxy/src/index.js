@@ -9,11 +9,12 @@
  *   Response: { ok, host, slug, status } — no tenantId.
  *   Only status=active domains are served. While a domain is still connecting, page visits are
  *   sent to {slug}.getbookking.com so the shop's site works meanwhile. No hardcoded domain map.
- *   Every address ends at https://{domain} (no www). Page visits are forwarded with a
+ *   Every address ends at https://www.{domain}. The bare domain forwards to www at Namecheap
+ *   (Cloudflare can't approve a bare domain on an ALIAS record). Page visits are forwarded with a
  *   temporary redirect (302) so a lapsed domain falls back to the subdomain at once:
  *     http://… → https://…
- *     www.{domain}/x → {domain}/x
- *     {slug}.getbookking.com/x → {domain}/x   (only while the domain is active)
+ *     {domain}/x → www.{domain}/x   (if a request for the bare domain reaches us)
+ *     {slug}.getbookking.com/x → www.{domain}/x   (only while the domain is active)
  *
  * Team invites:
  *   - Apex / www: getbookking.com/join* → Firebase (when apex is proxied through Cloudflare).
@@ -172,7 +173,7 @@ export default {
     if (sub) {
       if (isForwardablePageVisit(request, pathname)) {
         const domain = await resolveActiveDomainForSlug(sub);
-        if (domain) return temporaryRedirect(domain, pathname, url.search);
+        if (domain) return temporaryRedirect("www." + domain, pathname, url.search);
       }
       return proxyTenantPath(request, sub, pathname, url.search);
     }
@@ -188,9 +189,9 @@ export default {
     const customSlug = resolved && resolved.slug;
     if (customSlug) {
       if (isForwardablePageVisit(request, pathname)) {
-        const bareHost = host.startsWith("www.") ? host.slice(4) : host;
-        if (bareHost !== host || url.protocol === "http:") {
-          return temporaryRedirect(bareHost, pathname, url.search);
+        const mainHost = host.startsWith("www.") ? host : "www." + host;
+        if (mainHost !== host || url.protocol === "http:") {
+          return temporaryRedirect(mainHost, pathname, url.search);
         }
       }
       return proxyTenantPath(request, customSlug, pathname, url.search);

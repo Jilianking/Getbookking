@@ -117,6 +117,7 @@ function blockSectionHtml(tenant, id, block) {
   if (!inner) return '';
   var align = block.align === 'center' ? ' bk-block--center' : '';
   return '<section class="bk-block bk-block--' + esc(block.type) + align + '" data-bk-block="' + esc(id) +
+    '" data-bk-surface-key="block.' + esc(id) +
     '" data-bk-block-type="' + esc(block.type) + '"><div class="bk-block-inner">' + inner + '</div></section>';
 }
 

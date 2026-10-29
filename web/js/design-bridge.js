@@ -734,6 +734,7 @@
     var key = keyOnColorTarget(el);
     var surface = (el.getAttribute && el.getAttribute('data-bk-color-surface')) || '';
     var label = 'Section';
+    if (el.hasAttribute && el.hasAttribute('data-bk-block')) label = el.getAttribute('data-bk-section-label') || label;
     if (el.classList && el.classList.contains('booking-card') || /bookingCard$/.test(key) || key === 'charter.stickyBook') label = 'Booking form';
     else if (el.classList && el.classList.contains('booking-page-band') || /bookingPage$/.test(key)) label = 'Booking page';
     else if ((el.matches && el.matches('nav')) || (el.classList && el.classList.contains('tattoo-nav')) || /\.nav$/.test(key)) label = 'Header';

@@ -1777,9 +1777,10 @@ button.design-sec-row {
 
 /* Add section (section panel) */
 .design-add-section {
-  margin: 18px 0 0;
-  padding-top: 16px;
+  margin: 18px 0 18px;
+  padding: 16px 0;
   border-top: 1px solid var(--bk-line);
+  border-bottom: 1px solid var(--bk-line);
   display: grid;
   gap: 8px;
 }

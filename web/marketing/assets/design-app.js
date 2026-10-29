@@ -1147,9 +1147,7 @@
       '<div class="design-section-actions">' +
       '<button type="button" class="design-btn design-btn--ghost" data-section-toggle>' + (sec.hidden ? 'Show section' : 'Hide section') + '</button>' +
       '</div>' +
-      (sec.hidden ? '<p class="design-hint">Hidden sections don’t appear on your site. They show as a striped bar here so you can bring them back.</p>' : '') +
-      blockControlsHtml(sec, payload) +
-      addSectionMenuHtml();
+      (sec.hidden ? '<p class="design-hint">Hidden sections don’t appear on your site. They show as a striped bar here so you can bring them back.</p>' : '');
   }
 
   /** Saves the home page's section order and visibility. The preview applies it live and reports the new state back. */
@@ -1308,7 +1306,10 @@
     var showsFooter = layoutSlotFor(payload) === 'footer';
     // The template footer layouts don't apply to the shared footer, which has its own arrangement.
     var customFooter = showsFooter && footerSettings().enabled === true;
-    var html = (customFooter ? '' : layoutPickerHtml(payload)) + alignControlHtml(payload) + sectionControlsHtml(payload);
+    // Top to bottom: this section's own settings, then Add section, then the page order.
+    var sec = payload.section;
+    var html = (customFooter ? '' : layoutPickerHtml(payload)) + alignControlHtml(payload) +
+      (sec && sec.id ? blockControlsHtml(sec, payload) : '');
     if (showsFooter) html += footerEditorHtml();
     var showsHeader = layoutSlotFor(payload) === 'header';
     if (showsHeader) html = logoControlsHtml() + html;
@@ -1326,6 +1327,7 @@
     if (payload.label === 'Booking form' || payload.label === 'Booking page') {
       html += '<button type="button" class="design-btn design-btn--ghost" id="sectionBookingBtn">Form, fields, and services</button>';
     }
+    if (sec && sec.id) html += addSectionMenuHtml() + sectionControlsHtml(payload);
     if (!html) html = '<p class="design-hint">This section has no layout options. Click text or photos in the preview to edit them.</p>';
     host.innerHTML = html;
     var panel = $('panelSection');

@@ -863,6 +863,18 @@ function siteNameSpan(tenant, fallback, styleKey) {
     esc(tenantSiteDisplayName(tenant, fallback)) + '</span>';
 }
 
+/**
+ * Header brand: the shop name, its logo, or both, as chosen in the web editor (webHeaderBrand).
+ * Without a logo it's always the name.
+ */
+function navBrandHtml(tenant, nameHtml) {
+  var mode = tenant && (tenant.webHeaderBrand === 'logo' || tenant.webHeaderBrand === 'both') ? tenant.webHeaderBrand : 'name';
+  var logo = tenant && tenant.logoUrl ? String(tenant.logoUrl) : '';
+  return '<span class="bk-nav-brand" data-bk-nav-brand data-mode="' + mode + '"' + (logo ? ' data-has-logo="1"' : '') + '>' +
+    (logo ? '<img class="bk-nav-logo" src="' + esc(logo) + '" alt="">' : '') +
+    '<span class="bk-nav-name">' + nameHtml + '</span></span>';
+}
+
 /** When false, hours blocks are omitted on the public site (independent of contact visibility). */
 function tenantShowBusinessHours(tenant) {
   return tenant.showBusinessHoursOnPage !== false;
@@ -1382,6 +1394,9 @@ function mapLoadedTenant(id, data, slug) {
         webButtonColors: coerceStyleMap(data.webButtonColors),
         webSectionLayouts: coerceStyleMap(data.webSectionLayouts),
         webPage: data.webPage && typeof data.webPage === 'object' ? data.webPage : {},
+        webBlocks: data.webBlocks && typeof data.webBlocks === 'object' ? data.webBlocks : {},
+        webHeaderBrand: (data.webHeaderBrand || '').toString(),
+        webTabIcon: (data.webTabIcon || '').toString(),
         webFooter: data.webFooter && typeof data.webFooter === 'object' ? data.webFooter : {},
         bookingFormStyleId: data.bookingFormStyleId || '',
         // Prefer calendar when either field says so (see bookingModeResolved).
@@ -3099,6 +3114,43 @@ function applyWebButtonColors(tenant) {
 }
 
 /** Tells search engines the shop's connected domain is its main address (both addresses serve the same site). */
+/**
+ * Browser tab icon: the shop's logo, or the first letter of its name in the accent color.
+ * webTabIcon 'letter' always uses the letter.
+ */
+function tabIconHref(t) {
+  if (t.logoUrl && t.webTabIcon !== 'letter') return String(t.logoUrl);
+  var name = tenantSiteDisplayName(t, '') || t.slug || '';
+  var letter = (String(name).trim().match(/[A-Za-z0-9]/) || ['B'])[0].toUpperCase();
+  var accent = tenantColors(t).accent || '#111111';
+  var svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">' +
+    '<rect width="64" height="64" rx="14" fill="' + accent + '"/>' +
+    '<text x="32" y="44" text-anchor="middle" font-family="Georgia,serif" font-size="38" fill="' + readableOn(accent) + '">' + letter + '</text></svg>';
+  return 'data:image/svg+xml,' + encodeURIComponent(svg);
+}
+
+function readableOn(hex) {
+  var m = /^#?([0-9a-f]{6})$/i.exec(String(hex || ''));
+  if (!m) return '#ffffff';
+  var n = parseInt(m[1], 16);
+  var lum = (0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) / 255;
+  return lum > 0.6 ? '#111111' : '#ffffff';
+}
+
+function applyTabIcon(t) {
+  var href = tabIconHref(t);
+  [['icon', ''], ['apple-touch-icon', 'touch']].forEach(function (pair) {
+    if (pair[1] === 'touch' && !/^https?:/.test(href)) return;
+    var link = document.querySelector('link[rel="' + pair[0] + '"]');
+    if (!link) {
+      link = document.createElement('link');
+      link.rel = pair[0];
+      document.head.appendChild(link);
+    }
+    link.href = href;
+  });
+}
+
 function applyCanonicalLink(t) {
   var domain = (t && t.canonicalDomain) || '';
   if (!/^[a-z0-9.-]+\.[a-z]{2,}$/.test(domain)) return;
@@ -3121,6 +3173,7 @@ function applyCanonicalLink(t) {
 function applyBranding(t) {
   if (!t) return;
   applyCanonicalLink(t);
+  applyTabIcon(t);
   applySiteSeo(t);
   applySiteAnnouncement(t);
   applyTenantColorVars(t);
@@ -3378,6 +3431,10 @@ function stampPageSection(html, section, hidden) {
 function renderPageSections(tenant, pageId, list) {
   var settings = pageSectionSettings(tenant, pageId);
   var editing = isWebDesignPreview();
+  // Remembered so the web editor can re-render added sections live (see blocks.js).
+  window.__bkBlocksTenant = tenant;
+  window.__bkPreviewBlocks = previewPageBlocks;
+  list = list.concat(pageBlockSections(tenant, pageId));
   return orderPageSections(list, settings.order).map(function (section) {
     if (!section.html) return '';
     var saved = settings.sections[section.id];
@@ -3385,6 +3442,184 @@ function renderPageSections(tenant, pageId, list) {
     if (hidden && !editing) return '';
     return stampPageSection(section.html, section, hidden);
   }).join('');
+}
+
+/* ── blocks.js ── */
+/* Sections owners add from the web editor: text box, FAQ, policies, hours and map.
+   Saved in tenant.webBlocks as { 'blk-xxxx': { type, page, align, count } } and placed in the
+   page order like any template section. Their words live in webCopyOverrides under
+   wc.block.{id}.*, so click-to-edit saves them the same way as the rest of the site's text. */
+
+var BLOCK_TYPES = {
+  text: { label: 'Text box' },
+  faq: { label: 'FAQ' },
+  policies: { label: 'Policies' },
+  hours: { label: 'Hours and map' }
+};
+
+var BLOCK_DEFAULT_ITEMS = {
+  faq: [
+    ['How do I book?', 'Pick a service and a time on the Book page. You’ll get a confirmation right away.'],
+    ['Do you take walk-ins?', 'When there’s an opening, yes. Booking ahead is the best way to get the time you want.'],
+    ['How do I pay?', 'Pay online when you book or in person at your appointment.']
+  ],
+  policies: [
+    ['Deposits', 'Some services need a deposit to hold your time. It goes toward your total.'],
+    ['Cancellations', 'Please give at least 24 hours’ notice if you need to cancel or reschedule.'],
+    ['Late arrivals', 'If you’re more than 15 minutes late, we may need to shorten or move your appointment.']
+  ]
+};
+
+var BLOCK_DEFAULT_TITLES = {
+  text: 'A few words',
+  faq: 'Questions',
+  policies: 'Policies',
+  hours: 'Hours and location'
+};
+
+var BLOCK_MAX_ITEMS = 12;
+
+function blockKey(id, field) {
+  return 'wc.block.' + id + '.' + field;
+}
+
+function blockItemCount(block) {
+  var n = parseInt(block && block.count, 10);
+  if (isNaN(n)) n = 3;
+  return Math.max(1, Math.min(n, BLOCK_MAX_ITEMS));
+}
+
+function blockTitleHtml(tenant, id, type) {
+  return '<h2 class="bk-block-title">' + wcSpan(tenant, blockKey(id, 'title'), BLOCK_DEFAULT_TITLES[type] || '') + '</h2>';
+}
+
+function textBlockHtml(tenant, id) {
+  return blockTitleHtml(tenant, id, 'text') +
+    '<p class="bk-block-body">' +
+    wcSpanMultiline(tenant, blockKey(id, 'body'), 'Tell visitors what makes you different, share news, or add anything else you’d like them to know.') +
+    '</p>';
+}
+
+/** FAQ and policies: a heading plus question/answer pairs. Pairs cleared in the editor are left off the site. */
+function listBlockHtml(tenant, id, block, type) {
+  var defaults = BLOCK_DEFAULT_ITEMS[type] || [];
+  var editing = isWebDesignPreview();
+  var rows = '';
+  for (var i = 1; i <= blockItemCount(block); i++) {
+    var d = defaults[i - 1] || [type === 'faq' ? 'A question' : 'A policy', 'Write the details here.'];
+    var qKey = blockKey(id, 'q' + i);
+    var aKey = blockKey(id, 'a' + i);
+    var q = webCopyOverrideText(tenant, qKey, d[0]);
+    var a = webCopyOverrideText(tenant, aKey, d[1]);
+    if (!editing && !q && !a) continue;
+    if (type === 'faq') {
+      rows += '<details class="bk-block-faq-item"' + (editing ? ' open' : '') + '>' +
+        '<summary class="bk-block-q">' + wcSpan(tenant, qKey, d[0]) + '</summary>' +
+        '<p class="bk-block-a">' + wcSpanMultiline(tenant, aKey, d[1]) + '</p></details>';
+    } else {
+      rows += '<div class="bk-block-policy">' +
+        '<h3 class="bk-block-q">' + wcSpan(tenant, qKey, d[0]) + '</h3>' +
+        '<p class="bk-block-a">' + wcSpanMultiline(tenant, aKey, d[1]) + '</p></div>';
+    }
+  }
+  if (!rows && !editing) return '';
+  return blockTitleHtml(tenant, id, type) + '<div class="bk-block-list">' + rows + '</div>';
+}
+
+/** Hours from the business schedule and a map of the business address. */
+function hoursBlockHtml(tenant, id) {
+  var editing = isWebDesignPreview();
+  var hours = '';
+  var rows = tenantShowBusinessHours(tenant) ? businessHoursWeeklyGroupedRows(tenant) : null;
+  if (rows && rows.length) {
+    hours = '<div class="bk-block-hours">' + rows.map(function (row) {
+      return '<div class="bk-block-hours-row"><span>' + esc(row.label) + '</span>' +
+        '<span' + (row.closed ? ' class="is-closed"' : '') + '>' + esc(row.time) + '</span></div>';
+    }).join('') + '</div>';
+  } else if (tenantShowBusinessHours(tenant) && tenantBusinessHoursTrimmed(tenant)) {
+    hours = '<p class="bk-block-body">' + esc(tenantBusinessHoursTrimmed(tenant)).replace(/\n/g, '<br>') + '</p>';
+  }
+  var address = tenantStreetAddressText(tenant);
+  var place = address ? '<p class="bk-block-address"><a href="' + esc(googleMapsSearchUrl(address)) + '" target="_blank" rel="noopener noreferrer">' +
+    esc(address).replace(/\n/g, '<br>') + '</a></p>' : '';
+  var map = address ? '<div class="bk-block-map"><iframe src="' + esc(googleMapsEmbedUrl(address)) +
+    '" loading="lazy" referrerpolicy="no-referrer-when-downgrade" title="Map"></iframe></div>' : '';
+  if (!hours && !address) {
+    if (!editing) return '';
+    hours = '<p class="bk-block-body bk-block-hint">Add your business hours and address in Settings, and they’ll show here.</p>';
+  }
+  return blockTitleHtml(tenant, id, 'hours') +
+    '<div class="bk-block-hours-wrap"><div>' + hours + place + '</div>' + map + '</div>';
+}
+
+function blockInnerHtml(tenant, id, block) {
+  if (block.type === 'text') return textBlockHtml(tenant, id);
+  if (block.type === 'faq' || block.type === 'policies') return listBlockHtml(tenant, id, block, block.type);
+  if (block.type === 'hours') return hoursBlockHtml(tenant, id);
+  return '';
+}
+
+function blockSectionHtml(tenant, id, block) {
+  var inner = blockInnerHtml(tenant, id, block);
+  if (!inner) return '';
+  var align = block.align === 'center' ? ' bk-block--center' : '';
+  return '<section class="bk-block bk-block--' + esc(block.type) + align + '" data-bk-block="' + esc(id) +
+    '" data-bk-block-type="' + esc(block.type) + '"><div class="bk-block-inner">' + inner + '</div></section>';
+}
+
+/** Added sections for one page, as page-section entries ({ id, label, html }). */
+function pageBlockSections(tenant, pageId) {
+  var all = tenant && tenant.webBlocks;
+  if (!all || typeof all !== 'object') return [];
+  return Object.keys(all).filter(function (id) {
+    var b = all[id];
+    return /^blk-[a-z0-9]{1,24}$/.test(id) && b && BLOCK_TYPES[b.type] && (b.page || 'home') === pageId;
+  }).map(function (id) {
+    var b = all[id];
+    return { id: id, label: BLOCK_TYPES[b.type].label, html: blockSectionHtml(tenant, id, b) };
+  });
+}
+
+/**
+ * Web editor: re-renders added sections from unsaved changes. Replaces, adds, or removes each
+ * section in place, then the editor re-applies the page order. Returns true when it ran.
+ */
+function previewPageBlocks(payload) {
+  var base = window.__bkBlocksTenant;
+  if (!base || !payload) return false;
+  var tenant = Object.assign({}, base, {
+    webBlocks: payload.webBlocks || {},
+    webCopyOverrides: payload.webCopyOverrides || base.webCopyOverrides || {}
+  });
+  window.__bkBlocksTenant = tenant;
+  var pageId = payload.page || 'home';
+  var existing = [].slice.call(document.querySelectorAll('[data-bk-section^="blk-"]'));
+  var wanted = {};
+  pageBlockSections(tenant, pageId).forEach(function (s) { wanted[s.id] = s; });
+  existing.forEach(function (el) {
+    if (!wanted[el.getAttribute('data-bk-section')]) el.parentNode.removeChild(el);
+  });
+  var sections = [].slice.call(document.querySelectorAll('[data-bk-section]'));
+  if (!sections.length) return false;
+  var last = sections[sections.length - 1];
+  Object.keys(wanted).forEach(function (id) {
+    var s = wanted[id];
+    var holder = document.createElement('div');
+    holder.innerHTML = s.html ? stampPageSection(s.html, s, false) : '';
+    var fresh = holder.firstElementChild;
+    var old = document.querySelector('[data-bk-section="' + id + '"]');
+    if (old && fresh) {
+      if (old.hasAttribute('data-bk-section-hidden')) fresh.setAttribute('data-bk-section-hidden', '1');
+      if (old.hasAttribute('data-bk-design-selected')) fresh.setAttribute('data-bk-design-selected', '1');
+      old.parentNode.replaceChild(fresh, old);
+    } else if (old) {
+      old.parentNode.removeChild(old);
+    } else if (fresh) {
+      last.parentNode.insertBefore(fresh, last.nextSibling);
+      last = fresh;
+    }
+  });
+  return true;
 }
 
 /* ── footer.js ── */
@@ -8573,7 +8808,7 @@ function tattooNavHtml(tenant) {
     ? (' data-bk-color-surface="page"' + classicBkSurfaceKeyAttr(tenant, 'classic.nav'))
     : '';
   return '<nav class="tattoo-nav"' + classicNavAttr + '>' +
-    '<a href="' + base + '/home" class="tattoo-brand">' + siteNameSpan(tenant, 'Welcome') + '</a>' +
+    '<a href="' + base + '/home" class="tattoo-brand">' + navBrandHtml(tenant, siteNameSpan(tenant, 'Welcome')) + '</a>' +
     '<div class="tattoo-nav-trailing">' +
       '<div class="tattoo-nav-links">' + inner + '</div>' +
     '<button class="tattoo-nav-menu" type="button" aria-label="Menu">' + hamburgerMenuSvg() + '</button>' +
@@ -8694,7 +8929,7 @@ function classicHomePage(tenant, services, opts) {
   if (tenantShowBookPage(tenant)) navInner += '<a href="' + bookUrl + '" class="classic-nav-book" data-cta-key="wc.classic.navBook">' + wcSpan(tenant, 'wc.classic.navBook', 'Book') + '</a>';
   var nav = '<nav class="tattoo-nav" data-bk-color-surface="page"' +
     classicBkSurfaceKeyAttr(tenant, 'classic.nav') + '>' +
-    '<a href="' + base + '/home" class="tattoo-brand">' + siteNameSpan(tenant, opts.defaultName) + '</a>' +
+    '<a href="' + base + '/home" class="tattoo-brand">' + navBrandHtml(tenant, siteNameSpan(tenant, opts.defaultName)) + '</a>' +
     '<div class="tattoo-nav-trailing">' +
       '<div class="tattoo-nav-links">' + navInner + '</div>' +
     '<button class="tattoo-nav-menu" type="button" aria-label="Menu">' + hamburgerMenuSvg() + '</button>' +
@@ -9201,7 +9436,7 @@ function luxeChromeNavHtml(tenant, variant) {
   if (tenantShowAboutPage(tenant)) inner += '<a href="' + base + '/about">About</a>';
   if (tenantShowBookPage(tenant)) inner += '<a href="' + bookUrl + '" class="luxe-nav-book" data-cta-key="wc.luxe.navBook">' + wcSpan(tenant, 'wc.luxe.navBook', 'Booking') + '</a>';
   return '<nav class="' + navClass + '" data-bk-color-surface="page"' + luxeBkSurfaceKeyAttr(tenant, 'luxe.nav') + '>' +
-    '<a href="' + base + '/home" class="luxe-nav-brand">' + siteNameSpan(tenant, 'Welcome', 'displayName.luxe.nav') + '</a>' +
+    '<a href="' + base + '/home" class="luxe-nav-brand">' + navBrandHtml(tenant, siteNameSpan(tenant, 'Welcome', 'displayName.luxe.nav')) + '</a>' +
     '<div class="luxe-nav-trailing">' +
       '<div class="luxe-nav-links">' + inner + '</div>' +
     '<button class="tattoo-nav-menu" type="button" aria-label="Menu" style="background:none;border:none;font-size:1.5rem;cursor:pointer;padding:8px;display:none">' + hamburgerMenuSvg() + '</button>' +
@@ -9626,7 +9861,7 @@ function bladeNavHtml(tenant, anchorHome) {
     ? '<a href="' + bookUrl + '" class="blade-nav-book" data-cta-key="wc.blade.navBook">' + wcSpan(tenant, 'wc.blade.navBook', 'Book now') + '</a>'
     : '';
   return '<nav class="blade-topnav" data-bk-color-surface="page"' + bladeBkSurfaceKeyAttr(tenant, 'blade.nav') + '>' +
-    '<a href="' + base + '/home" class="blade-nav-logo">' + siteNameSpan(tenant, 'Studio', 'displayName.blade.nav') + '</a>' +
+    '<a href="' + base + '/home" class="blade-nav-logo">' + navBrandHtml(tenant, siteNameSpan(tenant, 'Studio', 'displayName.blade.nav')) + '</a>' +
     '<div class="blade-nav-trailing">' +
     '<ul class="blade-nav-links">' + lis + '</ul>' +
     bookBtn +
@@ -10181,7 +10416,7 @@ function stonecutNavHtml(tenant) {
     '<span class="stonecut-logo-wordmark">' + siteNameSpan(tenant, 'Studio', 'displayName.stonecut.nav') + '</span>' +
     '<span class="stonecut-logo-stack">' +
     stonecutIndustryEmHtml(tenant, 'stonecut-nav-industry') +
-    '<span class="stonecut-nav-name">' + siteNameSpan(tenant, 'Studio', 'displayName.stonecut.nav') + '</span>' +
+    navBrandHtml(tenant, '<span class="stonecut-nav-name">' + siteNameSpan(tenant, 'Studio', 'displayName.stonecut.nav') + '</span>') +
     locationHtml +
     '</span></a>' +
     '<div class="stonecut-nav-trailing">' +
@@ -10623,7 +10858,7 @@ function studio12NavHtml(tenant) {
     studio12BkSurfaceKeyAttr(tenant, 'studio12.nav') + '>' +
     '<button type="button" class="tattoo-nav-menu" aria-label="Menu">' + hamburgerMenuSvg() + '</button>' +
     '<a href="' + homeUrl + '" class="s12-nav-logo">' +
-    '<span class="s12-nav-logo-main">' + siteNameSpan(tenant, 'Studio', 'displayName.s12.nav') + '</span>' +
+    '<span class="s12-nav-logo-main">' + navBrandHtml(tenant, siteNameSpan(tenant, 'Studio', 'displayName.s12.nav')) + '</span>' +
     studio12NavLogoSubHtml(tenant) + '</a>' +
     '<ul class="s12-nav-links">' + navLis + '</ul>' +
     '<div class="s12-nav-trailing">' +
@@ -11446,7 +11681,7 @@ function charterNavHtml(tenant, active) {
     return '<a href="' + href + '"' + cls + '>' + wcSpan(tenant, copyKey, label) + '</a>';
   }
   return '<nav class="charter-nav"' + charterBandAttrs(tenant, 'page', 'charter.nav') + '>' +
-    '<a href="' + base + '/home" class="charter-brand">' + siteNameSpan(tenant, 'Harbor Charters', 'displayName.charter.nav') + '</a>' +
+    '<a href="' + base + '/home" class="charter-brand">' + navBrandHtml(tenant, siteNameSpan(tenant, 'Harbor Charters', 'displayName.charter.nav')) + '</a>' +
     '<div class="charter-nav-links">' +
       (tenantShowChartersPage(tenant) ? link(base + '/charters', 'Charters', 'charters', 'wc.charter.navCharters') : '') +
       (tenantShowHowItWorksPage(tenant) ? link(base + '/how-it-works', 'How it works', 'how', 'wc.charter.navHow') : '') +
@@ -11493,7 +11728,7 @@ function charterFooterHtml(tenant) {
   var year = new Date().getFullYear();
   var igHtml = charterInstagramLinkHtml(tenant, 'charter-footer-ig');
   return '<footer class="charter-footer"' + charterBandAttrs(tenant, 'about', 'charter.footer') + '>' +
-    '<a href="' + base + '/home" class="charter-brand">' + siteNameSpan(tenant, 'Harbor Charters') + '</a>' +
+    '<a href="' + base + '/home" class="charter-brand">' + navBrandHtml(tenant, siteNameSpan(tenant, 'Harbor Charters')) + '</a>' +
     (tenantShowChartersPage(tenant) ? '<a href="' + base + '/charters">' + wcSpan(tenant, 'wc.charter.footerCharters', 'Charters') + '</a>' : '') +
     (tenantShowHowItWorksPage(tenant) ? '<a href="' + base + '/how-it-works">' + wcSpan(tenant, 'wc.charter.footerHow', 'How it works') + '</a>' : '') +
     (tenantShowShopPage(tenant) ? '<a href="' + base + '/shop">' + wcSpan(tenant, 'wc.charter.footerShop', 'Shop') + '</a>' : '') +
@@ -14092,7 +14327,7 @@ function charterCheckoutNavHtml(tenant, service) {
       });
   return '<nav class="charter-nav"' + charterBandAttrs(tenant, 'page', 'charter.nav') + '>' +
     '<a class="charter-back charter-back--nav" href="' + esc(back) + '">‹ Back</a>' +
-    '<a href="' + tenantBaseUrl(tenant) + '/home" class="charter-brand">' + siteNameSpan(tenant, 'Harbor Charters', 'displayName.charter.nav') + '</a>' +
+    '<a href="' + tenantBaseUrl(tenant) + '/home" class="charter-brand">' + navBrandHtml(tenant, siteNameSpan(tenant, 'Harbor Charters', 'displayName.charter.nav')) + '</a>' +
     '<span style="margin-left:auto;font-size:13px;opacity:.5">' +
       wcSpan(tenant, 'wc.charter.secureCheckout', 'Secure checkout') + '</span>' +
     '</nav>';

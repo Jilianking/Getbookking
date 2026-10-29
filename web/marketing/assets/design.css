@@ -1745,3 +1745,61 @@ button.design-sec-row {
     linear-gradient(#2c2018, #2c2018) calc(100% - 8px) 50% / 22% 8px no-repeat,
     #f4efe6;
 }
+
+/* Logo (Style panel) */
+.design-logo-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin: 0 0 8px;
+}
+.design-logo-thumb {
+  width: 64px;
+  height: 64px;
+  flex: none;
+  border-radius: 10px;
+  border: 1px solid var(--bk-line);
+  background: #fff center / contain no-repeat;
+}
+.design-logo-thumb.is-empty {
+  background-image: none;
+  background-color: var(--bk-rail);
+}
+.design-logo-actions {
+  display: grid;
+  gap: 6px;
+  justify-items: start;
+}
+.design-seg-opt:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* Add section (section panel) */
+.design-add-section {
+  margin: 18px 0 0;
+  padding-top: 16px;
+  border-top: 1px solid var(--bk-line);
+  display: grid;
+  gap: 8px;
+}
+.design-add-section-menu {
+  display: grid;
+  gap: 6px;
+}
+.design-add-section-menu.hidden { display: none; }
+.design-add-section-opt {
+  display: grid;
+  gap: 2px;
+  text-align: left;
+  padding: 10px 12px;
+  border: 1px solid var(--bk-line);
+  border-radius: 10px;
+  background: var(--bk-panel);
+  color: var(--bk-ink);
+  font: 13px/1.3 "DM Sans", system-ui, sans-serif;
+  cursor: pointer;
+}
+.design-add-section-opt span { color: var(--bk-muted); font-size: 12px; }
+.design-add-section-opt:hover,
+.design-add-section-opt:focus-visible { border-color: var(--bk-ink); }

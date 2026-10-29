@@ -36,7 +36,7 @@ function tattooNavHtml(tenant) {
     ? (' data-bk-color-surface="page"' + classicBkSurfaceKeyAttr(tenant, 'classic.nav'))
     : '';
   return '<nav class="tattoo-nav"' + classicNavAttr + '>' +
-    '<a href="' + base + '/home" class="tattoo-brand">' + siteNameSpan(tenant, 'Welcome') + '</a>' +
+    '<a href="' + base + '/home" class="tattoo-brand">' + navBrandHtml(tenant, siteNameSpan(tenant, 'Welcome')) + '</a>' +
     '<div class="tattoo-nav-trailing">' +
       '<div class="tattoo-nav-links">' + inner + '</div>' +
     '<button class="tattoo-nav-menu" type="button" aria-label="Menu">' + hamburgerMenuSvg() + '</button>' +
@@ -157,7 +157,7 @@ function classicHomePage(tenant, services, opts) {
   if (tenantShowBookPage(tenant)) navInner += '<a href="' + bookUrl + '" class="classic-nav-book" data-cta-key="wc.classic.navBook">' + wcSpan(tenant, 'wc.classic.navBook', 'Book') + '</a>';
   var nav = '<nav class="tattoo-nav" data-bk-color-surface="page"' +
     classicBkSurfaceKeyAttr(tenant, 'classic.nav') + '>' +
-    '<a href="' + base + '/home" class="tattoo-brand">' + siteNameSpan(tenant, opts.defaultName) + '</a>' +
+    '<a href="' + base + '/home" class="tattoo-brand">' + navBrandHtml(tenant, siteNameSpan(tenant, opts.defaultName)) + '</a>' +
     '<div class="tattoo-nav-trailing">' +
       '<div class="tattoo-nav-links">' + navInner + '</div>' +
     '<button class="tattoo-nav-menu" type="button" aria-label="Menu">' + hamburgerMenuSvg() + '</button>' +

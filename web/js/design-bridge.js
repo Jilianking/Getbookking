@@ -704,6 +704,29 @@
     });
   }
 
+  /** Header shows the name, the logo, or both. */
+  function applyHeaderBrand(payload) {
+    var mode = payload.mode === 'logo' || payload.mode === 'both' ? payload.mode : 'name';
+    var logo = String(payload.logoUrl || '');
+    document.querySelectorAll('[data-bk-nav-brand]').forEach(function (el) {
+      el.setAttribute('data-mode', mode);
+      var img = el.querySelector('.bk-nav-logo');
+      if (!logo) {
+        el.removeAttribute('data-has-logo');
+        if (img) img.parentNode.removeChild(img);
+        return;
+      }
+      el.setAttribute('data-has-logo', '1');
+      if (!img) {
+        img = document.createElement('img');
+        img.className = 'bk-nav-logo';
+        img.alt = '';
+        el.insertBefore(img, el.firstChild);
+      }
+      img.src = logo;
+    });
+  }
+
   function describeCard(el) {
     var key = keyOnColorTarget(el);
     var surface = (el.getAttribute && el.getAttribute('data-bk-color-surface')) || '';
@@ -1237,6 +1260,17 @@
           syncFrames();
           post('section-refresh', describeCard(movedCard));
         }
+        break;
+      case 'blocks':
+        // Added sections changed in the editor: the site redraws them, then the order is re-applied.
+        if (typeof window.__bkPreviewBlocks === 'function' && window.__bkPreviewBlocks(data.payload || {})) {
+          stampEditableMarks();
+          syncFrames();
+        }
+        break;
+      case 'header-brand':
+        applyHeaderBrand(data.payload || {});
+        syncFrames();
         break;
       case 'paint-role':
         paintRoleKeys(data.payload || {});

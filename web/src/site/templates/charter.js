@@ -313,7 +313,7 @@ function charterNavHtml(tenant, active) {
     return '<a href="' + href + '"' + cls + '>' + wcSpan(tenant, copyKey, label) + '</a>';
   }
   return '<nav class="charter-nav"' + charterBandAttrs(tenant, 'page', 'charter.nav') + '>' +
-    '<a href="' + base + '/home" class="charter-brand">' + siteNameSpan(tenant, 'Harbor Charters', 'displayName.charter.nav') + '</a>' +
+    '<a href="' + base + '/home" class="charter-brand">' + navBrandHtml(tenant, siteNameSpan(tenant, 'Harbor Charters', 'displayName.charter.nav')) + '</a>' +
     '<div class="charter-nav-links">' +
       (tenantShowChartersPage(tenant) ? link(base + '/charters', 'Charters', 'charters', 'wc.charter.navCharters') : '') +
       (tenantShowHowItWorksPage(tenant) ? link(base + '/how-it-works', 'How it works', 'how', 'wc.charter.navHow') : '') +
@@ -360,7 +360,7 @@ function charterFooterHtml(tenant) {
   var year = new Date().getFullYear();
   var igHtml = charterInstagramLinkHtml(tenant, 'charter-footer-ig');
   return '<footer class="charter-footer"' + charterBandAttrs(tenant, 'about', 'charter.footer') + '>' +
-    '<a href="' + base + '/home" class="charter-brand">' + siteNameSpan(tenant, 'Harbor Charters') + '</a>' +
+    '<a href="' + base + '/home" class="charter-brand">' + navBrandHtml(tenant, siteNameSpan(tenant, 'Harbor Charters')) + '</a>' +
     (tenantShowChartersPage(tenant) ? '<a href="' + base + '/charters">' + wcSpan(tenant, 'wc.charter.footerCharters', 'Charters') + '</a>' : '') +
     (tenantShowHowItWorksPage(tenant) ? '<a href="' + base + '/how-it-works">' + wcSpan(tenant, 'wc.charter.footerHow', 'How it works') + '</a>' : '') +
     (tenantShowShopPage(tenant) ? '<a href="' + base + '/shop">' + wcSpan(tenant, 'wc.charter.footerShop', 'Shop') + '</a>' : '') +
@@ -2959,7 +2959,7 @@ function charterCheckoutNavHtml(tenant, service) {
       });
   return '<nav class="charter-nav"' + charterBandAttrs(tenant, 'page', 'charter.nav') + '>' +
     '<a class="charter-back charter-back--nav" href="' + esc(back) + '">‹ Back</a>' +
-    '<a href="' + tenantBaseUrl(tenant) + '/home" class="charter-brand">' + siteNameSpan(tenant, 'Harbor Charters', 'displayName.charter.nav') + '</a>' +
+    '<a href="' + tenantBaseUrl(tenant) + '/home" class="charter-brand">' + navBrandHtml(tenant, siteNameSpan(tenant, 'Harbor Charters', 'displayName.charter.nav')) + '</a>' +
     '<span style="margin-left:auto;font-size:13px;opacity:.5">' +
       wcSpan(tenant, 'wc.charter.secureCheckout', 'Secure checkout') + '</span>' +
     '</nav>';

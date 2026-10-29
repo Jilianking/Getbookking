@@ -521,6 +521,43 @@ function applyWebButtonColors(tenant) {
 }
 
 /** Tells search engines the shop's connected domain is its main address (both addresses serve the same site). */
+/**
+ * Browser tab icon: the shop's logo, or the first letter of its name in the accent color.
+ * webTabIcon 'letter' always uses the letter.
+ */
+function tabIconHref(t) {
+  if (t.logoUrl && t.webTabIcon !== 'letter') return String(t.logoUrl);
+  var name = tenantSiteDisplayName(t, '') || t.slug || '';
+  var letter = (String(name).trim().match(/[A-Za-z0-9]/) || ['B'])[0].toUpperCase();
+  var accent = tenantColors(t).accent || '#111111';
+  var svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">' +
+    '<rect width="64" height="64" rx="14" fill="' + accent + '"/>' +
+    '<text x="32" y="44" text-anchor="middle" font-family="Georgia,serif" font-size="38" fill="' + readableOn(accent) + '">' + letter + '</text></svg>';
+  return 'data:image/svg+xml,' + encodeURIComponent(svg);
+}
+
+function readableOn(hex) {
+  var m = /^#?([0-9a-f]{6})$/i.exec(String(hex || ''));
+  if (!m) return '#ffffff';
+  var n = parseInt(m[1], 16);
+  var lum = (0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) / 255;
+  return lum > 0.6 ? '#111111' : '#ffffff';
+}
+
+function applyTabIcon(t) {
+  var href = tabIconHref(t);
+  [['icon', ''], ['apple-touch-icon', 'touch']].forEach(function (pair) {
+    if (pair[1] === 'touch' && !/^https?:/.test(href)) return;
+    var link = document.querySelector('link[rel="' + pair[0] + '"]');
+    if (!link) {
+      link = document.createElement('link');
+      link.rel = pair[0];
+      document.head.appendChild(link);
+    }
+    link.href = href;
+  });
+}
+
 function applyCanonicalLink(t) {
   var domain = (t && t.canonicalDomain) || '';
   if (!/^[a-z0-9.-]+\.[a-z]{2,}$/.test(domain)) return;
@@ -543,6 +580,7 @@ function applyCanonicalLink(t) {
 function applyBranding(t) {
   if (!t) return;
   applyCanonicalLink(t);
+  applyTabIcon(t);
   applySiteSeo(t);
   applySiteAnnouncement(t);
   applyTenantColorVars(t);

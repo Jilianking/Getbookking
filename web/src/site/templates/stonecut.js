@@ -178,7 +178,7 @@ function stonecutNavHtml(tenant) {
     '<span class="stonecut-logo-wordmark">' + siteNameSpan(tenant, 'Studio', 'displayName.stonecut.nav') + '</span>' +
     '<span class="stonecut-logo-stack">' +
     stonecutIndustryEmHtml(tenant, 'stonecut-nav-industry') +
-    '<span class="stonecut-nav-name">' + siteNameSpan(tenant, 'Studio', 'displayName.stonecut.nav') + '</span>' +
+    navBrandHtml(tenant, '<span class="stonecut-nav-name">' + siteNameSpan(tenant, 'Studio', 'displayName.stonecut.nav') + '</span>') +
     locationHtml +
     '</span></a>' +
     '<div class="stonecut-nav-trailing">' +

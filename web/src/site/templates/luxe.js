@@ -74,7 +74,7 @@ function luxeChromeNavHtml(tenant, variant) {
   if (tenantShowAboutPage(tenant)) inner += '<a href="' + base + '/about">About</a>';
   if (tenantShowBookPage(tenant)) inner += '<a href="' + bookUrl + '" class="luxe-nav-book" data-cta-key="wc.luxe.navBook">' + wcSpan(tenant, 'wc.luxe.navBook', 'Booking') + '</a>';
   return '<nav class="' + navClass + '" data-bk-color-surface="page"' + luxeBkSurfaceKeyAttr(tenant, 'luxe.nav') + '>' +
-    '<a href="' + base + '/home" class="luxe-nav-brand">' + siteNameSpan(tenant, 'Welcome', 'displayName.luxe.nav') + '</a>' +
+    '<a href="' + base + '/home" class="luxe-nav-brand">' + navBrandHtml(tenant, siteNameSpan(tenant, 'Welcome', 'displayName.luxe.nav')) + '</a>' +
     '<div class="luxe-nav-trailing">' +
       '<div class="luxe-nav-links">' + inner + '</div>' +
     '<button class="tattoo-nav-menu" type="button" aria-label="Menu" style="background:none;border:none;font-size:1.5rem;cursor:pointer;padding:8px;display:none">' + hamburgerMenuSvg() + '</button>' +

@@ -729,6 +729,18 @@ function siteNameSpan(tenant, fallback, styleKey) {
     esc(tenantSiteDisplayName(tenant, fallback)) + '</span>';
 }
 
+/**
+ * Header brand: the shop name, its logo, or both, as chosen in the web editor (webHeaderBrand).
+ * Without a logo it's always the name.
+ */
+function navBrandHtml(tenant, nameHtml) {
+  var mode = tenant && (tenant.webHeaderBrand === 'logo' || tenant.webHeaderBrand === 'both') ? tenant.webHeaderBrand : 'name';
+  var logo = tenant && tenant.logoUrl ? String(tenant.logoUrl) : '';
+  return '<span class="bk-nav-brand" data-bk-nav-brand data-mode="' + mode + '"' + (logo ? ' data-has-logo="1"' : '') + '>' +
+    (logo ? '<img class="bk-nav-logo" src="' + esc(logo) + '" alt="">' : '') +
+    '<span class="bk-nav-name">' + nameHtml + '</span></span>';
+}
+
 /** When false, hours blocks are omitted on the public site (independent of contact visibility). */
 function tenantShowBusinessHours(tenant) {
   return tenant.showBusinessHoursOnPage !== false;
@@ -1248,6 +1260,9 @@ function mapLoadedTenant(id, data, slug) {
         webButtonColors: coerceStyleMap(data.webButtonColors),
         webSectionLayouts: coerceStyleMap(data.webSectionLayouts),
         webPage: data.webPage && typeof data.webPage === 'object' ? data.webPage : {},
+        webBlocks: data.webBlocks && typeof data.webBlocks === 'object' ? data.webBlocks : {},
+        webHeaderBrand: (data.webHeaderBrand || '').toString(),
+        webTabIcon: (data.webTabIcon || '').toString(),
         webFooter: data.webFooter && typeof data.webFooter === 'object' ? data.webFooter : {},
         bookingFormStyleId: data.bookingFormStyleId || '',
         // Prefer calendar when either field says so (see bookingModeResolved).

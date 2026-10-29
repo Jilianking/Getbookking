@@ -166,7 +166,7 @@
     'siteAnnouncementEnabled', 'siteAnnouncementText', 'seoTitle', 'seoDescription',
     'webThemeId', 'webCopyOverrides', 'webSurfaceColors', 'webButtonColors', 'webTextColors', 'webTextFontSizes',
     'bookingFormStyleId', 'formSchema', 'guidedStepTitles', 'guidedStepOrder', 'reviews',
-    'webSectionLayouts', 'webPage', 'webFooter', 'instagramHandle',
+    'webSectionLayouts', 'webPage', 'webFooter', 'instagramHandle', 'webBlocks', 'webHeaderBrand', 'webTabIcon', 'logoUrl',
     'heroImageUrl', 'heroImagePixelWidth', 'heroImagePixelHeight',
     'featuredWorkImages', 'galleryImages',
     'studio12PhilosophyImageUrl', 'studio12PhilosophyImagePixelWidth', 'studio12PhilosophyImagePixelHeight',
@@ -538,6 +538,8 @@
 
   function pushLivePreview() {
     postToFrame('color-patch', colorPatchFromTenant(state.tenant));
+    postBlocks();
+    postHeaderBrand();
     // The preview loads layouts from publicSites, which can lag the tenant; send ours so it always matches.
     postToFrame('layouts', (state.tenant && state.tenant.webSectionLayouts) || {});
     postPageSections();
@@ -846,6 +848,253 @@
     return next;
   }
 
+  /* ── Added sections: text box, FAQ, policies, hours and map (drawn by blocks.js on the site) ── */
+
+  var BLOCK_CHOICES = [
+    { type: 'text', label: 'Text box', hint: 'A heading and a paragraph' },
+    { type: 'faq', label: 'FAQ', hint: 'Questions that open when tapped' },
+    { type: 'policies', label: 'Policies', hint: 'Deposits, cancellations, late arrivals' },
+    { type: 'hours', label: 'Hours and map', hint: 'From your business hours and address' }
+  ];
+  var BLOCK_MAX_ITEMS = 12;
+
+  function currentBlocks() {
+    return cloneValue((state.tenant && state.tenant.webBlocks) || {});
+  }
+
+  function postBlocks() {
+    if (!state.tenant) return;
+    postToFrame('blocks', {
+      page: 'home',
+      webBlocks: state.tenant.webBlocks || {},
+      webCopyOverrides: state.tenant.webCopyOverrides || {}
+    });
+    postPageSections();
+  }
+
+  function blockItemCount(block) {
+    var n = parseInt(block && block.count, 10);
+    return Math.max(1, Math.min(isNaN(n) ? 3 : n, BLOCK_MAX_ITEMS));
+  }
+
+  function blockControlsHtml(sec) {
+    var block = (state.tenant.webBlocks || {})[sec.id];
+    if (!block) return '';
+    var html = '';
+    if (block.type === 'text') {
+      html += '<h2>Alignment</h2>' + segmentedHtml('data-block-align', sec.id, [
+        { id: 'left', label: 'Left' }, { id: 'center', label: 'Center' }
+      ], block.align === 'center' ? 'center' : 'left');
+    }
+    if (block.type === 'faq' || block.type === 'policies') {
+      var noun = block.type === 'faq' ? 'question' : 'policy';
+      var count = blockItemCount(block);
+      html += '<h2>' + (block.type === 'faq' ? 'Questions' : 'Policies') + '</h2>' +
+        '<p class="design-hint">Click any ' + noun + ' in the preview to edit it.</p>' +
+        '<div class="design-section-actions">' +
+        (count < BLOCK_MAX_ITEMS ? '<button type="button" class="design-btn design-btn--ghost" data-block-add-item>Add ' + noun + '</button>' : '') +
+        (count > 1 ? '<button type="button" class="design-text-btn" data-block-remove-item>Remove last ' + noun + '</button>' : '') +
+        '</div>';
+    }
+    if (block.type === 'hours') {
+      html += '<p class="design-hint">Hours and the map come from your business hours and address. Change them in Settings.</p>';
+    }
+    if (block.type === 'text') html += '<p class="design-hint">Click the heading or text in the preview to edit it.</p>';
+    return html + '<div class="design-section-actions"><button type="button" class="design-btn design-btn--ghost design-btn--danger" data-block-delete>Delete section</button></div>';
+  }
+
+  function addSectionMenuHtml() {
+    return '<div class="design-add-section">' +
+      '<button type="button" class="design-btn design-btn--primary" data-add-section-toggle aria-expanded="false">Add section</button>' +
+      '<div class="design-add-section-menu hidden" data-add-section-menu>' +
+      BLOCK_CHOICES.map(function (c) {
+        return '<button type="button" class="design-add-section-opt" data-add-block="' + c.type + '">' +
+          '<strong>' + escHtml(c.label) + '</strong><span>' + escHtml(c.hint) + '</span></button>';
+      }).join('') +
+      '</div><p class="design-hint">New sections go right below this one.</p></div>';
+  }
+
+  function savePageOrder(sec, order, blocks, extra) {
+    var page = sec.page || 'home';
+    var current = (state.tenant.webPage && state.tenant.webPage[page]) || {};
+    var webPage = Object.assign({}, state.tenant.webPage || {});
+    webPage[page] = { order: order, sections: cloneValue(current.sections || {}) };
+    queueUpdate(Object.assign({ webBlocks: blocks, webPage: webPage }, extra || {}));
+    postBlocks();
+  }
+
+  function addBlock(sec, type) {
+    var id = 'blk-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+    var blocks = currentBlocks();
+    blocks[id] = { type: type, page: sec.page || 'home' };
+    if (type === 'faq' || type === 'policies') blocks[id].count = 3;
+    var order = sec.order.slice();
+    var at = order.indexOf(sec.id);
+    order.splice(at === -1 ? order.length : at + 1, 0, id);
+    savePageOrder(sec, order, blocks);
+    setStatus('Section added. Click its text to edit.', 'is-ok');
+  }
+
+  /** Words of an added section, removed when it is deleted. */
+  function withoutBlockCopy(id, fromItem) {
+    var map = Object.assign({}, state.tenant.webCopyOverrides || {});
+    var prefix = 'wc.block.' + id + '.';
+    Object.keys(map).forEach(function (k) {
+      if (k.indexOf(prefix) !== 0) return;
+      var m = /\.(?:q|a)(\d+)$/.exec(k);
+      if (fromItem == null || (m && Number(m[1]) >= fromItem)) delete map[k];
+    });
+    return map;
+  }
+
+  function wireBlockControls(host, payload) {
+    var sec = payload.section;
+    var toggle = host.querySelector('[data-add-section-toggle]');
+    var menu = host.querySelector('[data-add-section-menu]');
+    if (toggle && menu) {
+      toggle.addEventListener('click', function () {
+        var open = menu.classList.toggle('hidden') === false;
+        toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+      });
+      menu.querySelectorAll('[data-add-block]').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          addBlock(sec, btn.getAttribute('data-add-block'));
+          menu.classList.add('hidden');
+          toggle.setAttribute('aria-expanded', 'false');
+        });
+      });
+    }
+    var block = sec && (state.tenant.webBlocks || {})[sec.id];
+    if (!block) return;
+    host.querySelectorAll('[data-block-align]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var blocks = currentBlocks();
+        blocks[sec.id].align = btn.getAttribute('data-block-align');
+        queueUpdate({ webBlocks: blocks });
+        postBlocks();
+        renderSectionBody(payload);
+      });
+    });
+    var addItem = host.querySelector('[data-block-add-item]');
+    if (addItem) {
+      addItem.addEventListener('click', function () {
+        var blocks = currentBlocks();
+        blocks[sec.id].count = blockItemCount(blocks[sec.id]) + 1;
+        queueUpdate({ webBlocks: blocks });
+        postBlocks();
+        renderSectionBody(payload);
+      });
+    }
+    var removeItem = host.querySelector('[data-block-remove-item]');
+    if (removeItem) {
+      removeItem.addEventListener('click', function () {
+        var blocks = currentBlocks();
+        var count = blockItemCount(blocks[sec.id]);
+        blocks[sec.id].count = count - 1;
+        queueUpdate({ webBlocks: blocks, webCopyOverrides: withoutBlockCopy(sec.id, count) });
+        postBlocks();
+        renderSectionBody(payload);
+      });
+    }
+    var del = host.querySelector('[data-block-delete]');
+    if (del) {
+      del.addEventListener('click', function () {
+        openConfirmModal({
+          title: 'Delete section',
+          body: 'Remove this ' + (BLOCK_CHOICES.filter(function (c) { return c.type === block.type; })[0] || { label: 'section' }).label + ' section and its text? You can undo this until you publish.',
+          confirmLabel: 'Delete',
+          onConfirm: function () {
+            var blocks = currentBlocks();
+            delete blocks[sec.id];
+            var order = sec.order.filter(function (id) { return id !== sec.id; });
+            savePageOrder(sec, order, blocks, { webCopyOverrides: withoutBlockCopy(sec.id) });
+            setPanel('pages');
+          }
+        });
+      });
+    }
+  }
+
+  /* ── Logo, header brand, and browser tab icon ── */
+
+  function postHeaderBrand() {
+    if (!state.tenant) return;
+    postToFrame('header-brand', { mode: state.tenant.webHeaderBrand || 'name', logoUrl: state.tenant.logoUrl || '' });
+  }
+
+  function fillLogo() {
+    var t = state.tenant || {};
+    var thumb = $('logoThumb');
+    if (thumb) {
+      thumb.style.backgroundImage = t.logoUrl ? 'url("' + String(t.logoUrl).replace(/"/g, '%22') + '")' : '';
+      thumb.classList.toggle('is-empty', !t.logoUrl);
+    }
+    if ($('uploadLogoBtn')) $('uploadLogoBtn').textContent = t.logoUrl ? 'Replace logo' : 'Upload logo';
+    if ($('removeLogoBtn')) $('removeLogoBtn').classList.toggle('hidden', !t.logoUrl);
+    var brand = t.webHeaderBrand === 'logo' || t.webHeaderBrand === 'both' ? t.webHeaderBrand : 'name';
+    var tab = t.webTabIcon === 'letter' ? 'letter' : 'logo';
+    document.querySelectorAll('[data-header-brand]').forEach(function (b) {
+      var on = b.getAttribute('data-header-brand') === brand;
+      b.classList.toggle('is-on', on);
+      b.setAttribute('aria-checked', on ? 'true' : 'false');
+      b.disabled = !t.logoUrl && b.getAttribute('data-header-brand') !== 'name';
+    });
+    document.querySelectorAll('[data-tab-icon]').forEach(function (b) {
+      var on = b.getAttribute('data-tab-icon') === tab;
+      b.classList.toggle('is-on', on);
+      b.setAttribute('aria-checked', on ? 'true' : 'false');
+      b.disabled = !t.logoUrl && b.getAttribute('data-tab-icon') === 'logo';
+    });
+  }
+
+  async function uploadLogoFile(file) {
+    if (!/^image\/(png|jpeg|webp|svg\+xml)$/.test(file.type)) throw new Error('Choose a PNG, JPG, WebP, or SVG image.');
+    if (file.size > 5 * 1024 * 1024) throw new Error('That logo is over 5 MB. Choose a smaller file.');
+    setStatus('Uploading logo…');
+    var ext = { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/webp': 'webp', 'image/svg+xml': 'svg' }[file.type];
+    var ref = storage.ref().child('tenants/' + state.tenantId + '/logo-' + Date.now().toString(36) + '.' + ext);
+    await ref.put(file, { contentType: file.type });
+    var url = await ref.getDownloadURL();
+    var updates = { logoUrl: url };
+    // First logo: show it in the header alongside the name.
+    if (!state.tenant.logoUrl && !state.tenant.webHeaderBrand) updates.webHeaderBrand = 'both';
+    await persistTenant(updates);
+    fillLogo();
+    postHeaderBrand();
+    setStatus('Logo uploaded', 'is-ok');
+  }
+
+  function wireLogoControls() {
+    if ($('uploadLogoBtn')) $('uploadLogoBtn').addEventListener('click', function () { beginUpload({ type: 'logo' }); });
+    if ($('removeLogoBtn')) {
+      $('removeLogoBtn').addEventListener('click', function () {
+        openConfirmModal({
+          title: 'Remove logo',
+          body: 'Remove your logo from your website and app? The header will show your business name.',
+          confirmLabel: 'Remove',
+          onConfirm: async function () {
+            await persistTenant({ logoUrl: '', webHeaderBrand: 'name' });
+            fillLogo();
+            postHeaderBrand();
+          }
+        });
+      });
+    }
+    document.querySelectorAll('[data-header-brand]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        queueUpdate({ webHeaderBrand: b.getAttribute('data-header-brand') });
+        fillLogo();
+        postHeaderBrand();
+      });
+    });
+    document.querySelectorAll('[data-tab-icon]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        queueUpdate({ webTabIcon: b.getAttribute('data-tab-icon') });
+        fillLogo();
+      });
+    });
+  }
+
   function sectionControlsHtml(payload) {
     var sec = payload.section;
     if (!sec || !sec.id) return '';
@@ -863,7 +1112,9 @@
       '<div class="design-section-actions">' +
       '<button type="button" class="design-btn design-btn--ghost" data-section-toggle>' + (sec.hidden ? 'Show section' : 'Hide section') + '</button>' +
       '</div>' +
-      (sec.hidden ? '<p class="design-hint">Hidden sections don’t appear on your site. They show as a striped bar here so you can bring them back.</p>' : '');
+      (sec.hidden ? '<p class="design-hint">Hidden sections don’t appear on your site. They show as a striped bar here so you can bring them back.</p>' : '') +
+      blockControlsHtml(sec) +
+      addSectionMenuHtml();
   }
 
   /** Saves the home page's section order and visibility. The preview applies it live and reports the new state back. */
@@ -1086,6 +1337,7 @@
         renderSectionBody(payload);
       });
     }
+    wireBlockControls(host, payload);
     var sectionToggle = host.querySelector('[data-section-toggle]');
     if (sectionToggle) {
       sectionToggle.addEventListener('click', function () {
@@ -1712,6 +1964,7 @@
 
   function fillBrandKit() {
     var t = state.tenant;
+    fillLogo();
     function setPair(colorId, textId, value) {
       var hex = normalizeHex(value, '#FFFFFF');
       if ($(colorId)) $(colorId).value = hex;
@@ -3940,10 +4193,23 @@
     $('uploadPhilosophyBtn').addEventListener('click', function () { beginUpload({ type: 'philosophy' }); });
     $('uploadBookCtaBtn').addEventListener('click', function () { beginUpload({ type: 'bookCta' }); });
 
+    wireLogoControls();
     $('filePicker').addEventListener('change', async function () {
       var files = Array.prototype.slice.call($('filePicker').files || []);
       var batchTarget = state.uploadTarget;
       if (!files.length || !batchTarget) return;
+      if (batchTarget.type === 'logo') {
+        // Logos keep their shape and see-through background, so they skip the photo crop.
+        try {
+          await uploadLogoFile(files[0]);
+        } catch (err) {
+          setStatus('');
+          alert((err && err.message) || 'Could not upload logo');
+        } finally {
+          state.uploadTarget = null;
+        }
+        return;
+      }
       var aspect = 16 / 9;
       if (batchTarget.type === 'featured' || batchTarget.type === 'gallery') aspect = 1;
       if (batchTarget.type === 'philosophy' || batchTarget.type === 'bookCta') aspect = 4 / 3;

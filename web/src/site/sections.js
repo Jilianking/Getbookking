@@ -52,6 +52,10 @@ function stampPageSection(html, section, hidden) {
 function renderPageSections(tenant, pageId, list) {
   var settings = pageSectionSettings(tenant, pageId);
   var editing = isWebDesignPreview();
+  // Remembered so the web editor can re-render added sections live (see blocks.js).
+  window.__bkBlocksTenant = tenant;
+  window.__bkPreviewBlocks = previewPageBlocks;
+  list = list.concat(pageBlockSections(tenant, pageId));
   return orderPageSections(list, settings.order).map(function (section) {
     if (!section.html) return '';
     var saved = settings.sections[section.id];

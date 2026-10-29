@@ -65,7 +65,7 @@ function bladeNavHtml(tenant, anchorHome) {
     ? '<a href="' + bookUrl + '" class="blade-nav-book" data-cta-key="wc.blade.navBook">' + wcSpan(tenant, 'wc.blade.navBook', 'Book now') + '</a>'
     : '';
   return '<nav class="blade-topnav" data-bk-color-surface="page"' + bladeBkSurfaceKeyAttr(tenant, 'blade.nav') + '>' +
-    '<a href="' + base + '/home" class="blade-nav-logo">' + siteNameSpan(tenant, 'Studio', 'displayName.blade.nav') + '</a>' +
+    '<a href="' + base + '/home" class="blade-nav-logo">' + navBrandHtml(tenant, siteNameSpan(tenant, 'Studio', 'displayName.blade.nav')) + '</a>' +
     '<div class="blade-nav-trailing">' +
     '<ul class="blade-nav-links">' + lis + '</ul>' +
     bookBtn +

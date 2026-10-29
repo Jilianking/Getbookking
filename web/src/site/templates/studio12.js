@@ -250,7 +250,7 @@ function studio12NavHtml(tenant) {
     studio12BkSurfaceKeyAttr(tenant, 'studio12.nav') + '>' +
     '<button type="button" class="tattoo-nav-menu" aria-label="Menu">' + hamburgerMenuSvg() + '</button>' +
     '<a href="' + homeUrl + '" class="s12-nav-logo">' +
-    '<span class="s12-nav-logo-main">' + siteNameSpan(tenant, 'Studio', 'displayName.s12.nav') + '</span>' +
+    '<span class="s12-nav-logo-main">' + navBrandHtml(tenant, siteNameSpan(tenant, 'Studio', 'displayName.s12.nav')) + '</span>' +
     studio12NavLogoSubHtml(tenant) + '</a>' +
     '<ul class="s12-nav-links">' + navLis + '</ul>' +
     '<div class="s12-nav-trailing">' +

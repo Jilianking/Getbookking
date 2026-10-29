@@ -56,6 +56,10 @@ const customDomainTarget = defineString("CUSTOM_DOMAIN_TARGET", {
   default: "domains.getbookking.com",
   description: "Address customer domains point at (Cloudflare fallback origin)",
 });
+const customDomainApexIp = defineString("CUSTOM_DOMAIN_APEX_IP", {
+  default: "35.252.212.83",
+  description: "Fixed address of the small server that forwards bare domains to www (with a certificate)",
+});
 /** Flat USD added on top of Namecheap cost (customer-facing price). */
 const domainMarkupUsd = defineString("DOMAIN_MARKUP_USD", {
   default: "0",
@@ -632,20 +636,20 @@ function statusPayload(tenant, tenantId, extras) {
             label: "HTTPS pending",
             detail:
               "Sandbox domains don’t get public DNS yet. On live Bookking, HTTPS activates when the domain points at us.",
-            url: `https://${domain}`,
+            url: `https://${wwwOf(domain)}`,
           }
         : {
             status: "active",
             label: "HTTPS on",
             detail: "Visitors see a secure padlock when DNS is live on Bookking.",
-            url: `https://${domain}`,
+            url: `https://${wwwOf(domain)}`,
           };
     } else if (["transferring", "connecting", "purchasing", "pending", "pending_dns"].includes(statusLower)) {
       customHttps = {
         status: "pending",
         label: "HTTPS pending",
         detail: "SSL activates after the domain finishes connecting to Bookking.",
-        url: `https://${domain}`,
+        url: `https://${wwwOf(domain)}`,
       };
     }
   }
@@ -908,7 +912,11 @@ async function cloudflareRequest(method, path, body) {
   return json.result;
 }
 
-/** Registers a hostname with Cloudflare (or finds the existing one). Cloudflare issues its certificate. */
+/**
+ * Registers a hostname with Cloudflare (or finds the existing one). Cloudflare issues its certificate.
+ * Only www is registered: Cloudflare can't approve a bare domain that points at us through
+ * Namecheap's ALIAS record, so the bare domain points at our small forwarding server instead.
+ */
 async function ensureCustomHostname(hostname) {
   const found = await cloudflareRequest(
     "GET",
@@ -923,6 +931,91 @@ async function ensureCustomHostname(hostname) {
 
 function customHostnameIsLive(h) {
   return !!(h && h.status === "active" && h.ssl && h.ssl.status === "active");
+}
+
+function xmlAttr(tag, name) {
+  const m = new RegExp(`\\s${name}="([^"]*)"`, "i").exec(tag);
+  return m ? m[1].replace(/&amp;/g, "&").replace(/&quot;/g, '"').replace(/&lt;/g, "<").replace(/&gt;/g, ">") : "";
+}
+
+/** Current Namecheap DNS records for a domain. */
+async function namecheapGetHosts(domain) {
+  const { sld, tld } = splitSldTld(domain);
+  const raw = await namecheapRequest("namecheap.domains.dns.getHosts", { SLD: sld, TLD: tld });
+  if (!namecheapStatusOk(raw)) {
+    throw new Error(`getHosts failed: ${namecheapErrorMessage(raw) || "unknown"}`);
+  }
+  const result = /<DomainDNSGetHostsResult[^>]*>/i.exec(raw);
+  const emailType = result ? xmlAttr(result[0], "EmailType") : "";
+  const records = (raw.match(/<host\s[^>]*\/?>/gi) || []).map((tag) => ({
+    host: xmlAttr(tag, "Name"),
+    type: xmlAttr(tag, "Type").toUpperCase(),
+    address: xmlAttr(tag, "Address"),
+    mxPref: xmlAttr(tag, "MXPref"),
+    ttl: xmlAttr(tag, "TTL"),
+  }));
+  return { records, emailType };
+}
+
+/** Bare-domain records replaced by the forward to www. */
+const APEX_WEB_TYPES = ["A", "AAAA", "CNAME", "ALIAS", "URL", "URL301", "FRAME"];
+/** Leftover Cloudflare approval records from the old bare-domain setup. */
+const OLD_VERIFY_TXT_HOSTS = new Set(["_cf-custom-hostname", "_acme-challenge"]);
+
+function apexIp() {
+  return (customDomainApexIp.value() || "").trim();
+}
+
+/** The bare domain points at our small forwarding server, which sends visitors to www securely. */
+function apexForwardRecord() {
+  return { host: "@", type: "A", address: apexIp(), ttl: 300 };
+}
+
+/**
+ * Domains set up before the bare domain pointed at the forwarding server: swap its record,
+ * keeping every other record (email, verification, www).
+ */
+async function forwardApexToWww(domain) {
+  const { records, emailType } = await namecheapGetHosts(domain);
+  if (!records.some((r) => r.host === "www")) {
+    throw new Error("getHosts returned no www record; not rewriting DNS");
+  }
+  const forward = apexForwardRecord();
+  const apexWeb = records.filter((r) => r.host === "@" && APEX_WEB_TYPES.includes(r.type));
+  const stale = records.some((r) => r.type === "TXT" && OLD_VERIFY_TXT_HOSTS.has(r.host));
+  if (!stale && apexWeb.length === 1 && apexWeb[0].type === "A" && apexWeb[0].address === forward.address) return;
+  const kept = records.filter(
+    (r) =>
+      !(r.host === "@" && APEX_WEB_TYPES.includes(r.type)) &&
+      !(r.type === "TXT" && OLD_VERIFY_TXT_HOSTS.has(r.host))
+  );
+  const all = [forward, ...kept];
+  const { sld, tld } = splitSldTld(domain);
+  const params = { SLD: sld, TLD: tld };
+  all.forEach((r, i) => {
+    const n = i + 1;
+    params[`HostName${n}`] = r.host;
+    params[`RecordType${n}`] = r.type;
+    params[`Address${n}`] = r.address;
+    params[`TTL${n}`] = String(r.ttl || 1800);
+    if (r.type === "MX") params[`MXPref${n}`] = String(r.mxPref || 10);
+  });
+  if (emailType) params.EmailType = emailType;
+  const raw = await namecheapRequest("namecheap.domains.dns.setHosts", params);
+  if (!namecheapStatusOk(raw)) {
+    throw new Error(`setHosts failed: ${namecheapErrorMessage(raw) || "unknown"}`);
+  }
+}
+
+/** Live domains on an older layout (or after the forwarding server moves): repoint the bare domain. */
+async function keepApexPointed(tenantRef, tenant) {
+  const domain = (tenant.customDomain || "").toString().trim().toLowerCase();
+  if (tenant.customDomainStatus !== "active" || !domain || !apexIp()) return false;
+  if (tenant.customDomainApexTarget === apexIp()) return false;
+  await forwardApexToWww(domain);
+  await tenantRef.set({ customDomainApexTarget: apexIp() }, { merge: true });
+  console.log("keepApexPointed", tenantRef.id, domain, apexIp());
+  return true;
 }
 
 async function removeCustomHostnames(ids) {
@@ -988,7 +1081,8 @@ async function readExistingEmailRecords(domain) {
 }
 
 /**
- * Points the bare domain and www at Get Bookking on Namecheap DNS, plus any kept email records.
+ * Points www at Get Bookking and forwards the bare domain to www on Namecheap DNS, plus any kept
+ * email records.
  * After a transfer the domain still uses its old DNS host, so it is switched to Namecheap DNS first.
  */
 async function pointDomainAtBookking(domain, keptRecords, { switchToNamecheapDns } = {}) {
@@ -1001,9 +1095,9 @@ async function pointDomainAtBookking(domain, keptRecords, { switchToNamecheapDns
     }
   }
   const records = [
-    { host: "@", type: "ALIAS", address: target, ttl: 300 },
+    apexForwardRecord(),
     { host: "www", type: "CNAME", address: target },
-    ...(keptRecords || []).filter((r) => !(r.host === "@" && ["A", "AAAA", "CNAME", "ALIAS"].includes(r.type)) && r.host !== "www"),
+    ...(keptRecords || []).filter((r) => !(r.host === "@" && APEX_WEB_TYPES.includes(r.type)) && r.host !== "www"),
   ];
   const params = { SLD: sld, TLD: tld };
   records.forEach((r, i) => {
@@ -1039,11 +1133,11 @@ async function connectDomainToBookking(tenantRef, tenant) {
     const kept = afterTransfer ? await readExistingEmailRecords(domain) : [];
     const keptCount = await pointDomainAtBookking(domain, kept, { switchToNamecheapDns: afterTransfer });
     patch.customDomainDnsPointedAt = admin.firestore.FieldValue.serverTimestamp();
+    patch.customDomainApexTarget = apexIp();
     patch.customDomainKeptRecordCount = keptCount;
   }
-  const apex = await ensureCustomHostname(domain);
   const www = await ensureCustomHostname(wwwOf(domain));
-  patch.customDomainCloudflareIds = [apex.id, www.id];
+  patch.customDomainCloudflareIds = [www.id];
   patch.customDomainUpdatedAt = admin.firestore.FieldValue.serverTimestamp();
   await tenantRef.set(patch, { merge: true });
   return true;
@@ -1053,8 +1147,11 @@ async function connectDomainToBookking(tenantRef, tenant) {
 async function setWalletDomain(tenantId, tenant, domain, enabled) {
   if (!domain || !(stripeSecretKey.value() || "").trim()) return;
   const accounts = await walletDomains.stripeAccountsForShop(getDb(), tenantId, tenant);
-  const results = await walletDomains.setWalletDomain(getStripe(), accounts, domain, enabled);
-  if (results.length) console.log("setWalletDomain", tenantId, domain, results.join("; "));
+  const hosts = enabled ? [wwwOf(domain)] : [domain, wwwOf(domain)];
+  for (const host of hosts) {
+    const results = await walletDomains.setWalletDomain(getStripe(), accounts, host, enabled);
+    if (results.length) console.log("setWalletDomain", tenantId, host, results.join("; "));
+  }
 }
 
 /** Fields cleared when a shop removes or transfers out its domain. */
@@ -1073,6 +1170,8 @@ function disconnectedDomainPatch() {
     customDomainAutoRenewUpdatedAt: del,
     customDomainCloudflareIds: del,
     customDomainDnsPointedAt: del,
+    customDomainApexForwardedAt: del,
+    customDomainApexTarget: del,
     customDomainKeptRecordCount: del,
     customDomainConnectingSince: del,
     customDomainLiveAt: del,
@@ -1187,17 +1286,32 @@ async function advanceCustomDomain(tenantRef, notifyDomainLive) {
   if (status !== "connecting") return "skip";
 
   const ids = Array.isArray(tenant.customDomainCloudflareIds) ? tenant.customDomainCloudflareIds : [];
-  if (!tenant.customDomainDnsPointedAt || ids.length < 2) {
+  if (!tenant.customDomainDnsPointedAt || !ids.length) {
     const connected = await connectDomainToBookking(tenantRef, tenant);
     return connected ? "connect-started" : "waiting-for-cloudflare";
   }
 
   const hosts = await Promise.all(ids.map((id) => cloudflareRequest("GET", `/custom_hostnames/${encodeURIComponent(id)}`)));
-  if (hosts.every(customHostnameIsLive)) {
+  const wwwHostname = hosts.find((h) => h && String(h.hostname || "").toLowerCase() === wwwOf(domain));
+  if (!wwwHostname) {
+    const connected = await connectDomainToBookking(tenantRef, tenant);
+    return connected ? "connect-started" : "waiting-for-cloudflare";
+  }
+  if (tenant.customDomainApexTarget !== apexIp()) {
+    // Set up under an older layout: point the bare domain at the forwarding server and drop any
+    // Cloudflare hostname for it.
+    await forwardApexToWww(domain);
+    await removeCustomHostnames(hosts.filter((h) => h && h.id !== wwwHostname.id).map((h) => h.id));
+    await tenantRef.set(
+      { customDomainApexTarget: apexIp(), customDomainCloudflareIds: [wwwHostname.id] },
+      { merge: true }
+    );
+  }
+  if (customHostnameIsLive(wwwHostname)) {
     await tenantRef.set(
       {
         customDomainStatus: "active",
-        customDomainStatusMessage: `Connected. ${domain} now opens your site.`,
+        customDomainStatusMessage: `Connected. ${wwwOf(domain)} now opens your site, and ${domain} forwards there.`,
         customDomainLiveAt: admin.firestore.FieldValue.serverTimestamp(),
         customDomainStuckNotedAt: admin.firestore.FieldValue.delete(),
         customDomainUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -1631,7 +1745,7 @@ async function fulfillDomainPurchase({ uid, tenantId, tenant, domain, payment, a
       ? `${domain} is yours in sandbox (test).`
       : `${domain} purchased. We’re connecting it now — this usually takes under an hour. Your free link keeps working meanwhile.`,
     subdomainUrl: `https://${slug}.getbookking.com`,
-    publicUrl: `https://${domain}`,
+    publicUrl: `https://${wwwOf(domain)}`,
   };
 }
 
@@ -1703,7 +1817,7 @@ async function fulfillDomainTransfer({ tenantId, tenant, domain, authCode, payme
     customerPaidUsd: payment && payment.customerPaidUsd,
     message:
       "Transfer started. Approve any email from your old registrar; we’ll connect the domain when the transfer finishes. Once connected, your domain will open your Get Bookking site instead of your old website. Remember to cancel your old website plan so you’re not still paying for it.",
-    publicUrl: `https://${domain}`,
+    publicUrl: `https://${wwwOf(domain)}`,
   };
 }
 
@@ -1967,9 +2081,9 @@ function registerCustomDomainFunctions(exportsObj, options) {
     const slug = (tenant.slug || "").toString().trim().toLowerCase();
     return safeNotify(
       notifyOwner, tenantId, tenant, "Your domain is live",
-      `${domain} now opens your Get Bookking site.` +
+      `${wwwOf(domain)} now opens your Get Bookking site.` +
         (slug ? ` Your old link (${slug}.getbookking.com) automatically forwards there.` : ""),
-      `${domain} is live`
+      `${wwwOf(domain)} is live`
     );
   };
 
@@ -1992,6 +2106,11 @@ function registerCustomDomainFunctions(exportsObj, options) {
           console.error("renewCustomDomains", doc.id, e.message || e);
         }
         outcomes[outcome] = (outcomes[outcome] || 0) + 1;
+        try {
+          await keepApexPointed(doc.ref, doc.data() || {});
+        } catch (e) {
+          console.warn("keepApexPointed", doc.id, e.message || e);
+        }
       }
       console.log("renewCustomDomains", JSON.stringify(outcomes));
       return null;
@@ -2795,7 +2914,7 @@ function registerCustomDomainFunctions(exportsObj, options) {
 
   /**
    * Public resolve for Cloudflare worker / SPA fallback.
-   * GET ?host=bleustattoos.com → { slug, status }
+   * GET ?host=bleustattoos.com → { slug, status } (also ?domain=, from the forwarding server)
    * GET ?slug=bleustattoos → { slug, domain } when that shop has a connected domain (subdomain forwarding).
    */
   exportsObj.resolveTenantDomain = functions.https.onRequest(async (req, res) => {
@@ -2830,7 +2949,8 @@ function registerCustomDomainFunctions(exportsObj, options) {
       return;
     }
 
-    let host = ((req.query && req.query.host) || "").toString().trim().toLowerCase();
+    // `domain` is how the forwarding server asks before getting a certificate.
+    let host = ((req.query && (req.query.host || req.query.domain)) || "").toString().trim().toLowerCase();
     host = host.replace(/^https?:\/\//, "").replace(/\/.*$/, "");
     if (!host || host.length > 253) {
       res.status(400).json({ error: "host required" });
@@ -2846,7 +2966,9 @@ function registerCustomDomainFunctions(exportsObj, options) {
     const status = (data.status || "").toString();
     const slug = (data.slug || "").toString().trim().toLowerCase();
     if (status !== "active" || !slug) {
-      res.status(404).json({ ok: false, host, slug: null, status: status || null });
+      // While connecting, the gateway sends visitors to the shop's free address instead of an error page.
+      const fallbackSlug = status === "connecting" && /^[a-z0-9][a-z0-9-]{0,62}$/.test(slug) ? slug : null;
+      res.status(404).json({ ok: false, host, slug: null, status: status || null, fallbackSlug });
       return;
     }
     // Public resolver: slug + status only (no tenantId enumeration).

@@ -84,6 +84,7 @@ const PUBLIC_SITE_KEYS = [
   "webHeaderBrand",
   "webTabIcon",
   "webLogoHeight",
+  "webSectionPhotos",
   "webFooter",
   "bookingFormStyleId",
   "bookingMode",

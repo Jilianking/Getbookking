@@ -1272,6 +1272,7 @@ function mapLoadedTenant(id, data, slug) {
         webHeaderBrand: (data.webHeaderBrand || '').toString(),
         webTabIcon: (data.webTabIcon || '').toString(),
         webLogoHeight: typeof data.webLogoHeight === 'number' ? data.webLogoHeight : 0,
+        webSectionPhotos: data.webSectionPhotos && typeof data.webSectionPhotos === 'object' ? data.webSectionPhotos : {},
         webFooter: data.webFooter && typeof data.webFooter === 'object' ? data.webFooter : {},
         bookingFormStyleId: data.bookingFormStyleId || '',
         // Prefer calendar when either field says so (see bookingModeResolved).

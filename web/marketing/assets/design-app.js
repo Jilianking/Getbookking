@@ -166,7 +166,7 @@
     'siteAnnouncementEnabled', 'siteAnnouncementText', 'seoTitle', 'seoDescription',
     'webThemeId', 'webCopyOverrides', 'webSurfaceColors', 'webButtonColors', 'webTextColors', 'webTextFontSizes',
     'bookingFormStyleId', 'formSchema', 'guidedStepTitles', 'guidedStepOrder', 'reviews',
-    'webSectionLayouts', 'webPage', 'webFooter', 'instagramHandle', 'webBlocks', 'webHeaderBrand', 'webTabIcon', 'webLogoHeight', 'logoUrl',
+    'webSectionLayouts', 'webPage', 'webFooter', 'instagramHandle', 'webBlocks', 'webHeaderBrand', 'webTabIcon', 'webLogoHeight', 'logoUrl', 'webSectionPhotos',
     'heroImageUrl', 'heroImagePixelWidth', 'heroImagePixelHeight',
     'featuredWorkImages', 'galleryImages',
     'studio12PhilosophyImageUrl', 'studio12PhilosophyImagePixelWidth', 'studio12PhilosophyImagePixelHeight',
@@ -539,6 +539,7 @@
   function pushLivePreview() {
     postToFrame('color-patch', colorPatchFromTenant(state.tenant));
     postBlocks();
+    postSectionPhotos();
     postHeaderBrand();
     // The preview loads layouts from publicSites, which can lag the tenant; send ours so it always matches.
     postToFrame('layouts', (state.tenant && state.tenant.webSectionLayouts) || {});
@@ -866,9 +867,72 @@
     postToFrame('blocks', {
       page: 'home',
       webBlocks: state.tenant.webBlocks || {},
-      webCopyOverrides: state.tenant.webCopyOverrides || {}
+      webCopyOverrides: state.tenant.webCopyOverrides || {},
+      webSectionPhotos: state.tenant.webSectionPhotos || {}
     });
     postPageSections();
+  }
+
+  /* ── Photo beside a section's content (sections.js on the site) ── */
+
+  var SECTION_PHOTO_IDS = { promo: 1, about: 1, services: 1, reviews: 1, info: 1, location: 1, philosophy: 1, process: 1, book: 1 };
+
+  function sectionPhotoAllowed(id) {
+    return !!SECTION_PHOTO_IDS[id] || /^blk-/.test(id || '');
+  }
+
+  function postSectionPhotos() {
+    if (!state.tenant) return;
+    postToFrame('section-photos', { webSectionPhotos: state.tenant.webSectionPhotos || {} });
+  }
+
+  function sectionPhotoControlHtml(sec) {
+    if (!sec || !sec.id || !sectionPhotoAllowed(sec.id)) return '';
+    var photo = ((state.tenant && state.tenant.webSectionPhotos) || {})[sec.id] || null;
+    var side = photo && photo.url ? (photo.side === 'right' ? 'right' : 'left') : 'none';
+    return '<h2>Photo</h2>' + segmentedHtml('data-sec-photo-side', sec.id, [
+      { id: 'none', label: 'None' }, { id: 'left', label: 'Left' }, { id: 'right', label: 'Right' }
+    ], side) +
+      (photo && photo.url
+        ? '<div class="design-logo-row"><div class="design-logo-thumb design-sec-photo-thumb" style="background-image:url(&quot;' +
+          escHtml(String(photo.url)) + '&quot;)"></div><div class="design-logo-actions">' +
+          '<button type="button" class="design-btn design-btn--ghost design-btn--small" data-sec-photo-upload>Replace photo</button></div></div>'
+        : '<p class="design-hint">Pick Left or Right to add a photo beside this section.</p>');
+  }
+
+  function saveSectionPhoto(id, photo) {
+    var map = cloneValue((state.tenant && state.tenant.webSectionPhotos) || {});
+    if (photo) map[id] = photo;
+    else delete map[id];
+    queueUpdate({ webSectionPhotos: map });
+    postSectionPhotos();
+  }
+
+  function wireSectionPhotoControls(host, payload) {
+    var sec = payload.section;
+    if (!sec || !sectionPhotoAllowed(sec.id)) return;
+    host.querySelectorAll('[data-sec-photo-side]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var side = btn.getAttribute('data-sec-photo-side');
+        var current = ((state.tenant.webSectionPhotos || {})[sec.id]) || null;
+        if (side === 'none') {
+          saveSectionPhoto(sec.id, null);
+          renderSectionBody(payload);
+        } else if (current && current.url) {
+          saveSectionPhoto(sec.id, { url: current.url, side: side });
+          renderSectionBody(payload);
+        } else {
+          beginUpload({ type: 'sectionPhoto', sectionId: sec.id, side: side, payload: payload });
+        }
+      });
+    });
+    var replace = host.querySelector('[data-sec-photo-upload]');
+    if (replace) {
+      replace.addEventListener('click', function () {
+        var current = ((state.tenant.webSectionPhotos || {})[sec.id]) || {};
+        beginUpload({ type: 'sectionPhoto', sectionId: sec.id, side: current.side || 'left', payload: payload });
+      });
+    }
   }
 
   function blockItemCount(block) {
@@ -1309,7 +1373,7 @@
     var customFooter = showsFooter && footerSettings().enabled === true;
     // Top to bottom: this section's own settings, then Add section, then the page order.
     var sec = payload.section;
-    var html = (customFooter ? '' : layoutPickerHtml(payload)) + alignControlHtml(payload) +
+    var html = (customFooter ? '' : layoutPickerHtml(payload)) + sectionPhotoControlHtml(sec) + alignControlHtml(payload) +
       (sec && sec.id ? blockControlsHtml(sec, payload) : '');
     if (showsFooter) html += footerEditorHtml();
     var showsHeader = layoutSlotFor(payload) === 'header';
@@ -1379,6 +1443,7 @@
       });
     }
     wireBlockControls(host, payload);
+    wireSectionPhotoControls(host, payload);
     var sectionToggle = host.querySelector('[data-section-toggle]');
     if (sectionToggle) {
       sectionToggle.addEventListener('click', function () {
@@ -2523,6 +2588,10 @@
         if (target.index >= 0 && target.index < featured.length) featured[target.index] = fUrl;
         else featured.push(fUrl);
         await persistTenant({ featuredWorkImages: featured });
+      } else if (target.type === 'sectionPhoto') {
+        var sUrl = await uploadBlob('tenants/' + state.tenantId + '/gallery/' + uid() + '.jpg', blob);
+        saveSectionPhoto(target.sectionId, { url: sUrl, side: target.side === 'right' ? 'right' : 'left' });
+        if (target.payload && state.panel === 'section') renderSectionBody(target.payload);
       } else if (target.type === 'gallery') {
         var gUrl = await uploadBlob('tenants/' + state.tenantId + '/gallery/' + uid() + '.jpg', blob);
         var gallery = Array.isArray(state.tenant.galleryImages) ? state.tenant.galleryImages.slice() : [];
@@ -4255,6 +4324,7 @@
       var aspect = 16 / 9;
       if (batchTarget.type === 'featured' || batchTarget.type === 'gallery') aspect = 1;
       if (batchTarget.type === 'philosophy' || batchTarget.type === 'bookCta') aspect = 4 / 3;
+      if (batchTarget.type === 'sectionPhoto') aspect = 4 / 5;
       var uploaded = 0;
       try {
         for (var i = 0; i < files.length; i++) {

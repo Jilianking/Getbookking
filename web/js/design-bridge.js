@@ -1272,6 +1272,13 @@
           syncFrames();
         }
         break;
+      case 'section-photos':
+        if (typeof window.__bkPreviewSectionPhotos === 'function') {
+          window.__bkPreviewSectionPhotos((data.payload || {}).webSectionPhotos || {});
+          stampEditableMarks();
+          syncFrames();
+        }
+        break;
       case 'select-section':
         // A section was just added in the editor: bring it into view and open it.
         var addedId = String((data.payload || {}).id || '').replace(/"/g, '');

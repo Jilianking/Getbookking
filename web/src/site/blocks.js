@@ -160,6 +160,7 @@ function previewPageBlocks(payload) {
   if (!base || !payload) return false;
   var tenant = Object.assign({}, base, {
     webBlocks: payload.webBlocks || {},
+    webSectionPhotos: payload.webSectionPhotos || base.webSectionPhotos || {},
     webCopyOverrides: payload.webCopyOverrides || base.webCopyOverrides || {}
   });
   window.__bkBlocksTenant = tenant;
@@ -176,7 +177,8 @@ function previewPageBlocks(payload) {
   Object.keys(wanted).forEach(function (id) {
     var s = wanted[id];
     var holder = document.createElement('div');
-    holder.innerHTML = s.html ? stampPageSection(s.html, s, false) : '';
+    var photo = sectionPhotoFor(tenant, id);
+    holder.innerHTML = s.html ? stampPageSection(photo ? wrapSectionWithPhoto(s.html, photo) : s.html, s, false) : '';
     var fresh = holder.firstElementChild;
     var old = document.querySelector('[data-bk-section="' + id + '"]');
     if (old && fresh) {

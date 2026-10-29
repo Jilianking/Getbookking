@@ -908,8 +908,12 @@ async function cloudflareRequest(method, path, body) {
   return json.result;
 }
 
-/** Registers a hostname with Cloudflare (or finds the existing one). Cloudflare issues its certificate. */
-async function ensureCustomHostname(hostname) {
+/**
+ * Registers a hostname with Cloudflare (or finds the existing one). Cloudflare issues its certificate.
+ * The bare domain uses text-record checks: it points at us with an ALIAS, which Cloudflare can't follow
+ * the way it follows www's CNAME, and its web check can't load until the domain is approved.
+ */
+async function ensureCustomHostname(hostname, sslMethod = "http") {
   const found = await cloudflareRequest(
     "GET",
     `/custom_hostnames?hostname=${encodeURIComponent(hostname)}`
@@ -917,12 +921,124 @@ async function ensureCustomHostname(hostname) {
   if (Array.isArray(found) && found.length) return found[0];
   return cloudflareRequest("POST", "/custom_hostnames", {
     hostname,
-    ssl: { method: "http", type: "dv", settings: { min_tls_version: "1.2" } },
+    ssl: { method: sslMethod, type: "dv", settings: { min_tls_version: "1.2" } },
   });
 }
 
 function customHostnameIsLive(h) {
   return !!(h && h.status === "active" && h.ssl && h.ssl.status === "active");
+}
+
+/** Moves a hostname that is still waiting over to text-record checks. Returns the updated hostname. */
+async function useTxtChecks(h) {
+  if (!h || !h.id || customHostnameIsLive(h) || (h.ssl && h.ssl.method === "txt")) return h;
+  return cloudflareRequest("PATCH", `/custom_hostnames/${encodeURIComponent(h.id)}`, {
+    ssl: { method: "txt", type: "dv", settings: { min_tls_version: "1.2" } },
+  });
+}
+
+/** Text records Cloudflare is waiting for, as Namecheap hosts relative to the domain. */
+function verificationTxtRecords(domain, h) {
+  const relative = (name) => {
+    const n = String(name || "").toLowerCase().replace(/\.$/, "");
+    if (n === domain) return "@";
+    return n.endsWith(`.${domain}`) ? n.slice(0, -(domain.length + 1)) : "";
+  };
+  const out = [];
+  const owner = h && h.ownership_verification;
+  if (h && h.status !== "active" && owner && owner.type === "txt" && owner.name && owner.value) {
+    out.push({ host: relative(owner.name), type: "TXT", address: owner.value });
+  }
+  const ssl = (h && h.ssl) || {};
+  if (ssl.status !== "active") {
+    (ssl.validation_records || []).forEach((r) => {
+      if (r.txt_name && r.txt_value) out.push({ host: relative(r.txt_name), type: "TXT", address: r.txt_value });
+    });
+  }
+  return out.filter((r) => r.host);
+}
+
+function xmlAttr(tag, name) {
+  const m = new RegExp(`\\s${name}="([^"]*)"`, "i").exec(tag);
+  return m ? m[1].replace(/&amp;/g, "&").replace(/&quot;/g, '"').replace(/&lt;/g, "<").replace(/&gt;/g, ">") : "";
+}
+
+/** Current Namecheap DNS records for a domain. */
+async function namecheapGetHosts(domain) {
+  const { sld, tld } = splitSldTld(domain);
+  const raw = await namecheapRequest("namecheap.domains.dns.getHosts", { SLD: sld, TLD: tld });
+  if (!namecheapStatusOk(raw)) {
+    throw new Error(`getHosts failed: ${namecheapErrorMessage(raw) || "unknown"}`);
+  }
+  const result = /<DomainDNSGetHostsResult[^>]*>/i.exec(raw);
+  const emailType = result ? xmlAttr(result[0], "EmailType") : "";
+  const records = (raw.match(/<host\s[^>]*\/?>/gi) || []).map((tag) => ({
+    host: xmlAttr(tag, "Name"),
+    type: xmlAttr(tag, "Type").toUpperCase(),
+    address: xmlAttr(tag, "Address"),
+    mxPref: xmlAttr(tag, "MXPref"),
+    ttl: xmlAttr(tag, "TTL"),
+  }));
+  return { records, emailType };
+}
+
+const VERIFY_TXT_HOSTS = new Set(["_cf-custom-hostname", "_acme-challenge"]);
+
+/**
+ * Adds Cloudflare's text records to the domain's Namecheap DNS, keeping every other record.
+ * Old verification values for the same hosts are replaced. Returns how many records were added.
+ */
+async function addVerificationTxtRecords(domain, txt) {
+  if (!txt.length) return 0;
+  const key = (r) => `${r.host}|${r.type}|${r.address}`.toLowerCase();
+  const wanted = new Set(txt.map(key));
+  const { records, emailType } = await namecheapGetHosts(domain);
+  const have = new Set(records.map(key));
+  const missing = txt.filter((r) => !have.has(key(r)));
+  if (!missing.length) return 0;
+  if (!records.some((r) => r.host === "@") || !records.some((r) => r.host === "www")) {
+    throw new Error("getHosts returned no @ or www record; not rewriting DNS");
+  }
+  const kept = records.filter((r) => !(r.type === "TXT" && VERIFY_TXT_HOSTS.has(r.host) && !wanted.has(key(r))));
+  const all = [...kept, ...missing];
+  const { sld, tld } = splitSldTld(domain);
+  const params = { SLD: sld, TLD: tld };
+  all.forEach((r, i) => {
+    const n = i + 1;
+    params[`HostName${n}`] = r.host;
+    params[`RecordType${n}`] = r.type;
+    params[`Address${n}`] = r.address;
+    params[`TTL${n}`] = String(r.ttl || 1800);
+    if (r.type === "MX") params[`MXPref${n}`] = String(r.mxPref || 10);
+  });
+  if (emailType) params.EmailType = emailType;
+  const raw = await namecheapRequest("namecheap.domains.dns.setHosts", params);
+  if (!namecheapStatusOk(raw)) {
+    throw new Error(`setHosts failed: ${namecheapErrorMessage(raw) || "unknown"}`);
+  }
+  return missing.length;
+}
+
+/**
+ * Live domains: the bare domain's certificate renews every few months with new text records.
+ * When Cloudflare is waiting on them, add them so the padlock never lapses.
+ */
+async function keepApexCertificateRenewing(tenant) {
+  const domain = (tenant.customDomain || "").toString().trim().toLowerCase();
+  const ids = Array.isArray(tenant.customDomainCloudflareIds) ? tenant.customDomainCloudflareIds : [];
+  if (tenant.customDomainStatus !== "active" || !domain || !ids[0] || !cloudflareConfigured()) return 0;
+  const h = await cloudflareRequest("GET", `/custom_hostnames/${encodeURIComponent(ids[0])}`);
+  if (!h || String(h.hostname || "").toLowerCase() !== domain || customHostnameIsLive(h)) return 0;
+  return syncApexVerification(domain, h);
+}
+
+/** Gets the bare domain approved: text-record checks at Cloudflare, records added at Namecheap. */
+async function syncApexVerification(domain, apexHostname) {
+  if (!apexHostname || customHostnameIsLive(apexHostname)) return 0;
+  const h = await useTxtChecks(apexHostname);
+  const added = await addVerificationTxtRecords(domain, verificationTxtRecords(domain, h));
+  if (added) console.log("syncApexVerification", domain, `added ${added} text record(s)`);
+  return added;
 }
 
 async function removeCustomHostnames(ids) {
@@ -1041,8 +1157,13 @@ async function connectDomainToBookking(tenantRef, tenant) {
     patch.customDomainDnsPointedAt = admin.firestore.FieldValue.serverTimestamp();
     patch.customDomainKeptRecordCount = keptCount;
   }
-  const apex = await ensureCustomHostname(domain);
+  const apex = await ensureCustomHostname(domain, "txt");
   const www = await ensureCustomHostname(wwwOf(domain));
+  try {
+    await syncApexVerification(domain, apex);
+  } catch (e) {
+    console.warn("syncApexVerification (connect)", domain, e.message || e);
+  }
   patch.customDomainCloudflareIds = [apex.id, www.id];
   patch.customDomainUpdatedAt = admin.firestore.FieldValue.serverTimestamp();
   await tenantRef.set(patch, { merge: true });
@@ -1193,6 +1314,14 @@ async function advanceCustomDomain(tenantRef, notifyDomainLive) {
   }
 
   const hosts = await Promise.all(ids.map((id) => cloudflareRequest("GET", `/custom_hostnames/${encodeURIComponent(id)}`)));
+  const apexHostname = hosts.find((h) => h && String(h.hostname || "").toLowerCase() === domain);
+  if (apexHostname && !customHostnameIsLive(apexHostname)) {
+    try {
+      await syncApexVerification(domain, apexHostname);
+    } catch (e) {
+      console.warn("syncApexVerification", tenantId, domain, e.message || e);
+    }
+  }
   if (hosts.every(customHostnameIsLive)) {
     await tenantRef.set(
       {
@@ -1992,6 +2121,11 @@ function registerCustomDomainFunctions(exportsObj, options) {
           console.error("renewCustomDomains", doc.id, e.message || e);
         }
         outcomes[outcome] = (outcomes[outcome] || 0) + 1;
+        try {
+          await keepApexCertificateRenewing(doc.data() || {});
+        } catch (e) {
+          console.warn("keepApexCertificateRenewing", doc.id, e.message || e);
+        }
       }
       console.log("renewCustomDomains", JSON.stringify(outcomes));
       return null;
@@ -2846,7 +2980,9 @@ function registerCustomDomainFunctions(exportsObj, options) {
     const status = (data.status || "").toString();
     const slug = (data.slug || "").toString().trim().toLowerCase();
     if (status !== "active" || !slug) {
-      res.status(404).json({ ok: false, host, slug: null, status: status || null });
+      // While connecting, the gateway sends visitors to the shop's free address instead of an error page.
+      const fallbackSlug = status === "connecting" && /^[a-z0-9][a-z0-9-]{0,62}$/.test(slug) ? slug : null;
+      res.status(404).json({ ok: false, host, slug: null, status: status || null, fallbackSlug });
       return;
     }
     // Public resolver: slug + status only (no tenantId enumeration).

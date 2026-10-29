@@ -910,7 +910,7 @@
         return '<button type="button" class="design-add-section-opt" data-add-block="' + c.type + '">' +
           '<strong>' + escHtml(c.label) + '</strong><span>' + escHtml(c.hint) + '</span></button>';
       }).join('') +
-      '</div><p class="design-hint">New sections go right below this one.</p></div>';
+      '</div></div>';
   }
 
   function savePageOrder(sec, order, blocks, extra) {
@@ -1135,6 +1135,7 @@
     if (!sec || !sec.id) return '';
     var items = sec.items || sec.order.map(function (id) { return { id: id, label: id, hidden: false }; });
     return '<h2>Page order</h2><p class="design-hint">Drag to reorder the sections on your home page.</p>' +
+      addSectionMenuHtml() +
       '<div class="design-sort" id="sectionOrderList">' +
       items.map(function (item) {
         return '<div class="design-sort-row' + (item.id === sec.id ? ' is-current' : '') + (item.hidden ? ' is-hidden' : '') + '" data-sort-row>' +
@@ -1327,7 +1328,7 @@
     if (payload.label === 'Booking form' || payload.label === 'Booking page') {
       html += '<button type="button" class="design-btn design-btn--ghost" id="sectionBookingBtn">Form, fields, and services</button>';
     }
-    if (sec && sec.id) html += addSectionMenuHtml() + sectionControlsHtml(payload);
+    if (sec && sec.id) html += sectionControlsHtml(payload);
     if (!html) html = '<p class="design-hint">This section has no layout options. Click text or photos in the preview to edit them.</p>';
     host.innerHTML = html;
     var panel = $('panelSection');

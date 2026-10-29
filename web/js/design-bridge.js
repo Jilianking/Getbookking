@@ -31,7 +31,7 @@
   function isUnsupportedTextKey(key) {
     if (!key) return true;
     if (/^svc:/.test(key)) return true;
-    if (/^s12Process:/.test(key)) return true;
+    if (/^s12Process:/.test(key) && !/^s12Process:\d+:(title|body)$/.test(key)) return true;
     if (/^charterFaq:/.test(key)) return true;
     if (/^tm:/.test(key)) return true;
     if (/:edit$/.test(key)) return true;
@@ -319,7 +319,22 @@
     editingEl = null;
     // Clicking text and clicking away without typing isn't an edit; don't mark the design unsaved.
     if (!key || !isInlineTextKey(key) || unchanged) return;
-    post('field-edit', { key: key, value: value });
+    var extra = { key: key, value: value };
+    // Studio 12 process steps save as one list, so send every step's current words.
+    if (/^s12Process:\d+:(title|body)$/.test(key)) extra.steps = processStepsOnPage();
+    post('field-edit', extra);
+  }
+
+  function processStepsOnPage() {
+    var steps = [];
+    [].forEach.call(document.querySelectorAll('[data-edit-key^="s12Process:"]'), function (n) {
+      var m = /^s12Process:(\d+):(title|body)$/.exec(n.getAttribute('data-edit-key') || '');
+      if (!m) return;
+      var i = Number(m[1]);
+      steps[i] = steps[i] || { title: '', body: '' };
+      steps[i][m[2]] = textOf(n);
+    });
+    return steps.filter(Boolean);
   }
 
   function textColorOf(el) {
@@ -734,7 +749,8 @@
     var key = keyOnColorTarget(el);
     var surface = (el.getAttribute && el.getAttribute('data-bk-color-surface')) || '';
     var label = 'Section';
-    if (el.hasAttribute && el.hasAttribute('data-bk-block')) label = el.getAttribute('data-bk-section-label') || label;
+    var labeled = el.closest ? el.closest('[data-bk-section-label]') : null;
+    if (labeled) label = labeled.getAttribute('data-bk-section-label') || label;
     if (el.classList && el.classList.contains('booking-card') || /bookingCard$/.test(key) || key === 'charter.stickyBook') label = 'Booking form';
     else if (el.classList && el.classList.contains('booking-page-band') || /bookingPage$/.test(key)) label = 'Booking page';
     else if ((el.matches && el.matches('nav')) || (el.classList && el.classList.contains('tattoo-nav')) || /\.nav$/.test(key)) label = 'Header';
@@ -772,8 +788,9 @@
     });
     var buttons = [];
     [].forEach.call(el.querySelectorAll ? el.querySelectorAll('[data-cta-key]') : [], function (node) {
-      var owner = node.closest('[data-bk-surface-key]') || node.closest('[data-bk-color-surface]');
-      if (owner && owner !== el && el.contains(owner)) return;
+      // Buttons inside a smaller box still belong here, unless that box is its own page section.
+      var ownerSection = node.closest('[data-bk-section]');
+      if (ownerSection && ownerSection !== el && el.contains(ownerSection)) return;
       if (buttons.length >= 6) return;
       buttons.push({
         key: node.getAttribute('data-cta-key'),

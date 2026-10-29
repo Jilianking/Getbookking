@@ -166,7 +166,7 @@
     'siteAnnouncementEnabled', 'siteAnnouncementText', 'seoTitle', 'seoDescription',
     'webThemeId', 'webCopyOverrides', 'webSurfaceColors', 'webButtonColors', 'webTextColors', 'webTextFontSizes',
     'bookingFormStyleId', 'formSchema', 'guidedStepTitles', 'guidedStepOrder', 'reviews',
-    'webSectionLayouts', 'webPage', 'webFooter', 'instagramHandle', 'webBlocks', 'webHeaderBrand', 'webTabIcon', 'webLogoHeight', 'logoUrl', 'webSectionPhotos', 'webButtonStyles',
+    'webSectionLayouts', 'webPage', 'webFooter', 'instagramHandle', 'webBlocks', 'webHeaderBrand', 'webTabIcon', 'webLogoHeight', 'logoUrl', 'webSectionPhotos', 'webButtonStyles', 'studio12ProcessSteps',
     'heroImageUrl', 'heroImagePixelWidth', 'heroImagePixelHeight',
     'featuredWorkImages', 'galleryImages',
     'studio12PhilosophyImageUrl', 'studio12PhilosophyImagePixelWidth', 'studio12PhilosophyImagePixelHeight',
@@ -2263,7 +2263,7 @@
     if (!textKey) return null;
 
     // Unsupported on web — never write
-    if (/^svc:/.test(textKey) || /^s12Process:/.test(textKey) ||
+    if (/^svc:/.test(textKey) || /^s12Process:\d+:edit$/.test(textKey) ||
         /^charterFaq:/.test(textKey) || /^tm:/.test(textKey) || /:edit$/.test(textKey)) {
       var skip = {};
       skip['__skip_' + key] = trimmed;
@@ -2899,7 +2899,9 @@
       var key = (data.payload || {}).key;
       var value = (data.payload || {}).value;
       if (!key) return;
-      var updates = buildFieldUpdates(key, value);
+      var updates = /^s12Process:\d+:(title|body)$/.test(key) && Array.isArray((data.payload || {}).steps)
+        ? { studio12ProcessSteps: data.payload.steps.map(function (s) { return { title: String(s.title || ''), body: String(s.body || '') }; }) }
+        : buildFieldUpdates(key, value);
       if (!updates || updates['__skip_' + key] !== undefined) {
         setInspector({ kind: 'text', key: key, value: value });
         if (updates && updates['__skip_' + key] !== undefined) {

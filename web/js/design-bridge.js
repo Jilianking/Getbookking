@@ -1272,6 +1272,15 @@
           syncFrames();
         }
         break;
+      case 'select-section':
+        // A section was just added in the editor: bring it into view and open it.
+        var addedId = String((data.payload || {}).id || '').replace(/"/g, '');
+        var added = addedId && document.querySelector('[data-bk-section="' + addedId + '"]');
+        if (added) {
+          if (added.scrollIntoView) added.scrollIntoView({ block: 'center' });
+          selectCard(added, added);
+        }
+        break;
       case 'header-brand':
         applyHeaderBrand(data.payload || {});
         syncFrames();

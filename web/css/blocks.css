@@ -1,7 +1,7 @@
 /* Sections owners add in the web editor (text box, FAQ, policies, hours and map) and the header logo.
    They take the template's colors and fonts so they fit every template. */
 .bk-block {
-  padding: clamp(48px, 7vw, 88px) 20px;
+  padding: clamp(40px, 5vw, 64px) 20px;
   color: inherit;
 }
 .bk-block-inner {
@@ -9,6 +9,8 @@
   margin: 0 auto;
 }
 .bk-block--center .bk-block-inner { text-align: center; }
+/* Two added sections in a row read as one run of content, not two far-apart bands. */
+.bk-block + .bk-block { padding-top: 0; }
 .bk-block-title {
   font-family: var(--font-hero, var(--font-display, var(--sc-display-font, inherit)));
   font-size: clamp(1.7rem, 3.4vw, 2.4rem);
@@ -88,6 +90,7 @@
 }
 @media (max-width: 720px) {
   .bk-block-hours-wrap { grid-template-columns: 1fr; gap: 24px; }
+  .bk-block--center .bk-block-hours-wrap > div:first-child { text-align: center; }
 }
 
 /* Header logo (webHeaderBrand: name, logo, or both). With just the name, the wrapper adds nothing. */

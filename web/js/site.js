@@ -3568,10 +3568,27 @@ function blockInnerHtml(tenant, id, block) {
   return '';
 }
 
+/** Templates with left-aligned headings start added sections on the left; the rest centered. */
+var BLOCK_LEFT_THEMES = { 'blade-v1': 1, 'studio-12-v1': 1, 'stonecut-v1': 1 };
+
+function blockAlign(tenant, block) {
+  if (block.align === 'left' || block.align === 'center') return block.align;
+  var theme = (tenant && (tenant.resolvedWebThemeId || resolvedWebThemeId(tenant))) || '';
+  return BLOCK_LEFT_THEMES[theme] ? 'left' : 'center';
+}
+
+/** Page-order label: the kind of section plus its heading, so two FAQs can be told apart. */
+function blockLabel(tenant, id, block) {
+  var base = BLOCK_TYPES[block.type].label;
+  var title = webCopyOverrideText(tenant, blockKey(id, 'title'), BLOCK_DEFAULT_TITLES[block.type] || '');
+  if (!title || title === BLOCK_DEFAULT_TITLES[block.type]) return base;
+  return base + ' · ' + (title.length > 24 ? title.slice(0, 23) + '…' : title);
+}
+
 function blockSectionHtml(tenant, id, block) {
   var inner = blockInnerHtml(tenant, id, block);
   if (!inner) return '';
-  var align = block.align === 'center' ? ' bk-block--center' : '';
+  var align = blockAlign(tenant, block) === 'center' ? ' bk-block--center' : '';
   return '<section class="bk-block bk-block--' + esc(block.type) + align + '" data-bk-block="' + esc(id) +
     '" data-bk-surface-key="block.' + esc(id) +
     '" data-bk-block-type="' + esc(block.type) + '"><div class="bk-block-inner">' + inner + '</div></section>';
@@ -3586,7 +3603,7 @@ function pageBlockSections(tenant, pageId) {
     return /^blk-[a-z0-9]{1,24}$/.test(id) && b && BLOCK_TYPES[b.type] && (b.page || 'home') === pageId;
   }).map(function (id) {
     var b = all[id];
-    return { id: id, label: BLOCK_TYPES[b.type].label, html: blockSectionHtml(tenant, id, b) };
+    return { id: id, label: blockLabel(tenant, id, b), html: blockSectionHtml(tenant, id, b) };
   });
 }
 

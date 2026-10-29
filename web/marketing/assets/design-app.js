@@ -851,7 +851,6 @@
   /* ── Added sections: text box, FAQ, policies, hours and map (drawn by blocks.js on the site) ── */
 
   var BLOCK_CHOICES = [
-    { type: 'text', label: 'Text box', hint: 'A heading and a paragraph' },
     { type: 'faq', label: 'FAQ', hint: 'Questions that open when tapped' },
     { type: 'policies', label: 'Policies', hint: 'Deposits, cancellations, late arrivals' },
     { type: 'hours', label: 'Hours and map', hint: 'From your business hours and address' }
@@ -877,15 +876,15 @@
     return Math.max(1, Math.min(isNaN(n) ? 3 : n, BLOCK_MAX_ITEMS));
   }
 
-  function blockControlsHtml(sec) {
+  function blockControlsHtml(sec, payload) {
     var block = (state.tenant.webBlocks || {})[sec.id];
     if (!block) return '';
     var html = '';
-    if (block.type === 'text') {
-      html += '<h2>Alignment</h2>' + segmentedHtml('data-block-align', sec.id, [
-        { id: 'left', label: 'Left' }, { id: 'center', label: 'Center' }
-      ], block.align === 'center' ? 'center' : 'left');
-    }
+    var leftTheme = { 'blade-v1': 1, 'studio-12-v1': 1, 'stonecut-v1': 1 }[layoutTheme(payload)];
+    var align = block.align === 'left' || block.align === 'center' ? block.align : (leftTheme ? 'left' : 'center');
+    html += '<h2>Alignment</h2>' + segmentedHtml('data-block-align', sec.id, [
+      { id: 'left', label: 'Left' }, { id: 'center', label: 'Center' }
+    ], align);
     if (block.type === 'faq' || block.type === 'policies') {
       var noun = block.type === 'faq' ? 'question' : 'policy';
       var count = blockItemCount(block);
@@ -932,6 +931,7 @@
     var at = order.indexOf(sec.id);
     order.splice(at === -1 ? order.length : at + 1, 0, id);
     savePageOrder(sec, order, blocks);
+    postToFrame('select-section', { id: id });
     setStatus('Section added. Click its text to edit.', 'is-ok');
   }
 
@@ -1148,7 +1148,7 @@
       '<button type="button" class="design-btn design-btn--ghost" data-section-toggle>' + (sec.hidden ? 'Show section' : 'Hide section') + '</button>' +
       '</div>' +
       (sec.hidden ? '<p class="design-hint">Hidden sections don’t appear on your site. They show as a striped bar here so you can bring them back.</p>' : '') +
-      blockControlsHtml(sec) +
+      blockControlsHtml(sec, payload) +
       addSectionMenuHtml();
   }
 

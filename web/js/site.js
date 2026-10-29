@@ -8354,7 +8354,7 @@ function teamRosterSectionHtml(tenant, providers, opts) {
   var viewAll = '';
   var homeEligible = providers.filter(function(p) { return p.showOnTeamHome !== false; });
   if (isHome && homeEligible.length > limit && tenantShowTeamPage(tenant)) {
-    viewAll = '<p class="bk-team-roster-view-all"><a href="' + esc(teamUrl) + '">View full team \u2192</a></p>';
+    viewAll = '<p class="bk-team-roster-view-all"><a href="' + esc(teamUrl) + '">' + wcSpan(tenant, 'wc.generic.teamViewAll', 'View full team') + ' \u2192</a></p>';
   }
   var teamSubFallback = defaultTeamRosterSubtitleForIndustry(tenant && tenant.industry);
   var title = isHome

@@ -149,7 +149,7 @@
       window.location.replace(hrefFor("website"));
       return;
     }
-    if (route === "payouts" && session && !session.teamMode) {
+    if (route === "payouts" && session && !(session.teamMode && session.isOwner)) {
       route = "payments";
     }
     ROUTES.forEach(function (name) {
@@ -175,7 +175,7 @@
       calendar: "Calendar",
       clients: "Clients",
       shop: "Shop",
-      payments: "Client payments",
+      payments: session && !session.isOwner ? "Payments" : "Client payments",
       payouts: "Team payouts",
       website: "Website builder",
       billing: "Plan & billing",
@@ -239,8 +239,12 @@
       .forEach(function (pair) {
         navFor(pair[0]).forEach(function (el) { el.classList.toggle("hidden", !can(pair[1])); });
       });
-    $("paymentsFolder").classList.toggle("hidden", !session.teamMode);
-    $("paymentsFlat").classList.toggle("hidden", session.teamMode);
+    // Owners of team shops get Client payments + Team payouts; everyone else gets one "Payments" link.
+    var ownerTeam = session.teamMode && session.isOwner;
+    $("paymentsFolder").classList.toggle("hidden", !ownerTeam);
+    $("paymentsFlat").classList.toggle("hidden", ownerTeam);
+    var flatLink = document.querySelector('#paymentsFlat .app-nav');
+    if (flatLink) flatLink.textContent = session.isOwner ? "Client payments" : "Payments";
     if (!can("payments")) {
       $("paymentsFlat").classList.add("hidden");
       $("paymentsFolder").classList.add("hidden");

@@ -463,7 +463,7 @@
     var wrap = $("calTeamWrap");
     var seg = $("calWeekMode");
     var legend = $("calLegend");
-    var team = !!session.teamMode;
+    var team = teamView(session);
     if (wrap) wrap.classList.toggle("hidden", !team);
     if (seg) {
       seg.classList.toggle("hidden", !team || calState.view !== "week");
@@ -494,7 +494,18 @@
     }
   }
 
+  /** Team columns, colors, and the Team filter are for people who may see everyone's bookings (like the app). */
+  function teamView(session) {
+    if (!session || !session.teamMode) return false;
+    return !!(session.isOwner || (global.ShopAppAccess && ShopAppAccess.can(session, "viewAllBookings")));
+  }
+
   function staffColumns(session, dayBookings) {
+    if (session.teamMode && !teamView(session)) {
+      // Staff see their own calendar only.
+      var me = session.user || {};
+      return [{ key: me.uid || "me", name: me.displayName || session.firstName || "You", uid: me.uid || "" }];
+    }
     if (!session.teamMode) {
       return [
         {
@@ -839,7 +850,7 @@
     var blocks = occupying
       .map(function (b) {
         var extra = b.serviceName || formatTime(b.start);
-        if (session.teamMode && b.assignedName) extra += " · " + b.assignedName;
+        if (teamView(session) && b.assignedName) extra += " · " + b.assignedName;
         return dashBlockHtml(b, extra);
       })
       .join("");
@@ -925,7 +936,7 @@
     return scoped(calState.bookings, session).filter(function (b) {
       if (!occupies(b.status, charter) || !b.start) return false;
       if (calState.serviceFilter && b.serviceName !== calState.serviceFilter) return false;
-      if (session.teamMode && !teamShown(teamKey(b))) return false;
+      if (teamView(session) && !teamShown(teamKey(b))) return false;
       return true;
     });
   }
@@ -956,7 +967,7 @@
     var height = Math.max(28, ((visEnd - topMin) / 60) * HOUR_PX - 4);
     var sub = extra || b.serviceName || formatTime(b.start);
     var session = calState.session;
-    var member = session && session.teamMode ? "--member:" + teamColor(session, teamKey(b)) + ";" : "";
+    var member = session && teamView(session) ? "--member:" + teamColor(session, teamKey(b)) + ";" : "";
     return (
       '<button type="button" class="app-cal-block' +
       (member ? " has-member" : "") +
@@ -1000,7 +1011,7 @@
       .map(function (c) {
         var blocks = occupying
           .filter(function (b) {
-            return columnFor(b, cols, session.teamMode) === c;
+            return columnFor(b, cols, teamView(session)) === c;
           })
           .map(function (b) {
             return blockHtml(b);
@@ -1055,7 +1066,7 @@
   }
 
   function paintWeek(session, occupying, board, head, grid) {
-    if (session.teamMode && calState.team.weekMode === "people") {
+    if (teamView(session) && calState.team.weekMode === "people") {
       paintTeamWeek(session, occupying, board, head, grid);
       return;
     }
@@ -1085,7 +1096,7 @@
           })
           .map(function (b) {
             var extra = b.serviceName || formatTime(b.start);
-            if (session.teamMode && b.assignedName) extra += " · " + b.assignedName;
+            if (teamView(session) && b.assignedName) extra += " · " + b.assignedName;
             return blockHtml(b, extra);
           })
           .join("");
@@ -1134,7 +1145,7 @@
       var bars = events
         .slice(0, 3)
         .map(function (b) {
-          var member = session.teamMode ? ' style="--member:' + teamColor(session, teamKey(b)) + '"' : "";
+          var member = teamView(session) ? ' style="--member:' + teamColor(session, teamKey(b)) + '"' : "";
           return (
             '<span class="app-cal-pill' +
             (member ? " has-member" : "") +
@@ -1242,7 +1253,7 @@
     if (!session || !board || !head || !grid) return;
     if (!calState.day) calState.day = startOfDay(new Date());
     loadTeamChoice(session);
-    var teamWeek = !!session.teamMode && calState.view === "week" && calState.team.weekMode === "people";
+    var teamWeek = teamView(session) && calState.view === "week" && calState.team.weekMode === "people";
     board.classList.toggle("is-week", calState.view === "week" && !teamWeek);
     board.classList.toggle("is-teamweek", teamWeek);
     board.classList.toggle("is-month", calState.view === "month");
@@ -1410,7 +1421,7 @@
     svc.innerHTML = options || '<option value="">No services yet</option>';
     var staffRow = $("calNewStaffRow");
     var staff = $("calNewStaff");
-    if (session.teamMode) {
+    if (teamView(session)) {
       staffRow.classList.remove("hidden");
       staff.innerHTML = (session.members || [])
         .map(function (m) {
@@ -1565,9 +1576,11 @@
     var parts = timeVal.split(":");
     var start = new Date(dateVal + "T00:00:00");
     start.setHours(parseInt(parts[0], 10), parseInt(parts[1], 10), 0, 0);
-    var staffUid = session.teamMode
+    var staffUid = teamView(session)
       ? $("calNewStaff").value
-      : session.ownerUid || session.user.uid;
+      : session.teamMode
+        ? session.user.uid
+        : session.ownerUid || session.user.uid;
     var member = memberForUid(session, staffUid);
     if (!member.uid) return fail("Choose a staff member.");
     var boatId = charter ? $("calNewBoat").value : "";

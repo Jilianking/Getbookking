@@ -76,6 +76,8 @@
       canTakePayments: data.canTakePayments === true,
       managersApproveAppointments: data.managersApproveAppointments === true,
       bookingRequiresApproval: data.bookingRequiresApproval !== false,
+      canEditPortfolio: data.canEditPortfolio === true,
+      canEditPublicBio: data.canEditPublicBio === true,
     };
   }
 
@@ -180,6 +182,7 @@
       case "insights": return true;
       case "editServices": return manager && p.editServicesPricing === true;
       case "website": return false;
+      case "websiteProfile": return a.canEditPortfolio === true || a.canEditPublicBio === true;
       case "billing": return false;
       default: return false;
     }

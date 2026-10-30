@@ -22,6 +22,7 @@
     "requests",
     "team",
     "insights",
+    "profile",
     "calendar",
     "clients",
     "shop",
@@ -67,6 +68,7 @@
     if (path.indexOf("/app/requests") !== -1) return "requests";
     if (path.indexOf("/app/team") !== -1) return "team";
     if (path.indexOf("/app/insights") !== -1) return "insights";
+    if (path.indexOf("/app/profile") !== -1) return "profile";
     if (path.indexOf("/app/calendar") !== -1) return "calendar";
     if (path.indexOf("/app/clients") !== -1) return "clients";
     if (path.indexOf("/app/shop") !== -1) return "shop";
@@ -136,7 +138,7 @@
     setRailCollapsed(collapsed);
   }
 
-  var ROUTE_ACCESS = { team: "team", clients: "clients", website: "website", billing: "billing", shop: "shop", payments: "payments", payouts: "payments" };
+  var ROUTE_ACCESS = { profile: "websiteProfile", team: "team", clients: "clients", website: "website", billing: "billing", shop: "shop", payments: "payments", payouts: "payments" };
 
   function setRoute(route, session) {
     // A link or bookmark to a page this person can't use lands on the dashboard.
@@ -169,6 +171,7 @@
       requests: "Requests",
       team: "Team",
       insights: "Insights",
+      profile: "Your website profile",
       calendar: "Calendar",
       clients: "Clients",
       shop: "Shop",
@@ -188,6 +191,9 @@
     }
     if (route === "team" && window.ShopAppTeam) {
       ShopAppTeam.load(session);
+    }
+    if (route === "profile" && window.ShopAppProfile) {
+      ShopAppProfile.load(session);
     }
     if (route === "insights" && window.ShopAppInsights) {
       ShopAppInsights.load(session);
@@ -227,6 +233,8 @@
     });
     var can = function (w) { return ShopAppAccess.can(session, w); };
     var navFor = function (route) { return document.querySelectorAll('.app-nav[data-route="' + route + '"]'); };
+    // Owners edit the whole site in the Website builder; team members with permission get their profile.
+    navFor("profile").forEach(function (el) { el.classList.toggle("hidden", session.isOwner || !can("websiteProfile")); });
     [["team", "team"], ["clients", "clients"], ["website", "website"], ["billing", "billing"], ["shop", "shop"], ["payouts", "payments"]]
       .forEach(function (pair) {
         navFor(pair[0]).forEach(function (el) { el.classList.toggle("hidden", !can(pair[1])); });

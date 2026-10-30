@@ -2950,3 +2950,69 @@ button.app-pay-tx.is-link:focus-visible {
   cursor: pointer;
 }
 .app-pop-item:hover { background: color-mix(in srgb, var(--cream) 50%, transparent); }
+
+/* ── Your website profile ── */
+.app-profile-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; max-width: 920px; }
+.app-profile-body { padding: 0 16px 16px; display: grid; gap: 10px; }
+.app-profile-body textarea {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 12px 14px;
+  font: inherit;
+  font-size: 15px;
+  line-height: 1.55;
+  resize: vertical;
+  background: var(--card);
+}
+.app-profile-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.app-sheet-error.is-ok { color: var(--sage); }
+.app-profile-photos {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  gap: 10px;
+}
+.app-profile-photos figure {
+  position: relative;
+  margin: 0;
+  aspect-ratio: 1;
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--cream);
+}
+.app-profile-photos img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.app-profile-remove {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(26, 20, 16, 0.72);
+  color: #fff;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.app-profile-photos figure:hover .app-profile-remove,
+.app-profile-remove:focus-visible { opacity: 1; }
+@media (hover: none) { .app-profile-remove { opacity: 1; } }
+.app-profile-add {
+  aspect-ratio: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  border: 1.5px dashed color-mix(in srgb, var(--warm) 35%, var(--line));
+  border-radius: 12px;
+  color: var(--muted);
+  cursor: pointer;
+}
+.app-profile-add:hover { background: color-mix(in srgb, var(--cream) 45%, transparent); border-color: var(--warm); }
+.app-profile-add input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.app-profile-add span { font-size: 26px; line-height: 1; color: var(--warm); }
+.app-profile-add strong { font-size: 13px; color: var(--ink); }

@@ -100,6 +100,7 @@
         { "source": "/app/requests", "destination": "/app.html" },
         { "source": "/app/team", "destination": "/app.html" },
         { "source": "/app/insights", "destination": "/app.html" },
+        { "source": "/app/profile", "destination": "/app.html" },
         { "source": "/app/calendar", "destination": "/app.html" },
         { "source": "/app/clients", "destination": "/app.html" },
         { "source": "/app/shop", "destination": "/app.html" },

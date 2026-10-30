@@ -215,8 +215,6 @@
     $("msgTitle").textContent = t.name;
     // Don't repeat the number under itself when there's no saved name.
     $("msgSub").textContent = t.name === prettyPhone(t.phone) ? "" : prettyPhone(t.phone);
-    var call = $("msgCall");
-    if (call) call.href = "tel:" + (e164(t.phone) || t.phone);
     var lastDay = "";
     var tidNow = threadIdFor(t.threadId || t.phone);
     var shown = state.messages.concat(state.pending.filter(function (p) { return p.threadKey === tidNow; }));
@@ -1002,7 +1000,6 @@
       closeRowMenu();
       var t = byId(id);
       if (act === "open") setOpen(id);
-      else if (act === "call" && t) location.href = "tel:" + (e164(t.phone) || t.phone);
       else if (act === "delete") deleteConversation(id);
     });
     document.addEventListener("click", function (ev) {

@@ -111,10 +111,7 @@
   /** Staff without full access see the requests assigned to them, plus unassigned ones they can pick up. */
   function visible(list) {
     var s = state.session;
-    if (s.isOwner) return list;
-    var access = s.access || {};
-    var perms = access.managerPermissions || {};
-    if (access.accessRole === "manager" && perms.viewAllBookings === true) return list;
+    if (global.ShopAppAccess && ShopAppAccess.can(s, "viewAllBookings")) return list;
     var uid = s.user && s.user.uid;
     return list.filter(function (r) {
       return !r.assignedUid || r.assignedUid === uid;
@@ -303,8 +300,10 @@
     var st = $("reqDetailStatus");
     if (st) st.outerHTML = chip(r.status).replace('class="app-req-chip', 'id="reqDetailStatus" class="app-req-chip');
     var charter = isCharter(state.session.tenant);
-    var open = ["new", "pending", "pending_consultation"].indexOf(r.status) !== -1;
-    var waiting = r.status === "pending_deposit" || r.status === "pending_payment";
+    // Confirming, declining, and cancelling follow the same rule as the app (owner, or a permitted manager).
+    var mayAct = !!(global.ShopAppAccess && ShopAppAccess.can(state.session, "approveRequests"));
+    var open = mayAct && ["new", "pending", "pending_consultation"].indexOf(r.status) !== -1;
+    var waiting = mayAct && (r.status === "pending_deposit" || r.status === "pending_payment");
     var day = r.start || null;
     var dateVal = day ? day.getFullYear() + "-" + pad(day.getMonth() + 1) + "-" + pad(day.getDate()) : "";
     var timeVal = day ? pad(day.getHours()) + ":" + pad(day.getMinutes()) : "";
@@ -339,6 +338,7 @@
     } else if (open && charter) {
       html += '<p class="app-hint">Schedule charter trips from the Calendar so you can pick the boat.</p>';
     }
+    if (!mayAct) html += '<p class="app-hint">Only the owner or a manager with permission can confirm or decline requests.</p>';
     html += '<p class="app-sheet-error hidden" id="reqError"></p>';
     body.innerHTML = html;
 
@@ -346,7 +346,7 @@
     if (open && !charter) actions.push('<button type="button" class="app-btn app-btn--primary" data-req-act="confirm">Confirm</button>');
     if (open || waiting) actions.push('<button type="button" class="app-btn app-btn--ghost" data-req-act="decline">' + (waiting ? "Cancel request" : "Decline") + "</button>");
     if (r.status === "confirmed") actions.push('<button type="button" class="app-btn app-btn--ghost" data-req-act="calendar">Open in calendar</button>');
-    if (r.status === "confirmed") actions.push('<button type="button" class="app-btn app-btn--ghost" data-req-act="cancel">Cancel booking</button>');
+    if (r.status === "confirmed" && mayAct) actions.push('<button type="button" class="app-btn app-btn--ghost" data-req-act="cancel">Cancel booking</button>');
     $("reqDetailActions").innerHTML = actions.join("");
   }
 

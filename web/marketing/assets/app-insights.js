@@ -54,8 +54,7 @@
   }
 
   function canSeeRevenue() {
-    var s = state.session;
-    return s.isOwner || (s.access && s.access.accessRole === "manager");
+    return !!(global.ShopAppAccess && ShopAppAccess.can(state.session, "earnings"));
   }
 
   /** Buckets (oldest first) covering the range: weeks for 30/90 days, months for 12 months. */
@@ -114,7 +113,7 @@
       .orderBy("createdAt", "desc").limit(1500).get().then(function (snap) {
         var uid = s.user && s.user.uid;
         var perms = (s.access && s.access.managerPermissions) || {};
-        var all = s.isOwner || (s.access && s.access.accessRole === "manager" && perms.viewAllBookings === true);
+        var all = ShopAppAccess.can(s, "viewAllBookings");
         state.bookings = snap.docs.map(function (doc) {
           var d = doc.data() || {};
           return {

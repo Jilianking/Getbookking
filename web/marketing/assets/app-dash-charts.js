@@ -130,8 +130,7 @@
   /* ── Revenue ── */
 
   function canSeeRevenue(s) {
-    var a = s.access || {};
-    return s.isOwner || a.accessRole === "manager";
+    return !!(global.ShopAppAccess && ShopAppAccess.can(s, "earnings"));
   }
 
   function paintRevenue() {

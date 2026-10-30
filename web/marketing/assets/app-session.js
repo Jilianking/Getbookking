@@ -73,6 +73,9 @@
           : fallback.canSendClientSms,
       accessRole: String(data.accessRole || "").trim().toLowerCase(),
       managerPermissions: data.managerPermissions || {},
+      canTakePayments: data.canTakePayments === true,
+      managersApproveAppointments: data.managersApproveAppointments === true,
+      bookingRequiresApproval: data.bookingRequiresApproval !== false,
     };
   }
 
@@ -156,5 +159,32 @@
       });
   }
 
+  /**
+   * What the signed-in person may see and do — the same rules as the iPhone app's team access:
+   * owners see everything; managers get what Team → Permissions allows; staff see their own work.
+   */
+  function can(session, what) {
+    if (!session) return false;
+    if (session.isOwner) return true;
+    var a = session.access || {};
+    var manager = a.accessRole === "manager";
+    var p = a.managerPermissions || {};
+    switch (what) {
+      case "viewAllBookings": return manager && p.viewAllBookings === true;
+      case "approveRequests": return manager && p.approveRejectRequests === true && a.managersApproveAppointments === true && a.bookingRequiresApproval !== false;
+      case "clients": return manager && p.accessClientList === true;
+      case "earnings": return manager && p.viewEarningsReports === true;
+      case "payments": return a.canTakePayments === true || (manager && p.viewEarningsReports === true);
+      case "team": return manager;
+      case "shop": return manager;
+      case "insights": return true;
+      case "editServices": return manager && p.editServicesPricing === true;
+      case "website": return false;
+      case "billing": return false;
+      default: return false;
+    }
+  }
+
   global.ShopAppSession = { load: load, firstName: firstName, salutation: salutation };
+  global.ShopAppAccess = { can: can };
 })(window);

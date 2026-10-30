@@ -136,7 +136,13 @@
     setRailCollapsed(collapsed);
   }
 
+  var ROUTE_ACCESS = { team: "team", clients: "clients", website: "website", billing: "billing", shop: "shop", payments: "payments", payouts: "payments" };
+
   function setRoute(route, session) {
+    // A link or bookmark to a page this person can't use lands on the dashboard.
+    if (session && ROUTE_ACCESS[route] && window.ShopAppAccess && !ShopAppAccess.can(session, ROUTE_ACCESS[route])) {
+      route = "dashboard";
+    }
     if (route === "website") {
       window.location.replace(hrefFor("website"));
       return;
@@ -214,10 +220,23 @@
     var initial = ($("userName").textContent || "?").charAt(0).toUpperCase();
     $("userInitial").textContent = initial;
 
-    var role = (session.access && session.access.accessRole) || "";
-    $("navTeam").classList.toggle("hidden", !(session.isOwner || role === "manager"));
+    // Hide what this person isn't allowed to open (Team → Permissions for managers).
+    [["dashRecordPay", "payments"], ["dashDue", "payments"], ["dashNewClient", "clients"]].forEach(function (pair) {
+      var el = $(pair[0]);
+      if (el) el.classList.toggle("hidden", !ShopAppAccess.can(session, pair[1]));
+    });
+    var can = function (w) { return ShopAppAccess.can(session, w); };
+    var navFor = function (route) { return document.querySelectorAll('.app-nav[data-route="' + route + '"]'); };
+    [["team", "team"], ["clients", "clients"], ["website", "website"], ["billing", "billing"], ["shop", "shop"], ["payouts", "payments"]]
+      .forEach(function (pair) {
+        navFor(pair[0]).forEach(function (el) { el.classList.toggle("hidden", !can(pair[1])); });
+      });
     $("paymentsFolder").classList.toggle("hidden", !session.teamMode);
     $("paymentsFlat").classList.toggle("hidden", session.teamMode);
+    if (!can("payments")) {
+      $("paymentsFlat").classList.add("hidden");
+      $("paymentsFolder").classList.add("hidden");
+    }
 
     var greet = session.salutation;
     if (session.firstName) greet += ", " + session.firstName;

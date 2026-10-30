@@ -4010,7 +4010,8 @@
     if (!tenantSnap.exists) { showGate('gateNoSite'); return; }
     var tenant = tenantSnap.data() || {};
     tenant.id = tenantSnap.id;
-    if (!(tenant.ownerUid === user.uid || userData.tenantId === tenantSnap.id)) {
+    // Like the iPhone app, website design is for the owner only.
+    if (tenant.ownerUid !== user.uid) {
       $('gateNoSiteMsg').textContent = 'This account can’t edit website design. Ask the business owner.';
       showGate('gateNoSite');
       return;

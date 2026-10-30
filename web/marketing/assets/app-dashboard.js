@@ -198,7 +198,7 @@
   }
 
   function scoped(list, session) {
-    if (session.isOwner) return list;
+    if (session.isOwner || (global.ShopAppAccess && ShopAppAccess.can(session, "viewAllBookings"))) return list;
     var uid = session.user && session.user.uid;
     if (!uid) return [];
     return list.filter(function (b) {

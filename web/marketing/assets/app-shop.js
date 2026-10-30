@@ -84,6 +84,9 @@
       return sum + (o.totalCents || 0);
     }, 0);
     $("shopStatRevenue").textContent = state.orders.length ? cents(revenue) : "$0.00";
+    // Revenue is for people who can see earnings.
+    var revTile = $("shopStatRevenue") && $("shopStatRevenue").parentNode;
+    if (revTile && global.ShopAppAccess) revTile.classList.toggle("hidden", !ShopAppAccess.can(state.session, "earnings"));
   }
 
   function renderCatalog() {

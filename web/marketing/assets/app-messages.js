@@ -19,6 +19,11 @@
     wired: false,
     sending: false,
     pendingPhoto: null,
+    composing: false,
+    contacts: null,
+    suggest: [],
+    suggestIndex: -1,
+    draftThread: null,
   };
 
   function $(id) {
@@ -183,6 +188,10 @@
     var host = $("msgConversation");
     if (!host) return;
     if (!t) return;
+    if (!state.openId && state.draftThread) {
+      host.innerHTML = '<p class="app-empty">New conversation with ' + esc(t.name) + ". Write your first text below.</p>";
+      return;
+    }
     $("msgTitle").textContent = t.name;
     $("msgSub").textContent = prettyPhone(t.phone);
     var call = $("msgCall");
@@ -217,6 +226,7 @@
   }
 
   function setOpen(id) {
+    if (id) endCompose();
     state.openId = id || "";
     if (state.unsubMessages) {
       state.unsubMessages();
@@ -291,6 +301,12 @@
 
   function send() {
     if (state.sending) return;
+    if (state.composing && !state.draftThread) {
+      var picked = recipientFromField();
+      if (!picked) return setError("Add who this text is to.");
+      chooseRecipient(picked);
+      if (!state.draftThread) return;
+    }
     var t = byId(state.openId) || state.draftThread;
     if (!t) return;
     var input = $("msgInput");
@@ -326,6 +342,7 @@
         // A brand-new conversation: open its thread once the server has created it.
         var id = returned ? threadIdFor(returned) : to;
         state.draftThread = null;
+        endCompose();
         setOpen(id);
       }
     }).catch(function (e) {
@@ -343,35 +360,96 @@
     input.style.height = Math.min(160, input.scrollHeight) + "px";
   }
 
-  /* ── New conversation ── */
+  /* ── New message: a To: field like iPhone Messages ── */
 
-  function setNewOpen(open) {
-    ["msgNewSheet", "msgNewScrim"].forEach(function (x) {
-      var el = $(x);
-      if (el) el.classList.toggle("hidden", !open);
+  function loadContacts() {
+    if (state.contacts || !(global.ShopAppAccess && ShopAppAccess.can(state.session, "clients"))) return Promise.resolve();
+    return col("customers").get().then(function (snap) {
+      state.contacts = snap.docs.map(function (doc) {
+        var d = doc.data() || {};
+        return { name: String(d.name || "").trim(), phone: d.phone || "" };
+      }).filter(function (c) { return e164(c.phone); });
+    }).catch(function () {
+      state.contacts = [];
     });
-    if (open) {
-      $("msgNewName").value = "";
-      $("msgNewPhone").value = "";
-      $("msgNewError").classList.add("hidden");
-      setTimeout(function () { $("msgNewName").focus(); }, 0);
-    }
   }
 
-  function startNew(ev) {
-    ev.preventDefault();
-    var name = $("msgNewName").value.trim();
-    var phone = e164($("msgNewPhone").value);
-    var err = $("msgNewError");
-    if (!phone) {
-      err.textContent = "Enter a 10-digit US phone number.";
-      err.classList.remove("hidden");
+  /** Matching conversations first, then clients, then "Text this number". Deduped by phone. */
+  function suggestions(q) {
+    var query = q.trim().toLowerCase();
+    var qd = digits(q);
+    if (!query) return [];
+    var seen = {};
+    var out = [];
+    var add = function (name, phone, thread) {
+      var key = e164(phone);
+      if (!key || seen[key]) return;
+      seen[key] = 1;
+      out.push({ name: name || prettyPhone(phone), phone: key, thread: thread || null });
+    };
+    var match = function (name, phone) {
+      return (name && name.toLowerCase().indexOf(query) !== -1) || (qd.length >= 3 && digits(phone).indexOf(qd) !== -1);
+    };
+    visible(state.threads).forEach(function (t) { if (match(t.name, t.phone)) add(t.name, t.phone, t); });
+    (state.contacts || []).forEach(function (c) { if (match(c.name, c.phone)) add(c.name, c.phone); });
+    if (e164(q) && !seen[e164(q)]) out.push({ name: "Text " + prettyPhone(q), phone: e164(q), thread: null, raw: true });
+    return out.slice(0, 8);
+  }
+
+  function paintSuggestions() {
+    var box = $("msgToSuggest");
+    var list = suggestions($("msgTo").value || "");
+    state.suggest = list;
+    state.suggestIndex = list.length ? 0 : -1;
+    if (!list.length) {
+      box.classList.add("hidden");
+      box.innerHTML = "";
       return;
     }
-    setNewOpen(false);
-    var existing = visible(state.threads).filter(function (t) { return e164(t.phone) === phone; })[0];
-    if (existing) return setOpen(existing.id);
-    state.draftThread = { id: "", threadId: phone, name: name || prettyPhone(phone), phone: phone };
+    box.classList.remove("hidden");
+    box.innerHTML = list.map(function (o, i) {
+      return '<button type="button" role="option" class="app-msg-to-opt' + (i === 0 ? " is-on" : "") + '" data-suggest="' + i + '">' +
+        '<span class="app-req-avatar" aria-hidden="true">' + esc(o.raw ? "#" : initials(o.name)) + "</span>" +
+        "<span><strong>" + esc(o.name) + "</strong><em>" + esc(o.raw ? "New conversation" : prettyPhone(o.phone) + (o.thread ? " · Conversation" : "")) + "</em></span></button>";
+    }).join("");
+  }
+
+  function moveSuggest(dir) {
+    if (!state.suggest || !state.suggest.length) return;
+    state.suggestIndex = (state.suggestIndex + dir + state.suggest.length) % state.suggest.length;
+    document.querySelectorAll(".app-msg-to-opt").forEach(function (b, i) { b.classList.toggle("is-on", i === state.suggestIndex); });
+  }
+
+  function chooseRecipient(o) {
+    if (!o) return;
+    $("msgToSuggest").classList.add("hidden");
+    if (o.thread) {
+      // Already texting this person: go to that conversation, like the iPhone does.
+      endCompose();
+      return setOpen(o.thread.id);
+    }
+    state.draftThread = { id: "", threadId: o.phone, name: o.raw ? prettyPhone(o.phone) : o.name, phone: o.phone };
+    var chip = $("msgToChip");
+    chip.innerHTML = esc(state.draftThread.name) + ' <button type="button" id="msgToClear" aria-label="Change recipient">×</button>';
+    chip.classList.remove("hidden");
+    $("msgTo").value = "";
+    $("msgTo").classList.add("hidden");
+    paintConversation();
+    $("msgInput").focus();
+  }
+
+  /** Typing a full number and pressing Enter (or sending) uses it even without picking a suggestion. */
+  function recipientFromField() {
+    var v = ($("msgTo").value || "").trim();
+    if (!v) return null;
+    if (state.suggest && state.suggest.length) return state.suggest[Math.max(0, state.suggestIndex)];
+    if (e164(v)) return { name: prettyPhone(v), phone: e164(v), raw: true };
+    return null;
+  }
+
+  function startCompose() {
+    state.composing = true;
+    state.draftThread = null;
     state.openId = "";
     if (state.unsubMessages) {
       state.unsubMessages();
@@ -380,9 +458,23 @@
     state.messages = [];
     ["msgPanel", "msgScrim"].forEach(function (x) { $(x).classList.remove("hidden"); });
     $("msgPlaceholder").classList.add("hidden");
+    $("msgToRow").classList.remove("hidden");
+    $("msgHead").classList.add("hidden");
+    $("msgToChip").classList.add("hidden");
+    $("msgTo").classList.remove("hidden");
+    $("msgTo").value = "";
+    $("msgToSuggest").classList.add("hidden");
+    $("msgConversation").innerHTML = '<p class="app-empty">Type a name or number above.</p>';
     paintThreads();
-    paintConversation();
-    $("msgInput").focus();
+    loadContacts();
+    setTimeout(function () { $("msgTo").focus(); }, 0);
+  }
+
+  function endCompose() {
+    state.composing = false;
+    $("msgToRow").classList.add("hidden");
+    $("msgHead").classList.remove("hidden");
+    $("msgToSuggest").classList.add("hidden");
   }
 
   function wire() {
@@ -399,6 +491,7 @@
     ["msgClose", "msgScrim"].forEach(function (x) {
       $(x).addEventListener("click", function () {
         state.draftThread = null;
+        endCompose();
         setOpen("");
       });
     });
@@ -425,11 +518,38 @@
       state.pendingPhoto = null;
       paintPendingPhoto();
     });
-    $("msgNewBtn").addEventListener("click", function () { setNewOpen(true); });
-    ["msgNewClose", "msgNewScrim", "msgNewCancel"].forEach(function (x) {
-      $(x).addEventListener("click", function () { setNewOpen(false); });
+    $("msgNewBtn").addEventListener("click", startCompose);
+    $("msgTo").addEventListener("input", paintSuggestions);
+    $("msgTo").addEventListener("keydown", function (ev) {
+      if (ev.key === "ArrowDown") { ev.preventDefault(); moveSuggest(1); }
+      else if (ev.key === "ArrowUp") { ev.preventDefault(); moveSuggest(-1); }
+      else if (ev.key === "Enter") {
+        ev.preventDefault();
+        var r = recipientFromField();
+        if (r) chooseRecipient(r);
+      } else if (ev.key === "Escape") {
+        $("msgToSuggest").classList.add("hidden");
+      }
     });
-    $("msgNewForm").addEventListener("submit", startNew);
+    $("msgToSuggest").addEventListener("mousedown", function (ev) {
+      var b = ev.target.closest("[data-suggest]");
+      if (!b) return;
+      ev.preventDefault();
+      chooseRecipient(state.suggest[Number(b.getAttribute("data-suggest"))]);
+    });
+    $("msgToChip").addEventListener("click", function (ev) {
+      if (!ev.target.closest("#msgToClear")) return;
+      state.draftThread = null;
+      $("msgToChip").classList.add("hidden");
+      $("msgTo").classList.remove("hidden");
+      $("msgTo").focus();
+      $("msgConversation").innerHTML = '<p class="app-empty">Type a name or number above.</p>';
+    });
+    $("msgToCancel").addEventListener("click", function () {
+      endCompose();
+      state.draftThread = null;
+      setOpen("");
+    });
   }
 
   /** Listens from sign-in so the sidebar count stays current. */

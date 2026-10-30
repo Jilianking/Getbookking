@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap" rel="stylesheet" />
   <base href="/" />
-  <link rel="stylesheet" href="/assets/app.css?v=60" />
+  <link rel="stylesheet" href="/assets/app.css?v=61" />
 </head>
 <body>
   <div id="gateLoading" class="app-gate">
@@ -399,7 +399,16 @@
           </article>
           <div class="app-sheet-scrim hidden" id="msgScrim"></div>
           <section class="app-sheet app-msg-panel hidden" id="msgPanel" aria-labelledby="msgTitle">
-            <header class="app-msg-head">
+            <div class="app-msg-to hidden" id="msgToRow">
+              <label for="msgTo">To:</label>
+              <div class="app-msg-to-field">
+                <span class="app-msg-to-chip hidden" id="msgToChip"></span>
+                <input id="msgTo" type="text" autocomplete="off" placeholder="Name or phone number" aria-autocomplete="list" aria-controls="msgToSuggest" />
+              </div>
+              <button type="button" class="app-icon-btn" id="msgToCancel" aria-label="Cancel new message">×</button>
+              <div class="app-msg-to-suggest hidden" id="msgToSuggest" role="listbox"></div>
+            </div>
+            <header class="app-msg-head" id="msgHead">
               <span>
                 <strong id="msgTitle">Conversation</strong>
                 <em id="msgSub"></em>
@@ -425,29 +434,6 @@
           </div>
         </div>
       </section>
-
-      <div class="app-sheet-scrim hidden" id="msgNewScrim"></div>
-      <div class="app-sheet hidden" id="msgNewSheet" role="dialog" aria-modal="true" aria-labelledby="msgNewHeading">
-        <div class="app-sheet-top">
-          <h2 id="msgNewHeading">New message</h2>
-          <button type="button" class="app-icon-btn" id="msgNewClose" aria-label="Close">×</button>
-        </div>
-        <form id="msgNewForm">
-          <div class="app-field">
-            <label for="msgNewName">Client name</label>
-            <input id="msgNewName" type="text" autocomplete="off" placeholder="Jordan Lee" />
-          </div>
-          <div class="app-field">
-            <label for="msgNewPhone">Mobile number</label>
-            <input id="msgNewPhone" type="tel" inputmode="tel" autocomplete="off" placeholder="(615) 555-0101" required />
-          </div>
-          <p class="app-sheet-error hidden" id="msgNewError"></p>
-          <div class="app-sheet-actions">
-            <button type="button" class="app-btn app-btn--ghost" id="msgNewCancel">Cancel</button>
-            <button type="submit" class="app-btn app-btn--primary">Start conversation</button>
-          </div>
-        </form>
-      </div>
 
       <section id="viewTeam" class="app-view hidden" data-view="team">
         <div class="app-greeting app-pay-head">
@@ -864,7 +850,7 @@
   <script src="/assets/app-dash-charts.js?v=6"></script>
   <script src="/assets/app-team.js?v=2"></script>
   <script src="/assets/app-profile.js?v=1"></script>
-  <script src="/assets/app-messages.js?v=1"></script>
+  <script src="/assets/app-messages.js?v=2"></script>
   <script src="/assets/app-insights.js?v=3"></script>
   <script src="/assets/app-payments.js?v=6"></script>
   <script src="/assets/app-payouts.js?v=2"></script>

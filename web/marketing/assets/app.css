@@ -3402,3 +3402,18 @@ button.app-pay-tx.is-link:focus-visible {
 }
 .app-msg-rowmenu button:hover { background: color-mix(in srgb, var(--cream) 55%, transparent); }
 .app-msg-rowmenu .is-danger { color: #A3322A; }
+
+/* Messages: unread */
+.app-msg-row.is-unread .app-req-copy strong { font-weight: 700; }
+.app-msg-row.is-unread .app-req-copy span { color: var(--text); }
+.app-msg-row { position: relative; }
+.app-msg-dot {
+  position: absolute;
+  left: 5px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #2a78d6;
+}

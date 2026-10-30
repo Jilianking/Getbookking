@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap" rel="stylesheet" />
   <base href="/" />
-  <link rel="stylesheet" href="/assets/app.css?v=65" />
+  <link rel="stylesheet" href="/assets/app.css?v=66" />
 </head>
 <body>
   <div id="gateLoading" class="app-gate">
@@ -54,7 +54,7 @@
           <div class="app-rail-tree">
             <a class="app-nav" data-route="dashboard" href="/app">Dashboard</a>
             <a class="app-nav" data-route="requests" href="/app/requests">Requests <span class="app-badge app-nav-badge hidden" id="navRequestsBadge">0</span></a>
-            <a class="app-nav" data-route="messages" href="/app/messages">Messages</a>
+            <a class="app-nav" data-route="messages" href="/app/messages">Messages <span class="app-badge app-nav-badge hidden" id="navMessagesBadge">0</span></a>
             <a class="app-nav" data-route="calendar" href="/app/calendar">Calendar</a>
             <a class="app-nav" data-route="clients" href="/app/clients">Clients</a>
           </div>
@@ -401,6 +401,7 @@
             <div id="msgThreads"></div>
             <div class="app-msg-rowmenu hidden" id="msgRowMenu" role="menu">
               <button type="button" role="menuitem" data-row-act="open">Open</button>
+              <button type="button" role="menuitem" data-row-act="unread">Mark as unread</button>
               <button type="button" role="menuitem" class="is-danger" data-row-act="delete">Delete conversation</button>
             </div>
           </article>
@@ -875,7 +876,7 @@
   <script src="/assets/app-dash-charts.js?v=6"></script>
   <script src="/assets/app-team.js?v=4"></script>
   <script src="/assets/app-profile.js?v=1"></script>
-  <script src="/assets/app-messages.js?v=7"></script>
+  <script src="/assets/app-messages.js?v=8"></script>
   <script src="/assets/app-insights.js?v=3"></script>
   <script src="/assets/app-payments.js?v=6"></script>
   <script src="/assets/app-payouts.js?v=2"></script>

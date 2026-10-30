@@ -30,6 +30,10 @@
     consentFor: "",
     popKind: "",
     menuFor: "",
+    readMap: {},
+    readSince: 0,
+    readSinceSet: false,
+    unsubReads: null,
   };
 
   function $(id) {
@@ -162,9 +166,65 @@
     return firebase.firestore().collection("tenants").doc(state.session.tenantId).collection(name);
   }
 
+  /* ── Read / unread, saved per person on their own user record (follows them to any computer) ── */
+
+  function readKey(t) {
+    return String(t.id || "").replace(/[.\/\[\]*~]/g, "_");
+  }
+
+  function isUnread(t) {
+    var v = state.readMap[readKey(t)];
+    if (v === -1) return true;
+    if (!t.at) return false;
+    var seen = Math.max(typeof v === "number" ? v : 0, state.readSince || 0);
+    return seen > 0 && t.at.getTime() > seen;
+  }
+
+  function saveRead(t, value) {
+    var uid = state.session && state.session.user && state.session.user.uid;
+    if (!uid || !t) return;
+    var key = readKey(t);
+    state.readMap[key] = value;
+    var patch = {};
+    patch[key] = value;
+    firebase.firestore().collection("users").doc(uid).set({ smsThreadRead: patch }, { merge: true }).catch(function () {});
+    paintThreads();
+  }
+
+  function markRead(t) {
+    if (t && isUnread(t)) saveRead(t, Date.now());
+  }
+
+  function paintBadge() {
+    var badge = $("navMessagesBadge");
+    if (!badge) return;
+    var n = visible(state.threads).filter(function (t) { return isUnread(t) && t.id !== state.openId; }).length;
+    badge.textContent = String(n);
+    badge.classList.toggle("hidden", !n);
+  }
+
+  function watchReads(session) {
+    var uid = session.user && session.user.uid;
+    if (!uid || state.unsubReads) return;
+    var ref = firebase.firestore().collection("users").doc(uid);
+    state.unsubReads = ref.onSnapshot(function (snap) {
+      var d = (snap && snap.data && snap.data()) || {};
+      state.readMap = d.smsThreadRead || {};
+      // Conversations from before read tracking started count as read.
+      if (typeof d.smsReadSince === "number") state.readSince = d.smsReadSince;
+      else if (!state.readSinceSet) {
+        state.readSinceSet = true;
+        state.readSince = Date.now();
+        ref.set({ smsReadSince: state.readSince }, { merge: true }).catch(function () {});
+      }
+      paintThreads();
+    }, function () {});
+  }
+
   /* ── Thread list ── */
 
   function paintThreads() {
+    paintBadge();
     var host = $("msgThreads");
     if (!host) return;
     var q = state.query.trim().toLowerCase();
@@ -188,8 +248,10 @@
       return;
     }
     host.innerHTML = list.map(function (t) {
-      return '<div class="app-msg-rowwrap' + (t.id === state.openId ? " is-active" : "") + '" data-row-id="' + esc(t.id) + '">' +
-        '<button type="button" class="app-req-row app-msg-row' + (t.id === state.openId ? " is-active" : "") + '" data-msg-open="' + esc(t.id) + '">' +
+      var unread = isUnread(t) && t.id !== state.openId;
+      return '<div class="app-msg-rowwrap' + (t.id === state.openId ? " is-active" : "") + (unread ? " is-unread" : "") + '" data-row-id="' + esc(t.id) + '">' +
+        '<button type="button" class="app-req-row app-msg-row' + (t.id === state.openId ? " is-active" : "") + (unread ? " is-unread" : "") + '" data-msg-open="' + esc(t.id) + '">' +
+        (unread ? '<span class="app-msg-dot" aria-label="Unread"></span>' : "") +
         avatarHtml(t.name) +
         '<span class="app-req-copy"><strong>' + esc(t.name) + "</strong><span>" + esc(t.last || "Photo") + "</span></span>" +
         '<span class="app-req-side"><time>' + esc(when(t.at)) + "</time></span></button>" +
@@ -270,6 +332,7 @@
     state.unsubMessages = col("smsLog").where("threadId", "==", tid).orderBy("createdAt", "asc")
       .onSnapshot(function (snap) {
         state.messages = snap.docs.map(mapMessage);
+        if (!document.hidden) markRead(byId(state.openId));
         // Drop "sending" bubbles once the real text has arrived.
         state.pending = state.pending.filter(function (p) {
           return p.threadKey === tid && !state.messages.some(function (m) { return m.out && m.body === p.body && m.at && m.at >= p.since; });
@@ -280,6 +343,7 @@
         state.messages = [];
         paintConversation();
       });
+    markRead(t);
     loadConsent(tid);
     closePop();
     setTray(false);
@@ -507,6 +571,8 @@
     if (!menu || !list) return;
     state.menuFor = id;
     menu.querySelector('[data-row-act="delete"]').classList.toggle("hidden", !canSend());
+    var tr = byId(id);
+    menu.querySelector('[data-row-act="unread"]').textContent = tr && isUnread(tr) && tr.id !== state.openId ? "Mark as read" : "Mark as unread";
     var box = list.parentNode.getBoundingClientRect();
     var top, left;
     if (anchor) {
@@ -732,6 +798,7 @@
       media: photos.map(function (p) { return p.preview; }),
     };
     state.pending.push(pending);
+    if (state.openId) saveRead(byId(state.openId), Date.now() + 60000);
     input.value = "";
     autoGrow();
     paintConversation();
@@ -1000,6 +1067,14 @@
       closeRowMenu();
       var t = byId(id);
       if (act === "open") setOpen(id);
+      else if (act === "unread" && t) {
+        if (isUnread(t) && t.id !== state.openId) saveRead(t, Date.now());
+        else {
+          // Marking the open conversation unread closes it, like Mail and Messages.
+          saveRead(t, -1);
+          if (state.openId === t.id) setOpen("");
+        }
+      }
       else if (act === "delete") deleteConversation(id);
     });
     document.addEventListener("click", function (ev) {
@@ -1067,6 +1142,7 @@
   /** Listens from sign-in so the sidebar count stays current. */
   function attach(session) {
     state.session = session;
+    watchReads(session);
     if (state.unsubThreads) return;
     state.unsubThreads = col("smsThreads").orderBy("lastMessageAt", "desc").limit(300).onSnapshot(function (snap) {
       state.threads = snap.docs.map(mapThread);

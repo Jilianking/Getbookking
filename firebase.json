@@ -98,6 +98,7 @@
         { "source": "/settings", "destination": "/settings.html" },
         { "source": "/app", "destination": "/app.html" },
         { "source": "/app/requests", "destination": "/app.html" },
+        { "source": "/app/messages", "destination": "/app.html" },
         { "source": "/app/team", "destination": "/app.html" },
         { "source": "/app/insights", "destination": "/app.html" },
         { "source": "/app/profile", "destination": "/app.html" },

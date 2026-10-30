@@ -20,6 +20,7 @@
   var ROUTES = [
     "dashboard",
     "requests",
+    "messages",
     "team",
     "insights",
     "profile",
@@ -66,6 +67,7 @@
       return "dashboard";
     }
     if (path.indexOf("/app/requests") !== -1) return "requests";
+    if (path.indexOf("/app/messages") !== -1) return "messages";
     if (path.indexOf("/app/team") !== -1) return "team";
     if (path.indexOf("/app/insights") !== -1) return "insights";
     if (path.indexOf("/app/profile") !== -1) return "profile";
@@ -138,7 +140,7 @@
     setRailCollapsed(collapsed);
   }
 
-  var ROUTE_ACCESS = { profile: "websiteProfile", team: "team", clients: "clients", website: "website", billing: "billing", shop: "shop", payments: "payments", payouts: "payments" };
+  var ROUTE_ACCESS = { messages: "messages", profile: "websiteProfile", team: "team", clients: "clients", website: "website", billing: "billing", shop: "shop", payments: "payments", payouts: "payments" };
 
   function setRoute(route, session) {
     // A link or bookmark to a page this person can't use lands on the dashboard.
@@ -169,6 +171,7 @@
     var titles = {
       dashboard: "Dashboard",
       requests: "Requests",
+      messages: "Messages",
       team: "Team",
       insights: "Insights",
       profile: "Your website profile",
@@ -197,6 +200,9 @@
     }
     if (route === "insights" && window.ShopAppInsights) {
       ShopAppInsights.load(session);
+    }
+    if (route === "messages" && window.ShopAppMessages) {
+      ShopAppMessages.load(session);
     }
     if (route === "requests" && window.ShopAppRequests) {
       ShopAppRequests.load(session);
@@ -235,7 +241,7 @@
     var navFor = function (route) { return document.querySelectorAll('.app-nav[data-route="' + route + '"]'); };
     // Owners edit the whole site in the Website builder; team members with permission get their profile.
     navFor("profile").forEach(function (el) { el.classList.toggle("hidden", session.isOwner || !can("websiteProfile")); });
-    [["team", "team"], ["clients", "clients"], ["website", "website"], ["billing", "billing"], ["shop", "shop"], ["payouts", "payments"]]
+    [["messages", "messages"], ["team", "team"], ["clients", "clients"], ["website", "website"], ["billing", "billing"], ["shop", "shop"], ["payouts", "payments"]]
       .forEach(function (pair) {
         navFor(pair[0]).forEach(function (el) { el.classList.toggle("hidden", !can(pair[1])); });
       });
@@ -312,6 +318,7 @@
         if (window.ShopAppClients) ShopAppClients.attach(session);
         if (window.ShopAppShop) ShopAppShop.attach(session);
         if (window.ShopAppRequests) ShopAppRequests.attach(session);
+        if (window.ShopAppMessages && ShopAppAccess.can(session, "messages")) ShopAppMessages.attach(session);
         setRoute(routeFromLocation(), session);
         if (window.ShopAppDashboard) ShopAppDashboard.load(session);
         if (window.ShopAppDashCharts) ShopAppDashCharts.load(session);

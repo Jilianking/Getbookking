@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap" rel="stylesheet" />
   <base href="/" />
-  <link rel="stylesheet" href="/assets/app.css?v=59" />
+  <link rel="stylesheet" href="/assets/app.css?v=60" />
 </head>
 <body>
   <div id="gateLoading" class="app-gate">
@@ -54,6 +54,7 @@
           <div class="app-rail-tree">
             <a class="app-nav" data-route="dashboard" href="/app">Dashboard</a>
             <a class="app-nav" data-route="requests" href="/app/requests">Requests <span class="app-badge app-nav-badge hidden" id="navRequestsBadge">0</span></a>
+            <a class="app-nav" data-route="messages" href="/app/messages">Messages</a>
             <a class="app-nav" data-route="calendar" href="/app/calendar">Calendar</a>
             <a class="app-nav" data-route="clients" href="/app/clients">Clients</a>
           </div>
@@ -382,6 +383,71 @@
           </div>
         </div>
       </section>
+
+      <section id="viewMessages" class="app-view hidden" data-view="messages">
+        <div class="app-greeting app-pay-head">
+          <div>
+            <h1>Messages</h1>
+            <p>Text your clients from your shop's number. Replies show up here and in the app.</p>
+          </div>
+          <button type="button" class="app-btn app-btn--primary" id="msgNewBtn">+ New message</button>
+        </div>
+        <div class="app-msg-layout">
+          <article class="app-card app-msg-list">
+            <div class="app-msg-search"><input id="msgSearch" class="app-pay-search" type="search" placeholder="Search conversations" autocomplete="off" /></div>
+            <div id="msgThreads"></div>
+          </article>
+          <div class="app-sheet-scrim hidden" id="msgScrim"></div>
+          <section class="app-sheet app-msg-panel hidden" id="msgPanel" aria-labelledby="msgTitle">
+            <header class="app-msg-head">
+              <span>
+                <strong id="msgTitle">Conversation</strong>
+                <em id="msgSub"></em>
+              </span>
+              <a class="app-btn app-btn--ghost app-btn--small" id="msgCall" href="#">Call</a>
+              <button type="button" class="app-icon-btn" id="msgClose" aria-label="Close">×</button>
+            </header>
+            <div class="app-msg-thread" id="msgConversation" aria-live="polite"></div>
+            <div class="app-msg-composer" id="msgComposer">
+              <div class="app-msg-attach hidden" id="msgAttachPreview"></div>
+              <p class="app-sheet-error hidden" id="msgError"></p>
+              <div class="app-msg-input">
+                <label class="app-icon-btn app-msg-photo" title="Add a photo"><input type="file" accept="image/*" id="msgPhoto" /><span aria-hidden="true">＋</span><span class="app-sr-only">Add a photo</span></label>
+                <textarea id="msgInput" rows="1" placeholder="Write a text…" aria-label="Message"></textarea>
+                <button type="button" class="app-btn app-btn--primary" id="msgSend">Send</button>
+              </div>
+              <p class="app-hint">Enter sends. Shift+Enter adds a new line. Standard texting rates apply to your plan's texts.</p>
+            </div>
+            <p class="app-hint app-msg-cantsend hidden" id="msgCantSend">You can read these texts. Sending needs client texting turned on for you.</p>
+          </section>
+          <div class="app-req-placeholder" id="msgPlaceholder">
+            <p><strong>Pick a conversation</strong>Or start one with New message.</p>
+          </div>
+        </div>
+      </section>
+
+      <div class="app-sheet-scrim hidden" id="msgNewScrim"></div>
+      <div class="app-sheet hidden" id="msgNewSheet" role="dialog" aria-modal="true" aria-labelledby="msgNewHeading">
+        <div class="app-sheet-top">
+          <h2 id="msgNewHeading">New message</h2>
+          <button type="button" class="app-icon-btn" id="msgNewClose" aria-label="Close">×</button>
+        </div>
+        <form id="msgNewForm">
+          <div class="app-field">
+            <label for="msgNewName">Client name</label>
+            <input id="msgNewName" type="text" autocomplete="off" placeholder="Jordan Lee" />
+          </div>
+          <div class="app-field">
+            <label for="msgNewPhone">Mobile number</label>
+            <input id="msgNewPhone" type="tel" inputmode="tel" autocomplete="off" placeholder="(615) 555-0101" required />
+          </div>
+          <p class="app-sheet-error hidden" id="msgNewError"></p>
+          <div class="app-sheet-actions">
+            <button type="button" class="app-btn app-btn--ghost" id="msgNewCancel">Cancel</button>
+            <button type="submit" class="app-btn app-btn--primary">Start conversation</button>
+          </div>
+        </form>
+      </div>
 
       <section id="viewTeam" class="app-view hidden" data-view="team">
         <div class="app-greeting app-pay-head">
@@ -792,17 +858,18 @@
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-functions-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-storage-compat.js"></script>
   <script src="/js/firebase-config.js"></script>
-  <script src="/assets/app-session.js?v=5"></script>
+  <script src="/assets/app-session.js?v=6"></script>
   <script src="/assets/app-dashboard.js?v=22"></script>
   <script src="/assets/app-requests.js?v=4"></script>
   <script src="/assets/app-dash-charts.js?v=6"></script>
   <script src="/assets/app-team.js?v=2"></script>
   <script src="/assets/app-profile.js?v=1"></script>
+  <script src="/assets/app-messages.js?v=1"></script>
   <script src="/assets/app-insights.js?v=3"></script>
   <script src="/assets/app-payments.js?v=6"></script>
   <script src="/assets/app-payouts.js?v=2"></script>
   <script src="/assets/app-clients.js?v=3"></script>
   <script src="/assets/app-shop.js?v=3"></script>
-  <script src="/assets/app.js?v=25"></script>
+  <script src="/assets/app.js?v=26"></script>
 </body>
 </html>

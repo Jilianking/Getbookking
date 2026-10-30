@@ -77,6 +77,7 @@
       managersApproveAppointments: data.managersApproveAppointments === true,
       bookingRequiresApproval: data.bookingRequiresApproval !== false,
       canEditPortfolio: data.canEditPortfolio === true,
+      usesOwnSms: data.usesOwnSms === true,
       canEditPublicBio: data.canEditPublicBio === true,
     };
   }
@@ -180,6 +181,7 @@
       case "team": return manager;
       case "shop": return manager;
       case "insights": return true;
+      case "messages": return manager || a.usesOwnSms === true;
       case "editServices": return manager && p.editServicesPricing === true;
       case "website": return false;
       case "websiteProfile": return a.canEditPortfolio === true || a.canEditPublicBio === true;

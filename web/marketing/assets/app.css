@@ -3016,3 +3016,106 @@ button.app-pay-tx.is-link:focus-visible {
 .app-profile-add input { position: absolute; opacity: 0; width: 1px; height: 1px; }
 .app-profile-add span { font-size: 26px; line-height: 1; color: var(--warm); }
 .app-profile-add strong { font-size: 13px; color: var(--ink); }
+
+/* ── Messages ── */
+.app-msg-layout {
+  display: grid;
+  gap: 16px;
+  min-height: 0;
+  flex: 1;
+}
+.app-msg-list { min-height: 0; }
+.app-msg-search { padding: 12px 12px 8px; }
+.app-msg-search input { width: 100%; }
+.app-msg-row .app-req-copy span { max-width: 100%; }
+.app-msg-panel { display: flex; flex-direction: column; padding: 0; gap: 0; }
+.app-msg-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--line);
+}
+.app-msg-head > span { flex: 1; min-width: 0; display: grid; }
+.app-msg-head strong { font-size: 16px; font-weight: 600; color: var(--ink); }
+.app-msg-head em { font-style: normal; font-size: 12px; color: var(--muted); }
+.app-msg-thread {
+  flex: 1;
+  min-height: 240px;
+  overflow: auto;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  background: color-mix(in srgb, var(--cream) 18%, var(--card));
+}
+.app-msg-day, .app-msg-system {
+  align-self: center;
+  margin: 8px 0 4px;
+  font-size: 11px;
+  color: var(--faint);
+}
+.app-msg-system { font-style: italic; }
+.app-msg {
+  max-width: 72%;
+  display: grid;
+  gap: 4px;
+  padding: 9px 12px 6px;
+  border-radius: 16px;
+  font-size: 14px;
+  line-height: 1.45;
+}
+.app-msg p { margin: 0; white-space: normal; overflow-wrap: anywhere; }
+.app-msg time { font-size: 10px; opacity: 0.7; justify-self: end; }
+.app-msg.is-in { align-self: flex-start; background: var(--card); border: 1px solid var(--line); border-bottom-left-radius: 6px; color: var(--text); }
+.app-msg.is-out { align-self: flex-end; background: var(--ink); color: #fff; border-bottom-right-radius: 6px; }
+.app-msg.is-failed { background: #7A2E26; }
+.app-msg-media { display: grid; gap: 4px; }
+.app-msg-media img { max-width: 220px; max-height: 260px; border-radius: 10px; display: block; object-fit: cover; }
+.app-msg-pay { font-size: 13px; font-weight: 600; color: inherit; text-decoration: underline; text-underline-offset: 3px; }
+.app-msg-composer { padding: 10px 12px 12px; border-top: 1px solid var(--line); display: grid; gap: 6px; }
+.app-msg-input { display: flex; align-items: flex-end; gap: 8px; }
+.app-msg-input textarea {
+  flex: 1;
+  min-height: 40px;
+  max-height: 160px;
+  resize: none;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  padding: 9px 14px;
+  font: inherit;
+  font-size: 14px;
+  line-height: 1.4;
+}
+.app-msg-input .app-btn { border-radius: 20px; padding: 10px 16px; }
+.app-msg-photo { position: relative; cursor: pointer; flex: none; }
+.app-msg-photo input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.app-msg-attach { position: relative; width: 72px; }
+.app-msg-attach img { width: 72px; height: 72px; object-fit: cover; border-radius: 10px; display: block; }
+.app-msg-attach button {
+  position: absolute; top: -6px; right: -6px; width: 22px; height: 22px; border-radius: 50%;
+  border: 0; background: var(--ink); color: #fff; cursor: pointer; line-height: 1;
+}
+.app-msg-cantsend { padding: 12px 16px; margin: 0; }
+@media (min-width: 1100px) {
+  .app-msg-layout { grid-template-columns: minmax(280px, 360px) minmax(0, 1fr); height: calc(100vh - 210px); }
+  .app-msg-list { overflow: auto; }
+  .app-msg-layout > .app-sheet-scrim { display: none !important; }
+  .app-msg-panel {
+    position: static;
+    transform: none;
+    width: auto;
+    max-height: none;
+    height: 100%;
+    box-shadow: none;
+    border-radius: 14px;
+    grid-column: 2;
+    grid-row: 1;
+    overflow: hidden;
+  }
+  .app-msg-panel #msgClose { display: none; }
+  .app-msg-layout .app-req-placeholder { grid-column: 2; grid-row: 1; height: 100%; }
+}
+@media (max-width: 1099px) {
+  .app-msg-panel { height: min(86vh, 720px); }
+}

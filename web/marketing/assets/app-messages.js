@@ -25,6 +25,7 @@
     suggestIndex: -1,
     draftThread: null,
     consent: null,
+    pending: [],
     consentFor: "",
     popKind: "",
   };
@@ -72,6 +73,14 @@
   function initials(name) {
     var parts = String(name || "?").trim().split(/\s+/);
     return ((parts[0] || "?").charAt(0) + (parts.length > 1 ? parts[parts.length - 1].charAt(0) : "")).toUpperCase();
+  }
+
+  var PERSON_ICON = '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><circle cx="12" cy="8.5" r="4" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M4.5 20c.9-3.8 4-6 7.5-6s6.6 2.2 7.5 6" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>';
+
+  /** Initials for a saved name; the person outline (like iPhone) when it's only a number. */
+  function avatarHtml(name) {
+    var hasLetters = /[A-Za-z]/.test(String(name || ""));
+    return '<span class="app-req-avatar' + (hasLetters ? "" : " is-person") + '" aria-hidden="true">' + (hasLetters ? esc(initials(name)) : PERSON_ICON) + "</span>";
   }
 
   function when(d) {
@@ -174,7 +183,7 @@
     }
     host.innerHTML = list.map(function (t) {
       return '<button type="button" class="app-req-row app-msg-row' + (t.id === state.openId ? " is-active" : "") + '" data-msg-open="' + esc(t.id) + '">' +
-        '<span class="app-req-avatar" aria-hidden="true">' + esc(initials(t.name)) + "</span>" +
+        avatarHtml(t.name) +
         '<span class="app-req-copy"><strong>' + esc(t.name) + "</strong><span>" + esc(t.last || "Photo") + "</span></span>" +
         '<span class="app-req-side"><time>' + esc(when(t.at)) + "</time></span></button>";
     }).join("");
@@ -196,13 +205,16 @@
       return;
     }
     $("msgTitle").textContent = t.name;
-    $("msgSub").textContent = prettyPhone(t.phone);
+    // Don't repeat the number under itself when there's no saved name.
+    $("msgSub").textContent = t.name === prettyPhone(t.phone) ? "" : prettyPhone(t.phone);
     var call = $("msgCall");
     if (call) call.href = "tel:" + (e164(t.phone) || t.phone);
     var del = $("msgDelete");
     if (del) del.classList.toggle("hidden", !state.openId || !canSend());
     var lastDay = "";
-    host.innerHTML = state.messages.map(function (m) {
+    var tidNow = threadIdFor(t.threadId || t.phone);
+    var shown = state.messages.concat(state.pending.filter(function (p) { return p.threadKey === tidNow; }));
+    host.innerHTML = shown.map(function (m) {
       var day = m.at ? m.at.toDateString() : "";
       var sep = "";
       if (day && day !== lastDay) {
@@ -217,12 +229,13 @@
       }).join("");
       var pay = m.payUrl && m.cents ? '<a class="app-msg-pay" href="' + esc(m.payUrl) + '" target="_blank" rel="noopener">' +
         esc((m.payKind === "deposit" ? "Deposit" : "Payment") + " request · $" + (m.cents / 100).toFixed(2)) + "</a>" : "";
-      return sep + '<div class="app-msg ' + (m.out ? "is-out" : "is-in") + (m.failed ? " is-failed" : "") + '">' +
+      return sep + '<div class="app-msg ' + (m.out ? "is-out" : "is-in") + (m.failed || m.error ? " is-failed" : "") + (m.sending ? " is-sending" : "") + '">' +
         (media ? '<div class="app-msg-media">' + media + "</div>" : "") +
         (m.body ? '<p>' + esc(m.body).replace(/\n/g, "<br>") + "</p>" : "") + pay +
-        '<time>' + esc(m.at ? m.at.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }) : "Sending…") +
+        '<time>' + esc(m.sending ? (m.error ? "Not sent" : "Sending…") : m.at ? m.at.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }) : "") +
         (m.failed ? " · Not delivered" : "") + "</time></div>";
     }).join("") || '<p class="app-empty">No messages yet. Say hello.</p>';
+    if (state.pending.some(function (p) { return p.threadKey === tidNow; })) host.scrollTop = host.scrollHeight;
     host.scrollTop = host.scrollHeight;
     var composer = $("msgComposer");
     var note = $("msgCantSend");
@@ -250,11 +263,16 @@
     var t = byId(id);
     var tid = threadIdFor(t ? t.threadId : id);
     paintConversation();
-    state.unsubMessages = col("smsLog").where("threadId", "==", tid).orderBy("createdAt", "asc").limitToLast(200)
+    state.unsubMessages = col("smsLog").where("threadId", "==", tid).orderBy("createdAt", "asc")
       .onSnapshot(function (snap) {
         state.messages = snap.docs.map(mapMessage);
+        // Drop "sending" bubbles once the real text has arrived.
+        state.pending = state.pending.filter(function (p) {
+          return p.threadKey === tid && !state.messages.some(function (m) { return m.out && m.body === p.body && m.at && m.at >= p.since; });
+        });
         paintConversation();
-      }, function () {
+      }, function (err) {
+        console.warn("Messages: couldn't load this conversation", err && err.message);
         state.messages = [];
         paintConversation();
       });
@@ -642,6 +660,20 @@
     setError("");
     $("msgSend").disabled = true;
     var s = state.session;
+    // Show it in the chat right away, like iPhone; it's replaced by the saved text when it lands.
+    var pending = {
+      threadKey: threadIdFor(t.threadId || to),
+      body: body,
+      out: true,
+      sending: true,
+      at: null,
+      since: new Date(Date.now() - 5000),
+      media: photo ? [photo.preview] : [],
+    };
+    state.pending.push(pending);
+    input.value = "";
+    autoGrow();
+    paintConversation();
     var upload = photo
       ? (function () {
           var ref = firebase.storage().ref().child("tenants/" + s.tenantId + "/smsMedia/" + (global.crypto && crypto.randomUUID ? crypto.randomUUID() : Date.now()) + ".jpg");
@@ -656,8 +688,6 @@
       }
       return firebase.app().functions(REGION).httpsCallable("sendClientSms")(payload);
     }).then(function (res) {
-      input.value = "";
-      autoGrow();
       state.pendingPhoto = null;
       paintPendingPhoto();
       var returned = res && res.data && res.data.threadId;
@@ -669,6 +699,9 @@
         setOpen(id);
       }
     }).catch(function (e) {
+      pending.error = true;
+      if (!input.value) input.value = body;
+      paintConversation();
       setError((e && e.message) || "Couldn't send that text.");
     }).then(function () {
       state.sending = false;
@@ -732,7 +765,7 @@
     box.classList.remove("hidden");
     box.innerHTML = list.map(function (o, i) {
       return '<button type="button" role="option" class="app-msg-to-opt' + (i === 0 ? " is-on" : "") + '" data-suggest="' + i + '">' +
-        '<span class="app-req-avatar" aria-hidden="true">' + esc(o.raw ? "#" : initials(o.name)) + "</span>" +
+        avatarHtml(o.raw ? "" : o.name) +
         "<span><strong>" + esc(o.name) + "</strong><em>" + esc(o.raw ? "New conversation" : prettyPhone(o.phone) + (o.thread ? " · Conversation" : "")) + "</em></span></button>";
     }).join("");
   }

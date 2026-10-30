@@ -3290,3 +3290,6 @@ button.app-pay-tx.is-link:focus-visible {
   font-size: 14px;
   resize: vertical;
 }
+
+.app-req-avatar.is-person { color: var(--muted); background: color-mix(in srgb, var(--cream) 70%, var(--line)); }
+.app-msg.is-sending { opacity: 0.72; }

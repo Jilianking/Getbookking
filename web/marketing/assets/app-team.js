@@ -199,7 +199,6 @@
     var editingOwner = r === "owner";
     $("teamDetailTitle").textContent = m.displayName || "Member";
     var contact = [];
-    if (m.phone) contact.push('<a class="app-btn app-btn--ghost app-btn--small" href="tel:' + esc(m.phone) + '">Call</a>');
     if (m.email) contact.push('<a class="app-btn app-btn--ghost app-btn--small" href="mailto:' + esc(m.email) + '">Email</a>');
     var html =
       '<div class="app-team-hero">' + avatar(m, "lg") +

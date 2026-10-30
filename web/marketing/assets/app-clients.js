@@ -191,7 +191,6 @@
     var links = [];
     var d = digits(c.phone);
     if (d.length >= 10) {
-      links.push('<a class="app-btn app-btn--ghost app-btn--small" href="tel:' + esc(c.phone) + '">Call</a>');
       links.push('<a class="app-btn app-btn--ghost app-btn--small" href="sms:' + esc(c.phone) + '">Text</a>');
     }
     if (c.email) links.push('<a class="app-btn app-btn--ghost app-btn--small" href="mailto:' + esc(c.email) + '">Email</a>');

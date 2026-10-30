@@ -282,7 +282,6 @@
     var links = [];
     var digits = r.phone.replace(/\D/g, "");
     if (digits.length >= 10) {
-      links.push('<a class="app-btn app-btn--ghost app-btn--small" href="tel:' + esc(r.phone) + '">Call</a>');
       links.push('<a class="app-btn app-btn--ghost app-btn--small" href="sms:' + esc(r.phone) + '">Text</a>');
     }
     if (r.email) links.push('<a class="app-btn app-btn--ghost app-btn--small" href="mailto:' + esc(r.email) + '">Email</a>');

@@ -10,7 +10,95 @@
   var INVITE_ORIGIN = "https://join.getbookking.com";
   var ROLE_LABEL = { owner: "Owner", manager: "Manager", member: "Staff" };
 
-  var state = { session: null, members: [], ownerUid: "", openUid: "", wired: false, loading: false, invite: null };
+  var state = { session: null, members: [], ownerUid: "", openUid: "", wired: false, loading: false, invite: null, tab: "people" };
+
+  // Same names and defaults the server and iPhone app use (functions DEFAULT_MANAGER_*).
+  var PERM_DEFAULTS = {
+    viewAllBookings: true, approveRejectRequests: true, editServicesPricing: false, manageBookingFormStyle: false,
+    manageArtistSchedules: false, accessClientList: false, viewEarningsReports: false, sendClientNotifications: true,
+  };
+  var NOTE_DEFAULTS = { onNewBooking: true, onCancellation: true, dailySummaryEmail: false };
+  var PERM_GROUPS = [
+    ["Bookings", [
+      ["perm", "viewAllBookings", "View all bookings", "See every booking, not only their own."],
+      ["perm", "approveRejectRequests", "Approve and reject requests", "Confirm or decline new booking requests."],
+      ["perm", "manageArtistSchedules", "Manage staff schedules", "Change other people's hours and time off."],
+    ]],
+    ["Services and website", [
+      ["perm", "editServicesPricing", "Edit services and prices", "Change the service list and pricing."],
+      ["perm", "manageBookingFormStyle", "Edit the booking form", "Change the booking form's style and questions."],
+    ]],
+    ["Clients and money", [
+      ["perm", "accessClientList", "See the client list", "Open Clients and client profiles."],
+      ["perm", "viewEarningsReports", "See earnings and reports", "Open Insights and Payments."],
+    ]],
+    ["Manager alerts", [
+      ["note", "onNewBooking", "New booking", "Managers get a notification for each new booking."],
+      ["note", "onCancellation", "Cancellation", "Managers get a notification when a booking is cancelled."],
+    ]],
+  ];
+
+  function current(kind) {
+    var t = (state.session && state.session.tenant) || {};
+    var raw = (kind === "perm" ? t.managerPermissions : t.managerNotifications) || {};
+    var defs = kind === "perm" ? PERM_DEFAULTS : NOTE_DEFAULTS;
+    var out = {};
+    Object.keys(defs).forEach(function (k) { out[k] = typeof raw[k] === "boolean" ? raw[k] : defs[k]; });
+    return out;
+  }
+
+  function paintPermissions() {
+    var host = $("teamPermissions");
+    if (!host) return;
+    var canEdit = isOwner();
+    var perm = current("perm");
+    var note = current("note");
+    host.innerHTML =
+      '<p class="app-hint app-team-perm-lead">' + (canEdit
+        ? "These apply to everyone with the Manager role. Staff always see their own bookings and clients."
+        : "Only the owner can change these.") + "</p>" +
+      PERM_GROUPS.map(function (g) {
+        return '<article class="app-card app-team-perm-card"><div class="app-card-head"><h2>' + esc(g[0]) + "</h2></div><div class=\"app-team-perm-body\">" +
+          g[1].map(function (r) {
+            var on = r[0] === "perm" ? perm[r[1]] : note[r[1]];
+            return toggleRow("perm_" + r[1], r[2], r[3], on, !canEdit).replace("<input ", '<input data-policy-kind="' + r[0] + '" data-policy-key="' + r[1] + '" ');
+          }).join("") + "</div></article>";
+      }).join("") +
+      '<p class="app-sheet-error hidden" id="teamPermError"></p>';
+  }
+
+  function savePermission(input) {
+    var kind = input.getAttribute("data-policy-kind");
+    var key = input.getAttribute("data-policy-key");
+    var perm = current("perm");
+    var note = current("note");
+    if (kind === "perm") perm[key] = input.checked;
+    else note[key] = input.checked;
+    input.disabled = true;
+    fns().httpsCallable("updateTenantManagerPolicy")({ managerPermissions: perm, managerNotifications: note }).then(function () {
+      state.session.tenant.managerPermissions = perm;
+      state.session.tenant.managerNotifications = note;
+    }).catch(function (e) {
+      input.checked = !input.checked;
+      var err = $("teamPermError");
+      if (err) {
+        err.textContent = (e && e.message) || "Couldn't save that change.";
+        err.classList.remove("hidden");
+      }
+    }).then(function () {
+      input.disabled = false;
+    });
+  }
+
+  function setTab(tab) {
+    state.tab = tab === "permissions" ? "permissions" : "people";
+    document.querySelectorAll("[data-team-tab]").forEach(function (b) {
+      b.classList.toggle("is-on", b.getAttribute("data-team-tab") === state.tab);
+    });
+    $("teamPeoplePanel").classList.toggle("hidden", state.tab !== "people");
+    $("teamPermissions").classList.toggle("hidden", state.tab !== "permissions");
+    if (state.tab === "permissions") paintPermissions();
+  }
 
   function $(id) {
     return document.getElementById(id);
@@ -110,8 +198,8 @@
         '<button type="button" data-team-role="manager" class="' + (r === "manager" ? "is-on" : "") + '">Manager</button>' +
         "</div>" +
         '<p class="app-hint">' + (r === "manager"
-          ? "Managers can help run the shop. What they can do is set in Settings → Team settings."
-          : "Staff see their own bookings and clients.") + "</p>";
+          ? "Managers can help run the shop. Choose what they can do under Permissions."
+          : "Staff see their own bookings and clients.") + ' <button type="button" class="app-btn app-btn--warm" data-team-goto="permissions">Manager permissions</button></p>';
     }
     if (canEdit) {
       html +=
@@ -263,6 +351,7 @@
       $(id).addEventListener("click", function () { setOpen(""); });
     });
     $("teamDetailBody").addEventListener("click", function (ev) {
+      if (ev.target.closest("[data-team-goto]")) return setTab("permissions");
       var b = ev.target.closest("[data-team-role]");
       if (!b) return;
       document.querySelectorAll("[data-team-role]").forEach(function (x) { x.classList.toggle("is-on", x === b); });
@@ -284,11 +373,19 @@
       document.querySelectorAll("[data-invite-role]").forEach(function (x) { x.classList.toggle("is-on", x === b); });
     });
     $("teamInviteCopy").addEventListener("click", copyInvite);
+    $("teamTabs").addEventListener("click", function (ev) {
+      var b = ev.target.closest("[data-team-tab]");
+      if (b) setTab(b.getAttribute("data-team-tab"));
+    });
+    $("teamPermissions").addEventListener("change", function (ev) {
+      if (ev.target.matches("[data-policy-key]")) savePermission(ev.target);
+    });
   }
 
   function load(session, force) {
     state.session = session;
     wire();
+    if (!force) setTab(new URLSearchParams(location.search).get("tab") === "permissions" ? "permissions" : state.tab);
     if (state.loading && !force) return Promise.resolve();
     state.loading = true;
     paintList();

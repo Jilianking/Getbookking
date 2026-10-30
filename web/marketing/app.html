@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap" rel="stylesheet" />
   <base href="/" />
-  <link rel="stylesheet" href="/assets/app.css?v=56" />
+  <link rel="stylesheet" href="/assets/app.css?v=57" />
 </head>
 <body>
   <div id="gateLoading" class="app-gate">
@@ -377,11 +377,18 @@
         <div class="app-greeting app-pay-head">
           <div>
             <h1>Team</h1>
-            <p>The people who work with you. Invite someone, set roles, and choose who takes bookings.</p>
+            <p>The people who work with you. Invite someone, set roles, and choose what managers can do.</p>
           </div>
           <button type="button" class="app-btn app-btn--primary hidden" id="teamInviteBtn">+ Invite</button>
         </div>
-        <div class="app-req-layout">
+        <div class="app-toolbar">
+          <div class="app-seg" role="tablist" aria-label="Team" id="teamTabs">
+            <button type="button" class="is-on" data-team-tab="people">People</button>
+            <button type="button" data-team-tab="permissions">Permissions</button>
+          </div>
+        </div>
+        <div class="app-team-perms hidden" id="teamPermissions"></div>
+        <div class="app-req-layout" id="teamPeoplePanel">
           <article class="app-card app-req-listcard">
             <div id="teamList"></div>
           </article>
@@ -768,7 +775,7 @@
   <script src="/assets/app-dashboard.js?v=19"></script>
   <script src="/assets/app-requests.js?v=3"></script>
   <script src="/assets/app-dash-charts.js?v=5"></script>
-  <script src="/assets/app-team.js?v=1"></script>
+  <script src="/assets/app-team.js?v=2"></script>
   <script src="/assets/app-insights.js?v=2"></script>
   <script src="/assets/app-payments.js?v=6"></script>
   <script src="/assets/app-payouts.js?v=2"></script>

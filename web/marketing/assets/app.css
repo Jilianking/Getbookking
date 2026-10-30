@@ -2847,3 +2847,11 @@ button.app-pay-tx.is-link:focus-visible {
 @media (max-width: 900px) {
   .app-ins-grid { grid-template-columns: 1fr; }
 }
+
+/* Team permissions */
+.app-team-perms { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; align-items: start; }
+.app-team-perm-lead { grid-column: 1 / -1; margin: 0; }
+.app-team-perm-body { padding: 0 16px 6px; }
+.app-team-perm-body .app-team-toggle:last-child { border-bottom: 0; }
+#teamPermError { grid-column: 1 / -1; }
+@media (max-width: 900px) { .app-team-perms { grid-template-columns: 1fr; } }

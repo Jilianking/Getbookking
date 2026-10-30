@@ -18,7 +18,7 @@
     manageArtistSchedules: false,
     accessClientList: false,
     viewEarningsReports: false,
-    sendClientNotifications: false,
+    sendClientNotifications: true,
   };
   var NOTE_DEFAULTS = {
     onNewBooking: true,
@@ -162,7 +162,7 @@
 
     if (owner) {
       var business = [
-        row(team ? "Team settings" : "Business settings", "", function () { openScreen("business"); }),
+        row("Business settings", "", function () { openScreen("business"); }),
       ];
       if (smsOn()) business.push(row("Messaging", "", function () { openScreen("messaging"); }));
       business.push(row("Domain", "", function () { openScreen("domain"); }));
@@ -232,11 +232,11 @@
   }
 
   function paintBusiness(body) {
-    $("detailTitle").textContent = isTeam() ? "Team settings" : "Business settings";
+    $("detailTitle").textContent = "Business settings";
     $("detailLead").textContent = isCharter()
       ? "Booking, boats, and client texting for your charters."
       : (isTeam()
-        ? "Studio-wide rules for managers and booking."
+        ? "Booking, services, and client texting for your whole business."
         : "Booking and client texting for your business.");
     var card = document.createElement("div");
     card.className = "acct-card";
@@ -244,13 +244,17 @@
     if (isCharter()) card.appendChild(row("Boats", "", function () { openScreen("boats"); }));
     card.appendChild(row(isCharter() ? "Trips" : "Services", "", function () { openScreen("services"); }));
     card.appendChild(row("Shipping & pickup", "", function () { openScreen("shipping"); }));
-    if (isTeam()) {
-      card.appendChild(row("Design & services", "", function () { openScreen("design"); }));
-      card.appendChild(row("Clients & reports", "", function () { openScreen("clients"); }));
-    }
     card.appendChild(row("Messaging", "", function () { openScreen("messaging"); }));
     if (!isCharter()) card.appendChild(row("Notifications", "", function () { openScreen("notifications"); }));
     body.appendChild(card);
+    if (isTeam()) {
+      // What managers can do now lives with the team.
+      var team = document.createElement("div");
+      team.className = "acct-card";
+      team.style.marginTop = "16px";
+      team.appendChild(linkRow("Team permissions and manager alerts", "/app/team?tab=permissions"));
+      body.appendChild(team);
+    }
   }
 
   function toggleRow(title, detail, checked, onChange) {

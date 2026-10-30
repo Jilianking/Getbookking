@@ -78,6 +78,7 @@
       bookingRequiresApproval: data.bookingRequiresApproval !== false,
       canEditPortfolio: data.canEditPortfolio === true,
       usesOwnSms: data.usesOwnSms === true,
+      memberSmsPhoneNumber: String(data.memberSmsPhoneNumber || ""),
       canEditPublicBio: data.canEditPublicBio === true,
     };
   }

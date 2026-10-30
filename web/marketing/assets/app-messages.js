@@ -24,6 +24,9 @@
     suggest: [],
     suggestIndex: -1,
     draftThread: null,
+    consent: null,
+    consentFor: "",
+    popKind: "",
   };
 
   function $(id) {
@@ -196,6 +199,8 @@
     $("msgSub").textContent = prettyPhone(t.phone);
     var call = $("msgCall");
     if (call) call.href = "tel:" + (e164(t.phone) || t.phone);
+    var del = $("msgDelete");
+    if (del) del.classList.toggle("hidden", !state.openId || !canSend());
     var lastDay = "";
     host.innerHTML = state.messages.map(function (m) {
       var day = m.at ? m.at.toDateString() : "";
@@ -253,8 +258,323 @@
         state.messages = [];
         paintConversation();
       });
+    loadConsent(tid);
+    closePop();
     var input = $("msgInput");
     if (input) setTimeout(function () { input.focus(); }, 0);
+  }
+
+  /* ── Opt-in status (same rules as the app; unknown never blocks, the server still checks) ── */
+
+  function paintConsent() {
+    var box = $("msgConsent");
+    var st = state.consent;
+    var blocked = !!(st && st.state && st.state !== "opted_in");
+    if (!box) return blocked;
+    if (!st || st.state === "opted_in") {
+      box.classList.add("hidden");
+      box.innerHTML = "";
+      return false;
+    }
+    var text = st.state === "opted_out"
+      ? "Client opted out (replied STOP). They can text YES or START to opt back in."
+      : st.state === "waiting"
+        ? "Waiting for the client to reply YES."
+        : "The client must text you first, or opt in when booking.";
+    var canResend = st.state === "waiting" && !st.canResendAtMs;
+    box.classList.remove("hidden");
+    box.innerHTML = "<span>" + esc(text) + "</span>" +
+      (canResend ? '<button type="button" class="app-btn app-btn--ghost app-btn--small" id="msgResend">Resend opt-in text</button>' : "") +
+      (st.state === "waiting" && st.canResendAtMs ? "<em>You can resend after " + esc(new Date(st.canResendAtMs).toLocaleString("en-US", { weekday: "short", hour: "numeric", minute: "2-digit" })) + ".</em>" : "");
+    return blocked;
+  }
+
+  function loadConsent(threadId) {
+    state.consent = null;
+    paintConsent();
+    if (!threadId || !canSend()) return;
+    var asked = threadId;
+    firebase.app().functions(REGION).httpsCallable("getSmsConsentStatus")({ threadId: threadId }).then(function (res) {
+      if (state.consentFor !== asked) return;
+      state.consent = (res && res.data) || null;
+      paintComposerLock();
+    }).catch(function () { /* unknown: don't block */ });
+    state.consentFor = asked;
+  }
+
+  function paintComposerLock() {
+    var blocked = paintConsent();
+    var input = $("msgInput");
+    var sendBtn = $("msgSend");
+    if (input) input.disabled = blocked;
+    if (sendBtn) sendBtn.disabled = blocked || state.sending;
+    document.querySelectorAll("[data-msg-action]").forEach(function (b) {
+      var a = b.getAttribute("data-msg-action");
+      b.disabled = blocked && a !== "book";
+    });
+  }
+
+  function resendConsent() {
+    var t = byId(state.openId);
+    if (!t) return;
+    var btn = $("msgResend");
+    if (btn) btn.disabled = true;
+    firebase.app().functions(REGION).httpsCallable("resendSmsConsentPrompt")({ threadId: threadIdFor(t.threadId) }).then(function () {
+      loadConsent(threadIdFor(t.threadId));
+    }).catch(function (e) {
+      setError((e && e.message) || "Couldn't resend the opt-in text.");
+      if (btn) btn.disabled = false;
+    });
+  }
+
+  /* ── Composer actions: quick reply, booking link, pay requests, book session ── */
+
+  var DEFAULT_QUICK = [
+    "Thanks for reaching out! We'll get back to you shortly.",
+    "See you at your appointment!",
+    "Can you share your preferred date and time?",
+  ];
+
+  function quickReplies() {
+    var list = state.session && state.session.tenant && state.session.tenant.smsQuickPresets;
+    return Array.isArray(list) && list.length ? list : DEFAULT_QUICK;
+  }
+
+  function businessName() {
+    var t = (state.session && state.session.tenant) || {};
+    return t.displayName || t.businessName || state.session.shopName || "";
+  }
+
+  function fillPlaceholders(text) {
+    return String(text || "").replace(/\{business(Name)?\}/g, businessName()).replace(/\{service(Name)?\}/g, "your appointment");
+  }
+
+  function bookingLink() {
+    var t = (state.session && state.session.tenant) || {};
+    if (t.customDomain && t.customDomainStatus === "active") return "https://www." + t.customDomain + "/book";
+    return t.slug ? "https://" + t.slug + ".getbookking.com/book" : "";
+  }
+
+  function insertText(text) {
+    var input = $("msgInput");
+    if (!input || !text) return;
+    var cur = input.value;
+    input.value = cur ? cur.replace(/\s*$/, "") + (/\s$/.test(cur) || !cur ? "" : " ") + text : text;
+    autoGrow();
+    input.focus();
+  }
+
+  function closePop() {
+    var pop = $("msgPop");
+    if (pop) {
+      pop.classList.add("hidden");
+      pop.innerHTML = "";
+    }
+    state.popKind = "";
+  }
+
+  function openPop(kind) {
+    var pop = $("msgPop");
+    if (state.popKind === kind) return closePop();
+    state.popKind = kind;
+    if (kind === "quick") {
+      pop.innerHTML = '<div class="app-msg-pop-list">' + quickReplies().map(function (q, i) {
+        return '<button type="button" data-quick="' + i + '">' + esc(fillPlaceholders(q)) + "</button>";
+      }).join("") + "</div>";
+    } else {
+      var title = kind === "deposit" ? "Request a deposit" : "Request a payment";
+      pop.innerHTML = '<div class="app-msg-pay-form"><strong>' + title + "</strong>" +
+        '<div class="app-msg-pay-row"><span>$</span><input id="msgPayAmount" type="text" inputmode="decimal" placeholder="0.00" autocomplete="off"></div>' +
+        '<div class="app-msg-pay-chips">' + [25, 50, 100].map(function (n) { return '<button type="button" data-pay-amt="' + n + '">$' + n + "</button>"; }).join("") + "</div>" +
+        '<button type="button" class="app-btn app-btn--primary app-btn--small" id="msgPaySend">Send ' + (kind === "deposit" ? "deposit" : "payment") + " link</button>" +
+        '<p class="app-hint">The client gets a secure pay link by text. Money goes to your connected payments account.</p></div>';
+      setTimeout(function () { var a = $("msgPayAmount"); if (a) a.focus(); }, 0);
+    }
+    pop.classList.remove("hidden");
+  }
+
+  function sendPayRequest(kind) {
+    var t = byId(state.openId) || state.draftThread;
+    if (!t || state.sending) return;
+    var raw = String(($("msgPayAmount") || {}).value || "").replace(/[^0-9.]/g, "");
+    var cents = Math.round(parseFloat(raw || "0") * 100);
+    if (!(cents >= 50)) return setError("Enter at least $0.50.");
+    var to = e164(t.phone);
+    if (!to) return setError("This conversation has no valid US phone number.");
+    state.sending = true;
+    setError("");
+    var btn = $("msgPaySend");
+    if (btn) btn.disabled = true;
+    var fns = firebase.app().functions(REGION);
+    fns.httpsCallable("createDepositLink")({ serviceAmountCents: cents }).then(function (res) {
+      var url = res && res.data && res.data.url;
+      if (!url) throw new Error("Couldn't create the pay link.");
+      // Same message the app sends: an empty body with the pay link and amount attached.
+      return fns.httpsCallable("sendClientSms")({
+        to: to,
+        body: "",
+        clientName: t.name,
+        threadId: threadIdFor(t.threadId || to),
+        paymentKind: kind,
+        amountCents: cents,
+        paymentUrl: url,
+        threadPreview: (kind === "deposit" ? "Deposit" : "Payment") + " · $" + (cents / 100).toFixed(2),
+      });
+    }).then(function (res) {
+      closePop();
+      if (state.draftThread) {
+        var returned = res && res.data && res.data.threadId;
+        var id = returned ? threadIdFor(returned) : to;
+        state.draftThread = null;
+        endCompose();
+        setOpen(id);
+      }
+    }).catch(function (e) {
+      setError((e && e.message) || "Couldn't send the pay link.");
+      if (btn) btn.disabled = false;
+    }).then(function () {
+      state.sending = false;
+    });
+  }
+
+  function onAction(kind) {
+    setError("");
+    if (kind === "link") {
+      var link = bookingLink();
+      if (!link) return setError("Your booking page address isn't set yet.");
+      closePop();
+      return insertText(link);
+    }
+    if (kind === "book") {
+      var t = byId(state.openId) || state.draftThread;
+      closePop();
+      if (t && global.ShopAppDashboard && ShopAppDashboard.openNew) {
+        ShopAppDashboard.openNew({ client: { name: t.name, phone: e164(t.phone) || t.phone, email: "" } });
+      }
+      return;
+    }
+    openPop(kind);
+  }
+
+  function deleteConversation() {
+    var t = byId(state.openId);
+    if (!t) return;
+    if (!global.confirm("Delete this conversation with " + t.name + "? This removes it for everyone on your team.")) return;
+    firebase.app().functions(REGION).httpsCallable("deleteSmsThreads")({ threadIds: [threadIdFor(t.threadId)] }).then(function () {
+      setOpen("");
+    }).catch(function (e) {
+      setError((e && e.message) || "Couldn't delete this conversation.");
+    });
+  }
+
+  /* ── Texting settings panel ── */
+
+  function settingsOpen(open) {
+    ["msgSettingsSheet", "msgSettingsScrim"].forEach(function (x) {
+      var el = $(x);
+      if (el) el.classList.toggle("hidden", !open);
+    });
+    if (open) paintSettings();
+  }
+
+  function usageLine(count, limit) {
+    if (limit == null) return "";
+    var pct = limit ? Math.min(100, Math.round((count / limit) * 100)) : 0;
+    return '<div class="app-msg-usage"><div><span>Texts this month</span><strong>' + (count || 0) + " of " + limit + '</strong></div><i><b style="width:' + pct + '%"></b></i></div>';
+  }
+
+  function paintSettings() {
+    var body = $("msgSettingsBody");
+    if (!body) return;
+    var s = state.session;
+    var a = access();
+    var t = s.tenant || {};
+    var owner = s.isOwner;
+    var html = "";
+    // Your line
+    if (owner || a.accessRole === "manager") {
+      var on = String(t.smsStatus || "").toLowerCase() === "active" && t.smsPhoneNumber;
+      html += '<section class="app-msg-set"><h3 class="app-req-h">Shop texting line</h3>' +
+        (on
+          ? '<p class="app-msg-line"><strong>' + esc(prettyPhone(t.smsPhoneNumber)) + "</strong><span>Clients see this number when you text them.</span></p>"
+          : '<p class="app-hint">Client texting isn\'t turned on for this shop yet.</p>') +
+        '<div id="msgSetUsage"></div>' +
+        (owner ? '<a class="app-btn app-btn--ghost app-btn--small" href="/billing#messaging" target="_top">' + (on ? "Manage numbers and billing" : "Turn on client texting") + "</a>" +
+          '<p class="app-hint">Adding numbers beyond your plan is charged in Plan and billing, with the price shown before you confirm.</p>' : "") +
+        "</section>";
+    } else if (a.usesOwnSms) {
+      html += '<section class="app-msg-set"><h3 class="app-req-h">Your texting line</h3>' +
+        '<p class="app-msg-line"><strong>' + esc(prettyPhone(a.memberSmsPhoneNumber || "")) + "</strong><span>Clients see this number when you text them.</span></p>" +
+        '<div id="msgSetUsage"></div></section>';
+    } else {
+      html += '<section class="app-msg-set"><h3 class="app-req-h">Your texting line</h3><p class="app-hint">You don\'t have a texting number yet. Ask the owner to set one up for you.</p></section>';
+    }
+    // Quick replies and presets
+    var quick = quickReplies();
+    html += '<section class="app-msg-set"><h3 class="app-req-h">Quick replies</h3>' +
+      '<p class="app-hint">Saved texts you can drop into any conversation. Use {business} for your business name.</p>' +
+      '<div class="app-msg-quick" id="msgQuickList">' + quick.map(function (q, i) {
+        return '<div class="app-msg-quick-row"><textarea data-quick-edit="' + i + '" rows="2" maxlength="300"' + (owner ? "" : " disabled") + ">" + esc(q) + "</textarea>" +
+          (owner ? '<button type="button" class="app-icon-btn" data-quick-remove="' + i + '" aria-label="Remove">×</button>' : "") + "</div>";
+      }).join("") + "</div>" +
+      (owner && quick.length < 12 ? '<button type="button" class="app-btn app-btn--ghost app-btn--small" id="msgQuickAdd">+ Add quick reply</button>' : "") +
+      "</section>";
+    html += '<section class="app-msg-set"><h3 class="app-req-h">Automatic texts</h3>' +
+      '<div class="app-field"><label for="msgPresetConfirmed">When you confirm a booking</label><textarea id="msgPresetConfirmed" rows="2" maxlength="300"' + (owner ? "" : " disabled") + ">" + esc(t.smsPresetConfirmed || "{business}: Your appointment request for {service} is confirmed. Reply STOP to opt out.") + "</textarea></div>" +
+      '<div class="app-field"><label for="msgPresetDeclined">When you decline a request</label><textarea id="msgPresetDeclined" rows="2" maxlength="300"' + (owner ? "" : " disabled") + ">" + esc(t.smsPresetDeclined || "") + "</textarea></div>" +
+      '<p class="app-hint">Use {business} and {service}. They fill in automatically.</p></section>';
+    html += '<p class="app-sheet-error hidden" id="msgSetError"></p>';
+    html += owner ? '<div class="app-sheet-actions"><button type="button" class="app-btn app-btn--primary" id="msgSetSave">Save</button></div>' :
+      '<p class="app-hint">Only the owner can change these.</p>';
+    body.innerHTML = html;
+    loadUsage();
+  }
+
+  function loadUsage() {
+    var box = $("msgSetUsage");
+    if (!box) return;
+    var s = state.session;
+    var fns = firebase.app().functions(REGION);
+    if (s.isOwner) {
+      fns.httpsCallable("getBillingSummary")({}).then(function (res) {
+        var m = (res && res.data && res.data.messaging) || {};
+        box.innerHTML = usageLine(m.smsMonthlyUsageCount, m.smsMonthlyLimit) +
+          (m.smsLinesUsed != null ? '<p class="app-hint">Numbers in use: ' + m.smsLinesUsed + " of " + (m.smsMaxLines || m.smsLinesUsed) + (m.smsFreeIncluded != null ? " · " + m.smsFreeIncluded + " included with your plan" : "") + ".</p>" : "");
+      }).catch(function () {});
+      return;
+    }
+    fns.httpsCallable("listTenantMembers")({}).then(function (res) {
+      var me = ((res && res.data && res.data.members) || []).filter(function (x) { return x.uid === s.user.uid; })[0];
+      if (me && me.smsMonthlyLimit != null) box.innerHTML = usageLine(me.smsMonthlyUsageCount, me.smsMonthlyLimit);
+    }).catch(function () {});
+  }
+
+  function readQuick() {
+    return [].map.call(document.querySelectorAll("[data-quick-edit]"), function (el) { return el.value.trim(); }).filter(Boolean);
+  }
+
+  function saveSettings() {
+    var btn = $("msgSetSave");
+    var err = $("msgSetError");
+    btn.disabled = true;
+    err.classList.add("hidden");
+    var payload = {
+      smsPresetConfirmed: $("msgPresetConfirmed").value.trim(),
+      smsPresetDeclined: $("msgPresetDeclined").value.trim(),
+      smsQuickPresets: readQuick(),
+    };
+    firebase.app().functions(REGION).httpsCallable("updateTenantMessagingPresets")(payload).then(function () {
+      var t = state.session.tenant || (state.session.tenant = {});
+      t.smsPresetConfirmed = payload.smsPresetConfirmed;
+      t.smsPresetDeclined = payload.smsPresetDeclined;
+      t.smsQuickPresets = payload.smsQuickPresets;
+      btn.textContent = "Saved";
+      setTimeout(function () { btn.textContent = "Save"; btn.disabled = false; }, 1400);
+    }).catch(function (e) {
+      err.textContent = (e && e.message) || "Couldn't save your texting settings.";
+      err.classList.remove("hidden");
+      btn.disabled = false;
+    });
   }
 
   /* ── Sending ── */
@@ -313,6 +633,9 @@
     var body = String(input.value || "").trim();
     var photo = state.pendingPhoto;
     if (!body && !photo) return;
+    if (state.consent && state.consent.state && state.consent.state !== "opted_in" && state.openId) {
+      return setError("This client hasn't opted in to texts yet.");
+    }
     var to = e164(t.phone);
     if (!to) return setError("This conversation has no valid US phone number.");
     state.sending = true;
@@ -519,6 +842,58 @@
       paintPendingPhoto();
     });
     $("msgNewBtn").addEventListener("click", startCompose);
+    $("msgActions").addEventListener("click", function (ev) {
+      var b = ev.target.closest("[data-msg-action]");
+      if (b && !b.disabled) onAction(b.getAttribute("data-msg-action"));
+    });
+    $("msgPop").addEventListener("click", function (ev) {
+      var q = ev.target.closest("[data-quick]");
+      if (q) {
+        insertText(fillPlaceholders(quickReplies()[Number(q.getAttribute("data-quick"))]));
+        return closePop();
+      }
+      var amt = ev.target.closest("[data-pay-amt]");
+      if (amt) {
+        $("msgPayAmount").value = amt.getAttribute("data-pay-amt") + ".00";
+        return;
+      }
+      if (ev.target.closest("#msgPaySend")) sendPayRequest(state.popKind);
+    });
+    $("msgPop").addEventListener("keydown", function (ev) {
+      if (ev.key === "Enter" && ev.target.id === "msgPayAmount") {
+        ev.preventDefault();
+        sendPayRequest(state.popKind);
+      } else if (ev.key === "Escape") {
+        closePop();
+      }
+    });
+    $("msgConsent").addEventListener("click", function (ev) {
+      if (ev.target.closest("#msgResend")) resendConsent();
+    });
+    $("msgDelete").addEventListener("click", deleteConversation);
+    $("msgSettingsBtn").addEventListener("click", function () { settingsOpen(true); });
+    ["msgSettingsClose", "msgSettingsScrim"].forEach(function (x) {
+      $(x).addEventListener("click", function () { settingsOpen(false); });
+    });
+    $("msgSettingsBody").addEventListener("click", function (ev) {
+      if (ev.target.closest("#msgSetSave")) return saveSettings();
+      if (ev.target.closest("#msgQuickAdd")) {
+        var listEl = $("msgQuickList");
+        if (listEl.children.length >= 12) return;
+        var row = document.createElement("div");
+        row.className = "app-msg-quick-row";
+        row.innerHTML = '<textarea data-quick-edit="new" rows="2" maxlength="300" placeholder="Type a quick reply"></textarea>' +
+          '<button type="button" class="app-icon-btn" data-quick-remove="new" aria-label="Remove">×</button>';
+        listEl.appendChild(row);
+        row.querySelector("textarea").focus();
+        return;
+      }
+      var rm = ev.target.closest("[data-quick-remove]");
+      if (rm) {
+        var row = rm.closest(".app-msg-quick-row");
+        if (row) row.parentNode.removeChild(row);
+      }
+    });
     $("msgTo").addEventListener("input", paintSuggestions);
     $("msgTo").addEventListener("keydown", function (ev) {
       if (ev.key === "ArrowDown") { ev.preventDefault(); moveSuggest(1); }

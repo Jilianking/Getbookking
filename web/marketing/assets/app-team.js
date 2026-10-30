@@ -133,6 +133,22 @@
     return '<span class="' + cls + '" aria-hidden="true">' + esc(initials(m.displayName)) + "</span>";
   }
 
+  function fmtPhone(raw) {
+    var d = String(raw || "").replace(/\D/g, "");
+    if (d.length === 11 && d.charAt(0) === "1") d = d.slice(1);
+    return d.length === 10 ? "(" + d.slice(0, 3) + ") " + d.slice(3, 6) + "-" + d.slice(6) : String(raw || "");
+  }
+
+  function clearSmsRequest() {
+    var m = byUid(state.openUid);
+    if (!m) return;
+    fns().httpsCallable("clearSmsLineRequest")({ memberUid: m.uid }).then(function () {
+      return load(state.session, true);
+    }).catch(function (e) {
+      fail((e && e.message) || "Couldn't clear the request.");
+    });
+  }
+
   function byUid(uid) {
     return state.members.filter(function (m) { return m.uid === uid; })[0] || null;
   }
@@ -209,6 +225,20 @@
         toggleRow("teamOnPage", "Show on the team page", "", m.showOnTeamPage !== false) +
         toggleRow("teamOnHome", "Show on the home page team section", "", m.showOnTeamHome !== false);
     }
+    // Texting line, like the app's member texting screen. Buying a number happens in Plan and billing.
+    var smsOn = String(m.smsStatus || "").toLowerCase() === "active" && m.smsPhoneNumber;
+    html += '<h3 class="app-req-h">Texting</h3>' +
+      (smsOn
+        ? '<div class="app-req-fact"><span>Their number</span><strong>' + esc(fmtPhone(m.smsPhoneNumber)) + "</strong></div>" +
+          (m.smsMonthlyLimit != null ? '<p class="app-hint">' + (m.smsMonthlyUsageCount || 0) + " of " + m.smsMonthlyLimit + " texts used this month.</p>" : "")
+        : '<p class="app-hint">' + (m.smsLineRequestPending ? "Asked for a personal texting number." : "Uses the shop's line. No personal number.") + "</p>") +
+      (canEdit && r !== "owner"
+        ? '<div class="app-req-links">' +
+          (smsOn ? "" : '<a class="app-btn app-btn--ghost app-btn--small" href="/billing#messaging" target="_top">Set up a number</a>') +
+          (m.smsLineRequestPending ? '<button type="button" class="app-btn app-btn--ghost app-btn--small" data-team-act="clearsms">Clear request</button>' : "") +
+          "</div>" +
+          (smsOn ? "" : '<p class="app-hint">Numbers are added in Plan and billing. Any charge is shown before you confirm.</p>')
+        : "");
     html += '<h3 class="app-req-h">Hours</h3><p class="app-hint">Working hours are set in Settings → Scheduling and hours.</p>' +
       '<a class="app-btn app-btn--ghost app-btn--small" href="/app?view=settings">Open scheduling</a>' +
       '<p class="app-sheet-error hidden" id="teamError"></p>';
@@ -352,6 +382,7 @@
     });
     $("teamDetailBody").addEventListener("click", function (ev) {
       if (ev.target.closest("[data-team-goto]")) return setTab("permissions");
+      if (ev.target.closest('[data-team-act="clearsms"]')) return clearSmsRequest();
       var b = ev.target.closest("[data-team-role]");
       if (!b) return;
       document.querySelectorAll("[data-team-role]").forEach(function (x) { x.classList.toggle("is-on", x === b); });
@@ -359,8 +390,9 @@
     $("teamDetailActions").addEventListener("click", function (ev) {
       var b = ev.target.closest("[data-team-act]");
       if (!b) return;
-      if (b.getAttribute("data-team-act") === "save") save();
-      else remove();
+      var act = b.getAttribute("data-team-act");
+      if (act === "save") save();
+      else if (act === "remove") remove();
     });
     $("teamInviteBtn").addEventListener("click", function () { setInviteOpen(true); });
     ["teamInviteClose", "teamInviteScrim", "teamInviteDone"].forEach(function (id) {

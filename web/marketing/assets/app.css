@@ -3194,3 +3194,99 @@ button.app-pay-tx.is-link:focus-visible {
 .app-msg-to-opt strong { display: block; font-size: 14px; font-weight: 600; color: var(--ink); }
 .app-msg-to-opt em { display: block; font-style: normal; font-size: 12px; color: var(--muted); }
 .app-msg-panel #msgToCancel { flex: none; }
+
+/* Messages: composer actions, pay requests, opt-in status, texting settings */
+.app-msg-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.app-msg-action {
+  padding: 6px 11px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--card);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text);
+  cursor: pointer;
+}
+.app-msg-action:hover:not(:disabled) { border-color: var(--warm); color: var(--ink); }
+.app-msg-action:disabled { opacity: 0.45; cursor: not-allowed; }
+.app-msg-pop {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--card);
+  padding: 8px;
+  box-shadow: 0 10px 26px rgba(44, 32, 24, 0.1);
+}
+.app-msg-pop-list { display: grid; gap: 4px; max-height: 220px; overflow: auto; }
+.app-msg-pop-list button {
+  text-align: left;
+  border: 0;
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: transparent;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+.app-msg-pop-list button:hover { background: color-mix(in srgb, var(--cream) 55%, transparent); }
+.app-msg-pay-form { display: grid; gap: 8px; padding: 4px; }
+.app-msg-pay-form strong { font-size: 14px; color: var(--ink); }
+.app-msg-pay-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 0 12px;
+}
+.app-msg-pay-row span { color: var(--muted); }
+.app-msg-pay-row input { flex: 1; border: 0; outline: none; font: inherit; font-size: 18px; padding: 8px 0; background: transparent; }
+.app-msg-pay-chips { display: flex; gap: 6px; }
+.app-msg-pay-chips button {
+  flex: 1;
+  padding: 6px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--card);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+.app-msg-pay-form .app-btn { justify-self: start; }
+.app-msg-consent {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  padding: 10px 16px;
+  border-top: 1px solid var(--line);
+  background: color-mix(in srgb, #C98A2B 10%, var(--card));
+  font-size: 13px;
+  color: #7A4F12;
+}
+.app-msg-consent em { font-style: normal; font-size: 12px; color: var(--muted); }
+.app-msg-input textarea:disabled { background: var(--paper); }
+.app-msg-settings { width: min(560px, calc(100vw - 32px)); }
+.app-msg-set { display: grid; gap: 8px; padding: 6px 0 14px; border-bottom: 1px solid var(--line); margin-bottom: 10px; }
+.app-msg-set:last-of-type { border-bottom: 0; }
+.app-msg-set .app-btn { justify-self: start; }
+.app-msg-line { margin: 0; display: grid; }
+.app-msg-line strong { font-size: 18px; color: var(--ink); }
+.app-msg-line span { font-size: 13px; color: var(--muted); }
+.app-msg-usage { display: grid; gap: 6px; }
+.app-msg-usage div { display: flex; justify-content: space-between; font-size: 13px; color: var(--muted); }
+.app-msg-usage strong { color: var(--ink); }
+.app-msg-usage i { display: block; height: 6px; border-radius: 999px; background: color-mix(in srgb, var(--cream) 80%, transparent); overflow: hidden; }
+.app-msg-usage b { display: block; height: 100%; background: #A3752F; border-radius: 999px; }
+.app-msg-quick { display: grid; gap: 8px; }
+.app-msg-quick-row { display: flex; gap: 8px; align-items: flex-start; }
+.app-msg-quick-row textarea, .app-msg-set textarea {
+  flex: 1;
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 8px 10px;
+  font: inherit;
+  font-size: 14px;
+  resize: vertical;
+}

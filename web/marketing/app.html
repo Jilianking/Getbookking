@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap" rel="stylesheet" />
   <base href="/" />
-  <link rel="stylesheet" href="/assets/app.css?v=63" />
+  <link rel="stylesheet" href="/assets/app.css?v=65" />
 </head>
 <body>
   <div id="gateLoading" class="app-gate">
@@ -399,6 +399,11 @@
           <article class="app-card app-msg-list">
             <div class="app-msg-search"><input id="msgSearch" class="app-pay-search" type="search" placeholder="Search conversations" autocomplete="off" /></div>
             <div id="msgThreads"></div>
+            <div class="app-msg-rowmenu hidden" id="msgRowMenu" role="menu">
+              <button type="button" role="menuitem" data-row-act="open">Open</button>
+              <button type="button" role="menuitem" data-row-act="call">Call</button>
+              <button type="button" role="menuitem" class="is-danger" data-row-act="delete">Delete conversation</button>
+            </div>
           </article>
           <div class="app-sheet-scrim hidden" id="msgScrim"></div>
           <section class="app-sheet app-msg-panel hidden" id="msgPanel" aria-labelledby="msgTitle">
@@ -417,28 +422,28 @@
                 <em id="msgSub"></em>
               </span>
               <a class="app-btn app-btn--ghost app-btn--small" id="msgCall" href="#">Call</a>
-              <button type="button" class="app-btn app-btn--ghost app-btn--small" id="msgDelete">Delete</button>
               <button type="button" class="app-icon-btn" id="msgClose" aria-label="Close">×</button>
             </header>
             <div class="app-msg-thread" id="msgConversation" aria-live="polite"></div>
             <div class="app-msg-consent hidden" id="msgConsent"></div>
             <div class="app-msg-composer" id="msgComposer">
-              <div class="app-msg-actions" id="msgActions">
-                <button type="button" class="app-msg-action" data-msg-action="quick">Quick reply</button>
-                <button type="button" class="app-msg-action" data-msg-action="link">Booking link</button>
-                <button type="button" class="app-msg-action" data-msg-action="deposit">Request deposit</button>
-                <button type="button" class="app-msg-action" data-msg-action="payment">Request payment</button>
-                <button type="button" class="app-msg-action" data-msg-action="book">Book session</button>
+              <div class="app-msg-tray hidden" id="msgActions" role="menu" aria-label="Message actions">
+                <button type="button" class="app-msg-tray-item" data-msg-action="photo"><span class="app-msg-tray-icon" style="background:#3FA764"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="5" width="16" height="14" rx="2.5"/><circle cx="9" cy="10" r="1.6"/><path d="M5 17l4.5-4.5 3 3L15 13l4 4"/></svg></span>Photos</button>
+                <button type="button" class="app-msg-tray-item" data-msg-action="payment"><span class="app-msg-tray-icon" style="background:#3B7BF2"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="6" width="17" height="12" rx="2"/><path d="M3.5 10h17M7 14.5h3"/></svg></span>Request payment</button>
+                <button type="button" class="app-msg-tray-item" data-msg-action="deposit"><span class="app-msg-tray-icon" style="background:#2F8CF2"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 7.5v8M8.5 12.5 12 16l3.5-3.5"/></svg></span>Request deposit</button>
+                <button type="button" class="app-msg-tray-item" data-msg-action="book"><span class="app-msg-tray-icon" style="background:#F08A33"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="5.5" width="16" height="14" rx="2"/><path d="M4 9.5h16M8.5 3.5v4M15.5 3.5v4"/></svg></span>Book session</button>
+                <button type="button" class="app-msg-tray-item" data-msg-action="link"><span class="app-msg-tray-icon" style="background:#8C6647"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 14a4 4 0 0 0 5.7 0l2.6-2.6a4 4 0 0 0-5.7-5.7L11.5 6.8"/><path d="M14 10a4 4 0 0 0-5.7 0l-2.6 2.6a4 4 0 0 0 5.7 5.7l1.1-1.1"/></svg></span>Booking link</button>
+                <button type="button" class="app-msg-tray-item" data-msg-action="quick"><span class="app-msg-tray-icon" style="background:#9A9A9A"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 3 5 13.5h6L10 21l8-10.5h-6z"/></svg></span>Quick reply</button>
               </div>
               <div class="app-msg-pop hidden" id="msgPop"></div>
               <div class="app-msg-attach hidden" id="msgAttachPreview"></div>
               <p class="app-sheet-error hidden" id="msgError"></p>
               <div class="app-msg-input">
-                <label class="app-icon-btn app-msg-photo" title="Add a photo"><input type="file" accept="image/*" id="msgPhoto" /><span aria-hidden="true">＋</span><span class="app-sr-only">Add a photo</span></label>
+                <button type="button" class="app-msg-plus" id="msgPlus" aria-expanded="false" aria-controls="msgActions" aria-label="Message actions"><span aria-hidden="true">+</span></button>
+                <input type="file" accept="image/*" multiple id="msgPhoto" class="app-sr-only" tabindex="-1" />
                 <textarea id="msgInput" rows="1" placeholder="Write a text…" aria-label="Message"></textarea>
                 <button type="button" class="app-btn app-btn--primary" id="msgSend">Send</button>
               </div>
-              <p class="app-hint">Enter sends. Shift+Enter adds a new line. Standard texting rates apply to your plan's texts.</p>
             </div>
             <p class="app-hint app-msg-cantsend hidden" id="msgCantSend">You can read these texts. Sending needs client texting turned on for you.</p>
           </section>
@@ -872,7 +877,7 @@
   <script src="/assets/app-dash-charts.js?v=6"></script>
   <script src="/assets/app-team.js?v=3"></script>
   <script src="/assets/app-profile.js?v=1"></script>
-  <script src="/assets/app-messages.js?v=4"></script>
+  <script src="/assets/app-messages.js?v=6"></script>
   <script src="/assets/app-insights.js?v=3"></script>
   <script src="/assets/app-payments.js?v=6"></script>
   <script src="/assets/app-payouts.js?v=2"></script>

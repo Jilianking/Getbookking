@@ -18,7 +18,8 @@
     query: "",
     wired: false,
     sending: false,
-    pendingPhoto: null,
+    pendingPhotos: [],
+    trayOpen: false,
     composing: false,
     contacts: null,
     suggest: [],
@@ -28,6 +29,7 @@
     pending: [],
     consentFor: "",
     popKind: "",
+    menuFor: "",
   };
 
   function $(id) {
@@ -166,9 +168,13 @@
     var host = $("msgThreads");
     if (!host) return;
     var q = state.query.trim().toLowerCase();
+    var qd = digits(q);
     var list = visible(state.threads).filter(function (t) {
       if (!q) return true;
-      return t.name.toLowerCase().indexOf(q) !== -1 || digits(t.phone).indexOf(digits(q) || "\u0000") !== -1 || t.last.toLowerCase().indexOf(q) !== -1;
+      // Name, last message, or the number typed any way: "615 500", "(615) 500-1337", "5001337".
+      if (t.name.toLowerCase().indexOf(q) !== -1) return true;
+      if (t.last.toLowerCase().indexOf(q) !== -1) return true;
+      return qd.length >= 2 && digits(t.phone).indexOf(qd) !== -1;
     });
     if (!visible(state.threads).length) {
       var a = access();
@@ -182,10 +188,12 @@
       return;
     }
     host.innerHTML = list.map(function (t) {
-      return '<button type="button" class="app-req-row app-msg-row' + (t.id === state.openId ? " is-active" : "") + '" data-msg-open="' + esc(t.id) + '">' +
+      return '<div class="app-msg-rowwrap' + (t.id === state.openId ? " is-active" : "") + '" data-row-id="' + esc(t.id) + '">' +
+        '<button type="button" class="app-req-row app-msg-row' + (t.id === state.openId ? " is-active" : "") + '" data-msg-open="' + esc(t.id) + '">' +
         avatarHtml(t.name) +
         '<span class="app-req-copy"><strong>' + esc(t.name) + "</strong><span>" + esc(t.last || "Photo") + "</span></span>" +
-        '<span class="app-req-side"><time>' + esc(when(t.at)) + "</time></span></button>";
+        '<span class="app-req-side"><time>' + esc(when(t.at)) + "</time></span></button>" +
+        '<button type="button" class="app-msg-more" data-row-more="' + esc(t.id) + '" aria-label="More for ' + esc(t.name) + '" aria-haspopup="menu">⋯</button></div>';
     }).join("");
   }
 
@@ -209,8 +217,6 @@
     $("msgSub").textContent = t.name === prettyPhone(t.phone) ? "" : prettyPhone(t.phone);
     var call = $("msgCall");
     if (call) call.href = "tel:" + (e164(t.phone) || t.phone);
-    var del = $("msgDelete");
-    if (del) del.classList.toggle("hidden", !state.openId || !canSend());
     var lastDay = "";
     var tidNow = threadIdFor(t.threadId || t.phone);
     var shown = state.messages.concat(state.pending.filter(function (p) { return p.threadKey === tidNow; }));
@@ -278,6 +284,9 @@
       });
     loadConsent(tid);
     closePop();
+    setTray(false);
+    state.pendingPhotos = [];
+    paintPendingPhoto();
     var input = $("msgInput");
     if (input) setTimeout(function () { input.focus(); }, 0);
   }
@@ -330,6 +339,7 @@
       var a = b.getAttribute("data-msg-action");
       b.disabled = blocked && a !== "book";
     });
+    if (blocked) setTray(false);
   }
 
   function resendConsent() {
@@ -455,8 +465,25 @@
     });
   }
 
+  function setTray(open) {
+    state.trayOpen = !!open;
+    var tray = $("msgActions");
+    var plus = $("msgPlus");
+    if (tray) tray.classList.toggle("hidden", !open);
+    if (plus) {
+      plus.classList.toggle("is-open", !!open);
+      plus.setAttribute("aria-expanded", open ? "true" : "false");
+      plus.setAttribute("aria-label", open ? "Close actions" : "Message actions");
+    }
+  }
+
   function onAction(kind) {
     setError("");
+    setTray(false);
+    if (kind === "photo") {
+      closePop();
+      return $("msgPhoto").click();
+    }
     if (kind === "link") {
       var link = bookingLink();
       if (!link) return setError("Your booking page address isn't set yet.");
@@ -474,12 +501,43 @@
     openPop(kind);
   }
 
-  function deleteConversation() {
-    var t = byId(state.openId);
+  /* ── Conversation menu (⋯ on a row, or right-click) ── */
+
+  function openRowMenu(id, anchor, x, y) {
+    var menu = $("msgRowMenu");
+    var list = $("msgThreads");
+    if (!menu || !list) return;
+    state.menuFor = id;
+    menu.querySelector('[data-row-act="delete"]').classList.toggle("hidden", !canSend());
+    var box = list.parentNode.getBoundingClientRect();
+    var top, left;
+    if (anchor) {
+      var r = anchor.getBoundingClientRect();
+      top = r.bottom - box.top + list.parentNode.scrollTop + 4;
+      left = r.right - box.left - 180;
+    } else {
+      top = y - box.top + list.parentNode.scrollTop;
+      left = x - box.left;
+    }
+    menu.style.top = Math.max(4, top) + "px";
+    menu.style.left = Math.max(4, Math.min(left, box.width - 190)) + "px";
+    menu.classList.remove("hidden");
+  }
+
+  function closeRowMenu() {
+    var menu = $("msgRowMenu");
+    if (menu) menu.classList.add("hidden");
+    state.menuFor = "";
+  }
+
+  function deleteConversation(id) {
+    var t = byId(id || state.openId);
     if (!t) return;
     if (!global.confirm("Delete this conversation with " + t.name + "? This removes it for everyone on your team.")) return;
     firebase.app().functions(REGION).httpsCallable("deleteSmsThreads")({ threadIds: [threadIdFor(t.threadId)] }).then(function () {
-      setOpen("");
+      state.threads = state.threads.filter(function (x) { return x.id !== t.id; });
+      if (state.openId === t.id) setOpen("");
+      else paintThreads();
     }).catch(function (e) {
       setError((e && e.message) || "Couldn't delete this conversation.");
     });
@@ -625,16 +683,21 @@
     });
   }
 
+  var MAX_PHOTOS = 5;
+
   function paintPendingPhoto() {
     var box = $("msgAttachPreview");
     if (!box) return;
-    if (!state.pendingPhoto) {
+    var list = state.pendingPhotos;
+    if (!list.length) {
       box.classList.add("hidden");
       box.innerHTML = "";
       return;
     }
     box.classList.remove("hidden");
-    box.innerHTML = '<img src="' + esc(state.pendingPhoto.preview) + '" alt=""><button type="button" id="msgAttachRemove" aria-label="Remove photo">×</button>';
+    box.innerHTML = list.map(function (p, i) {
+      return '<figure><img src="' + esc(p.preview) + '" alt=""><button type="button" data-photo-remove="' + i + '" aria-label="Remove photo">×</button></figure>';
+    }).join("");
   }
 
   function send() {
@@ -649,8 +712,8 @@
     if (!t) return;
     var input = $("msgInput");
     var body = String(input.value || "").trim();
-    var photo = state.pendingPhoto;
-    if (!body && !photo) return;
+    var photos = state.pendingPhotos.slice();
+    if (!body && !photos.length) return;
     if (state.consent && state.consent.state && state.consent.state !== "opted_in" && state.openId) {
       return setError("This client hasn't opted in to texts yet.");
     }
@@ -668,28 +731,26 @@
       sending: true,
       at: null,
       since: new Date(Date.now() - 5000),
-      media: photo ? [photo.preview] : [],
+      media: photos.map(function (p) { return p.preview; }),
     };
     state.pending.push(pending);
     input.value = "";
     autoGrow();
     paintConversation();
-    var upload = photo
-      ? (function () {
-          var ref = firebase.storage().ref().child("tenants/" + s.tenantId + "/smsMedia/" + (global.crypto && crypto.randomUUID ? crypto.randomUUID() : Date.now()) + ".jpg");
-          return ref.put(photo.blob, { contentType: "image/jpeg" }).then(function () { return ref.getDownloadURL(); });
-        })()
-      : Promise.resolve("");
-    upload.then(function (mediaUrl) {
+    state.pendingPhotos = [];
+    paintPendingPhoto();
+    var upload = Promise.all(photos.map(function (photo) {
+      var ref = firebase.storage().ref().child("tenants/" + s.tenantId + "/smsMedia/" + (global.crypto && crypto.randomUUID ? crypto.randomUUID() : Date.now() + Math.random()) + ".jpg");
+      return ref.put(photo.blob, { contentType: "image/jpeg" }).then(function () { return ref.getDownloadURL(); });
+    }));
+    upload.then(function (mediaUrls) {
       var payload = { to: to, body: body, clientName: t.name, threadId: threadIdFor(t.threadId || to) };
-      if (mediaUrl) {
-        payload.mediaUrls = [mediaUrl];
+      if (mediaUrls.length) {
+        payload.mediaUrls = mediaUrls;
         if (!body) payload.threadPreview = "Photo";
       }
       return firebase.app().functions(REGION).httpsCallable("sendClientSms")(payload);
     }).then(function (res) {
-      state.pendingPhoto = null;
-      paintPendingPhoto();
       var returned = res && res.data && res.data.threadId;
       if (state.draftThread) {
         // A brand-new conversation: open its thread once the server has created it.
@@ -701,6 +762,10 @@
     }).catch(function (e) {
       pending.error = true;
       if (!input.value) input.value = body;
+      if (!state.pendingPhotos.length) {
+        state.pendingPhotos = photos;
+        paintPendingPhoto();
+      }
       paintConversation();
       setError((e && e.message) || "Couldn't send that text.");
     }).then(function () {
@@ -861,18 +926,30 @@
     });
     $("msgInput").addEventListener("input", autoGrow);
     $("msgPhoto").addEventListener("change", function () {
-      var f = this.files && this.files[0];
+      var files = Array.prototype.slice.call(this.files || [], 0, Math.max(0, MAX_PHOTOS - state.pendingPhotos.length));
       this.value = "";
-      if (!f) return;
-      shrink(f).then(function (blob) {
-        state.pendingPhoto = { blob: blob, preview: URL.createObjectURL(blob) };
+      if (!files.length) return setError("Up to " + MAX_PHOTOS + " photos per text.");
+      Promise.all(files.map(shrink)).then(function (blobs) {
+        blobs.forEach(function (blob) { state.pendingPhotos.push({ blob: blob, preview: URL.createObjectURL(blob) }); });
         paintPendingPhoto();
+        $("msgInput").focus();
       }).catch(function (e) { setError(e.message); });
     });
     $("msgAttachPreview").addEventListener("click", function (ev) {
-      if (!ev.target.closest("#msgAttachRemove")) return;
-      state.pendingPhoto = null;
+      var b = ev.target.closest("[data-photo-remove]");
+      if (!b) return;
+      state.pendingPhotos.splice(Number(b.getAttribute("data-photo-remove")), 1);
       paintPendingPhoto();
+    });
+    $("msgPlus").addEventListener("click", function () {
+      if (state.popKind) closePop();
+      setTray(!state.trayOpen);
+    });
+    document.addEventListener("click", function (ev) {
+      if (state.trayOpen && !ev.target.closest("#msgActions, #msgPlus")) setTray(false);
+    });
+    document.addEventListener("keydown", function (ev) {
+      if (ev.key === "Escape" && state.trayOpen) setTray(false);
     });
     $("msgNewBtn").addEventListener("click", startCompose);
     $("msgActions").addEventListener("click", function (ev) {
@@ -903,7 +980,37 @@
     $("msgConsent").addEventListener("click", function (ev) {
       if (ev.target.closest("#msgResend")) resendConsent();
     });
-    $("msgDelete").addEventListener("click", deleteConversation);
+    $("msgThreads").addEventListener("click", function (ev) {
+      var more = ev.target.closest("[data-row-more]");
+      if (!more) return;
+      ev.stopPropagation();
+      var id = more.getAttribute("data-row-more");
+      if (state.menuFor === id) return closeRowMenu();
+      openRowMenu(id, more);
+    }, true);
+    $("msgThreads").addEventListener("contextmenu", function (ev) {
+      var row = ev.target.closest("[data-row-id]");
+      if (!row) return;
+      ev.preventDefault();
+      openRowMenu(row.getAttribute("data-row-id"), null, ev.clientX, ev.clientY);
+    });
+    $("msgRowMenu").addEventListener("click", function (ev) {
+      var b = ev.target.closest("[data-row-act]");
+      if (!b) return;
+      var id = state.menuFor;
+      var act = b.getAttribute("data-row-act");
+      closeRowMenu();
+      var t = byId(id);
+      if (act === "open") setOpen(id);
+      else if (act === "call" && t) location.href = "tel:" + (e164(t.phone) || t.phone);
+      else if (act === "delete") deleteConversation(id);
+    });
+    document.addEventListener("click", function (ev) {
+      if (state.menuFor && !ev.target.closest("#msgRowMenu, [data-row-more]")) closeRowMenu();
+    });
+    document.addEventListener("keydown", function (ev) {
+      if (ev.key === "Escape" && state.menuFor) closeRowMenu();
+    });
     $("msgSettingsBtn").addEventListener("click", function () { settingsOpen(true); });
     ["msgSettingsClose", "msgSettingsScrim"].forEach(function (x) {
       $(x).addEventListener("click", function () { settingsOpen(false); });

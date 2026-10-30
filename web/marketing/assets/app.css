@@ -3293,3 +3293,112 @@ button.app-pay-tx.is-link:focus-visible {
 
 .app-req-avatar.is-person { color: var(--muted); background: color-mix(in srgb, var(--cream) 70%, var(--line)); }
 .app-msg.is-sending { opacity: 0.72; }
+
+/* Messages: + button and action tray, like the iPhone app */
+.app-msg-plus {
+  flex: none;
+  width: 40px;
+  height: 40px;
+  border: 0;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--cream) 75%, var(--line));
+  color: var(--ink);
+  font-size: 24px;
+  line-height: 1;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  transition: transform 0.18s ease, background 0.15s;
+}
+.app-msg-plus span { display: block; transform: translateY(-1px); }
+.app-msg-plus:hover { background: color-mix(in srgb, var(--cream) 55%, var(--line)); }
+.app-msg-plus.is-open { transform: rotate(45deg); }
+.app-msg-tray {
+  display: grid;
+  gap: 4px;
+  justify-items: start;
+  padding: 4px 0 2px;
+  animation: app-msg-tray-in 0.18s ease-out;
+}
+@keyframes app-msg-tray-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+.app-msg-tray-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 12px 4px 4px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text);
+  cursor: pointer;
+}
+.app-msg-tray-item:hover:not(:disabled) { background: color-mix(in srgb, var(--cream) 55%, transparent); }
+.app-msg-tray-item:disabled { opacity: 0.4; cursor: not-allowed; }
+.app-msg-tray-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  flex: none;
+}
+.app-msg-attach { width: auto; display: flex; flex-wrap: wrap; gap: 8px; }
+.app-msg-attach figure { position: relative; margin: 0; }
+.app-msg-attach figure img { width: 72px; height: 72px; object-fit: cover; border-radius: 10px; display: block; }
+.app-msg-attach figure button {
+  position: absolute; top: -6px; right: -6px; width: 22px; height: 22px; border-radius: 50%;
+  border: 0; background: var(--ink); color: #fff; cursor: pointer; line-height: 1;
+}
+
+/* Messages: conversation row menu */
+.app-msg-list { position: relative; }
+.app-msg-rowwrap { position: relative; }
+.app-msg-rowwrap .app-msg-row { padding-right: 44px; }
+.app-msg-more {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--muted);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.12s, background 0.12s;
+}
+.app-msg-rowwrap:hover .app-msg-more, .app-msg-more:focus-visible, .app-msg-rowwrap.is-active .app-msg-more { opacity: 1; }
+.app-msg-more:hover { background: color-mix(in srgb, var(--cream) 70%, transparent); color: var(--ink); }
+@media (hover: none) { .app-msg-more { opacity: 1; } }
+.app-msg-rowwrap .app-req-side { margin-right: 4px; }
+.app-msg-rowmenu {
+  position: absolute;
+  z-index: 6;
+  min-width: 180px;
+  display: grid;
+  padding: 6px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--card);
+  box-shadow: 0 14px 32px rgba(44, 32, 24, 0.16);
+}
+.app-msg-rowmenu button {
+  text-align: left;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  font: inherit;
+  font-size: 14px;
+  color: var(--text);
+  cursor: pointer;
+}
+.app-msg-rowmenu button:hover { background: color-mix(in srgb, var(--cream) 55%, transparent); }
+.app-msg-rowmenu .is-danger { color: #A3322A; }

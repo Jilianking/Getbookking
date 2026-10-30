@@ -20,6 +20,8 @@
   var ROUTES = [
     "dashboard",
     "requests",
+    "team",
+    "insights",
     "calendar",
     "clients",
     "shop",
@@ -63,6 +65,8 @@
       return "dashboard";
     }
     if (path.indexOf("/app/requests") !== -1) return "requests";
+    if (path.indexOf("/app/team") !== -1) return "team";
+    if (path.indexOf("/app/insights") !== -1) return "insights";
     if (path.indexOf("/app/calendar") !== -1) return "calendar";
     if (path.indexOf("/app/clients") !== -1) return "clients";
     if (path.indexOf("/app/shop") !== -1) return "shop";
@@ -157,6 +161,8 @@
     var titles = {
       dashboard: "Dashboard",
       requests: "Requests",
+      team: "Team",
+      insights: "Insights",
       calendar: "Calendar",
       clients: "Clients",
       shop: "Shop",
@@ -173,6 +179,12 @@
     }
     if (route === "payouts" && window.ShopAppPayouts) {
       ShopAppPayouts.load(session);
+    }
+    if (route === "team" && window.ShopAppTeam) {
+      ShopAppTeam.load(session);
+    }
+    if (route === "insights" && window.ShopAppInsights) {
+      ShopAppInsights.load(session);
     }
     if (route === "requests" && window.ShopAppRequests) {
       ShopAppRequests.load(session);
@@ -202,6 +214,8 @@
     var initial = ($("userName").textContent || "?").charAt(0).toUpperCase();
     $("userInitial").textContent = initial;
 
+    var role = (session.access && session.access.accessRole) || "";
+    $("navTeam").classList.toggle("hidden", !(session.isOwner || role === "manager"));
     $("paymentsFolder").classList.toggle("hidden", !session.teamMode);
     $("paymentsFlat").classList.toggle("hidden", session.teamMode);
 

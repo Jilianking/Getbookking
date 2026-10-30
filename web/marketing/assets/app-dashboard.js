@@ -821,6 +821,13 @@
     calState.walkIn = !!(opts && opts.walkIn);
     loadServices(calState.session).finally(function () {
       setSheetOpen(true);
+      var c = opts && opts.client;
+      if (c) {
+        // "Book appointment" from a client profile fills in who it's for.
+        if ($("calNewName")) $("calNewName").value = c.name || "";
+        if ($("calNewEmail")) $("calNewEmail").value = c.email || "";
+        if ($("calNewPhone")) $("calNewPhone").value = c.phone || "";
+      }
     });
   }
 

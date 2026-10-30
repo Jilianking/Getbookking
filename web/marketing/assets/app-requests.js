@@ -493,5 +493,5 @@
     paint();
   }
 
-  global.ShopAppRequests = { attach: attach, load: load, open: setOpen };
+  global.ShopAppRequests = { attach: attach, load: load, open: setOpen, all: function () { return state.list.slice(); } };
 })(window);

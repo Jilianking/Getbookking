@@ -69,12 +69,13 @@
   }
 
   /** Thin rounded bars on a shared baseline, a recessive grid, labels in text ink, and a hover tooltip. */
-  function barsSvg(points, fmt, title) {
-    var W = 320, H = 150, padL = 4, padR = 4, padT = 10, padB = 22;
+  function barsSvg(points, fmt, title, opts) {
+    opts = opts || {};
+    var W = opts.width || 320, H = opts.height || 150, padL = 4, padR = 4, padT = 10, padB = 22;
     var max = Math.max.apply(null, points.map(function (p) { return p.value; }).concat([0]));
     var top = max > 0 ? max : 1;
     var slot = (W - padL - padR) / points.length;
-    var bw = Math.min(14, slot * 0.45);
+    var bw = Math.min(opts.width ? 22 : 14, slot * 0.45);
     var plotH = H - padT - padB;
     var grid = [0.5, 1].map(function (f) {
       var y = padT + plotH * (1 - f);
@@ -88,8 +89,8 @@
       // Rounded top only; the bottom sits square on the baseline.
       var path = h ? "M" + x + "," + (y + h) + "V" + (y + r) + "Q" + x + "," + y + " " + (x + r) + "," + y +
         "H" + (x + bw - r) + "Q" + (x + bw) + "," + y + " " + (x + bw) + "," + (y + r) + "V" + (y + h) + "Z" : "";
-      var tip = esc(p.label + " week: " + fmt(p.value));
-      var showLabel = i === 0 || i === points.length - 1 || i === Math.floor(points.length / 2);
+      var tip = esc((opts.tipPrefix ? opts.tipPrefix(p) : p.label + " week") + ": " + fmt(p.value));
+      var showLabel = opts.allLabels || i === 0 || i === points.length - 1 || i === Math.floor(points.length / 2);
       return '<g class="app-chart-bar" data-tip="' + tip + '">' +
         '<rect class="app-chart-hit" x="' + (padL + slot * i) + '" y="' + padT + '" width="' + slot + '" height="' + (plotH + padB) + '"/>' +
         (path ? '<path d="' + path + '" fill="' + BAR + '"/>' : "") +
@@ -97,7 +98,7 @@
         "</g>";
     }).join("");
     var base = '<line x1="' + padL + '" x2="' + (W - padR) + '" y1="' + (padT + plotH) + '" y2="' + (padT + plotH) + '" class="app-chart-base"/>';
-    var table = '<table class="app-sr-only"><caption>' + esc(title) + "</caption><tr><th>Week of</th><th>Value</th></tr>" +
+    var table = '<table class="app-sr-only"><caption>' + esc(title) + "</caption><tr><th>" + (opts.allLabels ? "Group" : "Week of") + "</th><th>Value</th></tr>" +
       points.map(function (p) { return "<tr><td>" + esc(p.label) + "</td><td>" + esc(fmt(p.value)) + "</td></tr>"; }).join("") + "</table>";
     return '<div class="app-chart-plot"><svg viewBox="0 0 ' + W + " " + H + '" role="img" aria-label="' + esc(title) + '">' +
       grid + base + bars + '</svg><div class="app-chart-tip hidden" role="status"></div></div>' + table;
@@ -241,5 +242,5 @@
     loadRevenue();
   }
 
-  global.ShopAppDashCharts = { load: load, paintBookings: paintBookings };
+  global.ShopAppDashCharts = { load: load, paintBookings: paintBookings, bars: barsSvg, wireTips: wireTips, money: money, pct: pct, changeHtml: changeHtml };
 })(window);

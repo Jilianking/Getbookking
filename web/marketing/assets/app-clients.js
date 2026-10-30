@@ -9,6 +9,7 @@
     clients: [],
     wired: false,
     query: "",
+    openId: "",
   };
 
   function $(id) {
@@ -95,17 +96,11 @@
         last = L;
       }
       html +=
-        '<div class="app-row">' +
-        '<span class="app-row-avatar" aria-hidden="true">' +
-        esc(displayName(c).charAt(0).toUpperCase()) +
-        "</span>" +
-        '<span class="app-row-copy"><strong>' +
-        esc(displayName(c)) +
-        "</strong><span>" +
-        esc(subtitle(c)) +
-        "</span></span>" +
-        (c.vip ? '<span class="app-row-meta">VIP</span>' : "") +
-        "</div>";
+        '<button type="button" class="app-req-row' + (c.id === state.openId ? " is-active" : "") + '" data-client-open="' + esc(c.id) + '">' +
+        '<span class="app-req-avatar" aria-hidden="true">' + esc(initialsOf(displayName(c))) + "</span>" +
+        '<span class="app-req-copy"><strong>' + esc(displayName(c)) + "</strong><span>" + esc(subtitle(c)) + "</span></span>" +
+        (c.vip ? '<span class="app-req-side"><span class="app-req-chip is-wait">VIP</span></span>' : "") +
+        "</button>";
     });
     list.innerHTML = html;
   }
@@ -119,7 +114,185 @@
       phone: d.phone || "",
       totalAppointments: d.totalAppointments || 0,
       vip: !!d.vip,
+      notes: d.notes || "",
+      noteEntries: Array.isArray(d.noteEntries) ? d.noteEntries : [],
+      createdAt: d.createdAt && d.createdAt.toDate ? d.createdAt.toDate() : null,
+      birthday: d.birthday || "",
+      smsOptedOutAt: d.smsOptedOutAt || null,
     };
+  }
+
+  function initialsOf(name) {
+    var parts = String(name || "?").trim().split(/\s+/);
+    return ((parts[0] || "?").charAt(0) + (parts.length > 1 ? parts[parts.length - 1].charAt(0) : "")).toUpperCase();
+  }
+
+  /* ── Client profile ── */
+
+  var BOOKED = ["confirmed", "pending_deposit", "pending_payment", "pending_consultation", "completed"];
+  var STATUS_LABEL = {
+    new: "Requested", pending: "Requested", pending_deposit: "Awaiting deposit", pending_payment: "Awaiting payment",
+    pending_consultation: "Consult", confirmed: "Confirmed", completed: "Completed", declined: "Declined", cancelled: "Cancelled",
+  };
+
+  function byId(id) {
+    return state.clients.filter(function (c) { return c.id === id; })[0] || null;
+  }
+
+  /** Their bookings, matched the way the app does: by phone (last 10 digits) or email. */
+  function bookingsFor(c) {
+    var all = (global.ShopAppRequests && global.ShopAppRequests.all && global.ShopAppRequests.all()) || [];
+    var phone = digits(c.phone).slice(-10);
+    var email = String(c.email || "").trim().toLowerCase();
+    return all.filter(function (r) {
+      var rp = digits(r.phone).slice(-10);
+      return (phone && rp === phone) || (email && String(r.email || "").toLowerCase() === email);
+    });
+  }
+
+  function whenLabel(d) {
+    return d ? d.toLocaleString("en-US", { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) : "No time set";
+  }
+
+  function noteDate(n) {
+    var v = n.updatedAt || n.createdAt;
+    var d = v && v.toDate ? v.toDate() : v ? new Date(v) : null;
+    return d && !isNaN(d.getTime()) ? d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "";
+  }
+
+  function notesOf(c) {
+    var list = c.noteEntries.slice();
+    if (!list.length && String(c.notes || "").trim()) list = [{ id: "legacy", body: c.notes, createdAt: c.createdAt }];
+    return list.sort(function (a, b) {
+      var da = a.updatedAt || a.createdAt, db = b.updatedAt || b.createdAt;
+      return (db && db.toDate ? db.toDate() : new Date(db || 0)) - (da && da.toDate ? da.toDate() : new Date(da || 0));
+    });
+  }
+
+  function paintProfile() {
+    var c = byId(state.openId);
+    var body = $("clientDetailBody");
+    if (!c || !body) return;
+    $("clientDetailTitle").textContent = displayName(c);
+    var vip = $("clientDetailVip");
+    if (vip) {
+      vip.textContent = c.vip ? "VIP" : "Mark VIP";
+      vip.classList.toggle("is-on", c.vip);
+    }
+    var now = new Date();
+    var bookings = bookingsFor(c);
+    var upcoming = bookings.filter(function (b) { return b.start && b.start >= now && BOOKED.indexOf(b.status) !== -1; })
+      .sort(function (a, b) { return a.start - b.start; });
+    var past = bookings.filter(function (b) { return !(b.start && b.start >= now && BOOKED.indexOf(b.status) !== -1); })
+      .sort(function (a, b) { return (b.start || b.createdAt || 0) - (a.start || a.createdAt || 0); });
+    var visits = bookings.filter(function (b) { return b.start && b.start < now && BOOKED.indexOf(b.status) !== -1; }).length;
+    var paid = bookings.reduce(function (t, b) { return t + (b.paidCents || 0); }, 0);
+
+    var links = [];
+    var d = digits(c.phone);
+    if (d.length >= 10) {
+      links.push('<a class="app-btn app-btn--ghost app-btn--small" href="tel:' + esc(c.phone) + '">Call</a>');
+      links.push('<a class="app-btn app-btn--ghost app-btn--small" href="sms:' + esc(c.phone) + '">Text</a>');
+    }
+    if (c.email) links.push('<a class="app-btn app-btn--ghost app-btn--small" href="mailto:' + esc(c.email) + '">Email</a>');
+
+    var row = function (b) {
+      return '<div class="app-client-booking"><span><strong>' + esc(b.service || "Appointment") + "</strong><em>" +
+        esc(whenLabel(b.start || b.createdAt) + (b.assignedName ? " · " + b.assignedName : "")) + "</em></span>" +
+        '<span class="app-req-chip' + (b.status === "confirmed" || b.status === "completed" ? " is-ok" : b.status === "declined" || b.status === "cancelled" ? " is-off" : "") + '">' +
+        esc(STATUS_LABEL[b.status] || b.status) + "</span></div>";
+    };
+    var notes = notesOf(c);
+    body.innerHTML =
+      '<p class="app-req-contact">' + esc([c.phone, c.email].filter(Boolean).join(" · ") || "No contact info") + "</p>" +
+      (links.length ? '<div class="app-req-links">' + links.join("") + "</div>" : "") +
+      (c.smsOptedOutAt ? '<p class="app-hint">This client replied STOP, so texts to them are off.</p>' : "") +
+      '<div class="app-req-facts">' +
+      '<div class="app-req-fact"><span>Visits</span><strong>' + visits + "</strong></div>" +
+      '<div class="app-req-fact"><span>Upcoming</span><strong>' + upcoming.length + "</strong></div>" +
+      '<div class="app-req-fact"><span>Paid online</span><strong>$' + (paid / 100).toFixed(2) + "</strong></div>" +
+      '<div class="app-req-fact"><span>Client since</span><strong>' + esc(c.createdAt ? c.createdAt.toLocaleDateString("en-US", { month: "short", year: "numeric" }) : "—") + "</strong></div>" +
+      "</div>" +
+      '<h3 class="app-req-h">Upcoming</h3>' + (upcoming.length ? upcoming.slice(0, 5).map(row).join("") : '<p class="app-hint">Nothing booked.</p>') +
+      '<h3 class="app-req-h">History</h3>' + (past.length ? past.slice(0, 8).map(row).join("") : '<p class="app-hint">No past bookings yet.</p>') +
+      '<h3 class="app-req-h">Notes</h3>' +
+      '<div class="app-client-note-new"><textarea id="clientNoteInput" rows="2" placeholder="Prefers a low fade, allergic to…"></textarea>' +
+      '<button type="button" class="app-btn app-btn--ghost app-btn--small" id="clientNoteAdd">Add note</button></div>' +
+      (notes.length ? notes.map(function (n) {
+        return '<div class="app-client-note"><p>' + esc(n.body).replace(/\n/g, "<br>") + "</p><span>" + esc([noteDate(n), n.authorName].filter(Boolean).join(" · ")) + "</span></div>";
+      }).join("") : '<p class="app-hint">No notes yet.</p>') +
+      '<p class="app-sheet-error hidden" id="clientDetailError"></p>';
+  }
+
+  function setProfileOpen(id) {
+    state.openId = id || "";
+    ["clientDetailSheet", "clientDetailScrim"].forEach(function (x) {
+      var el = $(x);
+      if (el) el.classList.toggle("hidden", !id);
+    });
+    var ph = $("clientPlaceholder");
+    if (ph) ph.classList.toggle("hidden", !!id);
+    render();
+    if (id) paintProfile();
+  }
+
+  function customerRef(c) {
+    return firebase.firestore().collection("tenants").doc(state.session.tenantId).collection("customers").doc(c.id);
+  }
+
+  function profileError(msg) {
+    var e = $("clientDetailError");
+    if (e) {
+      e.textContent = msg;
+      e.classList.remove("hidden");
+    }
+  }
+
+  function addNote() {
+    var c = byId(state.openId);
+    var input = $("clientNoteInput");
+    if (!c || !input) return;
+    var text = String(input.value || "").trim();
+    if (!text) return profileError("Write a note first.");
+    var s = state.session;
+    var entry = {
+      id: (global.crypto && crypto.randomUUID) ? crypto.randomUUID() : "n_" + Date.now(),
+      body: text,
+      createdAt: firebase.firestore.Timestamp.now(),
+      authorName: (s.user && (s.user.displayName || s.user.email)) || "",
+    };
+    // Keep an older single note by turning it into the first entry, like the app does.
+    var existing = c.noteEntries.slice();
+    if (!existing.length && String(c.notes || "").trim()) {
+      existing.push({ id: "legacy", body: c.notes, createdAt: firebase.firestore.Timestamp.now() });
+    }
+    var next = [entry].concat(existing);
+    customerRef(c).set({ noteEntries: next, updatedAt: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true })
+      .then(function () {
+        c.noteEntries = next;
+        paintProfile();
+      }).catch(function (e) {
+        profileError((e && e.message) || "Couldn't save the note.");
+      });
+  }
+
+  function toggleVip() {
+    var c = byId(state.openId);
+    if (!c) return;
+    var next = !c.vip;
+    customerRef(c).set({ vip: next }, { merge: true }).then(function () {
+      c.vip = next;
+      render();
+      paintProfile();
+    }).catch(function (e) {
+      profileError((e && e.message) || "Couldn't update this client.");
+    });
+  }
+
+  function bookAgain() {
+    var c = byId(state.openId);
+    if (!c || !global.ShopAppDashboard || !ShopAppDashboard.openNew) return;
+    ShopAppDashboard.openNew({ client: { name: displayName(c), email: c.email, phone: c.phone } });
   }
 
   function load(session) {
@@ -210,6 +383,18 @@
 
   function attach(session) {
     state.session = session;
+    $("clientList").addEventListener("click", function (ev) {
+      var b = ev.target.closest("[data-client-open]");
+      if (b) setProfileOpen(b.getAttribute("data-client-open"));
+    });
+    ["clientDetailClose", "clientDetailScrim"].forEach(function (x) {
+      $(x).addEventListener("click", function () { setProfileOpen(""); });
+    });
+    $("clientDetailVip").addEventListener("click", toggleVip);
+    $("clientDetailBook").addEventListener("click", bookAgain);
+    $("clientDetailBody").addEventListener("click", function (ev) {
+      if (ev.target.closest("#clientNoteAdd")) addNote();
+    });
     if (state.wired) return;
     state.wired = true;
     $("clientAddBtn").addEventListener("click", function () {

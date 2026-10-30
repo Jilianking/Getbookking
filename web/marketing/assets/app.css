@@ -2688,7 +2688,7 @@ button.app-pay-tx.is-link:focus-visible {
 @media (min-width: 1100px) {
   .app-req-layout { grid-template-columns: minmax(0, 1fr) minmax(360px, 420px); }
   .app-req-listcard { grid-column: 1; grid-row: 1; }
-  #reqDetailScrim { display: none !important; }
+  .app-req-layout > .app-sheet-scrim { display: none !important; }
   .app-req-panel {
     position: sticky;
     top: 0;
@@ -2702,7 +2702,7 @@ button.app-pay-tx.is-link:focus-visible {
     border-radius: 14px;
     z-index: 1;
   }
-  .app-req-panel #reqDetailClose { display: none; }
+  .app-req-panel .app-sheet-top .app-icon-btn { display: none; }
   .app-req-placeholder {
     display: grid;
     grid-column: 2;
@@ -2730,3 +2730,120 @@ button.app-pay-tx.is-link:focus-visible {
 .app-chart-empty strong { font-size: 14px; color: var(--ink); }
 .app-chart-empty span { font-size: 13px; color: var(--muted); line-height: 1.5; }
 #dashRevenueBody > .app-empty { padding: 4px 0 0; }
+
+/* ── Team ── */
+.app-team-avatar {
+  flex: none;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+  background: color-mix(in srgb, var(--cream) 85%, var(--warm) 15%);
+}
+.app-team-avatar.is-lg { width: 56px; height: 56px; font-size: 18px; }
+.app-team-avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.app-team-hero { display: flex; align-items: center; gap: 14px; }
+.app-team-hero p { margin: 0; font-weight: 600; color: var(--ink); }
+.app-team-hero span { font-size: 13px; color: var(--muted); }
+.app-team-role { align-self: start; }
+.app-team-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line);
+  cursor: pointer;
+}
+.app-team-toggle strong { display: block; font-size: 14px; font-weight: 500; }
+.app-team-toggle em { display: block; font-style: normal; font-size: 12px; color: var(--muted); }
+.app-team-toggle input { position: absolute; opacity: 0; pointer-events: none; }
+.app-team-toggle i {
+  flex: none;
+  width: 40px;
+  height: 24px;
+  border-radius: 999px;
+  background: var(--line);
+  position: relative;
+  transition: background 0.15s;
+}
+.app-team-toggle i::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+  transition: transform 0.15s;
+}
+.app-team-toggle input:checked + i { background: var(--sage); }
+.app-team-toggle input:checked + i::after { transform: translateX(16px); }
+.app-team-toggle input:focus-visible + i { outline: 2px solid var(--warm); outline-offset: 2px; }
+
+/* ── Client profile ── */
+.app-client-vip { border: 0; cursor: pointer; font: inherit; font-size: 11px; font-weight: 600; }
+.app-client-vip.is-on { background: color-mix(in srgb, #C98A2B 18%, transparent); color: #7A4F12; }
+.app-client-booking {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--line);
+}
+.app-client-booking strong { display: block; font-size: 14px; font-weight: 500; }
+.app-client-booking em { display: block; font-style: normal; font-size: 12px; color: var(--muted); }
+.app-client-note-new { display: grid; gap: 8px; }
+.app-client-note-new textarea {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 9px 11px;
+  font: inherit;
+  font-size: 14px;
+  resize: vertical;
+}
+.app-client-note-new button { justify-self: end; }
+.app-client-note {
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--cream) 40%, var(--card));
+}
+.app-client-note p { margin: 0; font-size: 14px; line-height: 1.5; }
+.app-client-note span { font-size: 11px; color: var(--muted); }
+
+/* ── Insights ── */
+.app-ins-tiles { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+.app-ins-tiles .app-chart-change { display: block; margin-top: 2px; }
+.app-ins-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin-top: 16px;
+}
+.app-ins-card.is-wide { grid-column: 1 / -1; }
+.app-ins-body { padding: 0 16px 16px; }
+.app-ins-tiles .app-chart-change { text-transform: none; letter-spacing: 0; }
+.app-ins-rank { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.app-ins-rank li {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  font-size: 14px;
+}
+.app-ins-rank-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.app-ins-rank-bar { height: 8px; border-radius: 999px; background: color-mix(in srgb, var(--cream) 70%, transparent); overflow: hidden; }
+.app-ins-rank-bar i { display: block; height: 100%; border-radius: 999px; background: #A3752F; }
+.app-ins-rank strong { font-weight: 600; min-width: 24px; text-align: right; }
+@media (max-width: 900px) {
+  .app-ins-grid { grid-template-columns: 1fr; }
+}

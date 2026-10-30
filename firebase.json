@@ -98,6 +98,8 @@
         { "source": "/settings", "destination": "/settings.html" },
         { "source": "/app", "destination": "/app.html" },
         { "source": "/app/requests", "destination": "/app.html" },
+        { "source": "/app/team", "destination": "/app.html" },
+        { "source": "/app/insights", "destination": "/app.html" },
         { "source": "/app/calendar", "destination": "/app.html" },
         { "source": "/app/clients", "destination": "/app.html" },
         { "source": "/app/shop", "destination": "/app.html" },

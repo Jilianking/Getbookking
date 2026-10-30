@@ -39,7 +39,12 @@
   };
   var REGION = "us-central1";
   var dashView = "day";
+  /** One color per person, in team order (color-blind-safe set). Names always show beside the color. */
+  var TEAM_COLORS = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#6250d6", "#e34948"];
+  var UNASSIGNED_COLOR = "#9A8A7A";
+
   var calState = {
+    team: { hidden: {}, weekMode: "people", loadedFor: "" },
     session: null,
     bookings: [],
     day: null,
@@ -406,6 +411,89 @@
     paintDashCalendar();
   }
 
+  /* ── Team: who's shown, each person's color, and the saved choice ── */
+
+  function teamKey(b) {
+    return b.assignedUid || "unassigned";
+  }
+
+  function teamRoster(session) {
+    var list = (session.members || []).map(function (m, i) {
+      return {
+        key: m.uid || "m" + i,
+        uid: m.uid || "",
+        name: (m.displayName || m.firstName || "").trim() || "Staff",
+        color: TEAM_COLORS[i % TEAM_COLORS.length],
+      };
+    });
+    list.push({ key: "unassigned", uid: "", name: "Unassigned", color: UNASSIGNED_COLOR });
+    return list;
+  }
+
+  function teamColor(session, key) {
+    var hit = teamRoster(session).filter(function (r) { return r.key === key; })[0];
+    return hit ? hit.color : UNASSIGNED_COLOR;
+  }
+
+  function teamStoreKey(session) {
+    return "bkCalTeam:" + (session.tenantId || "");
+  }
+
+  function loadTeamChoice(session) {
+    if (calState.team.loadedFor === session.tenantId) return;
+    calState.team.loadedFor = session.tenantId;
+    try {
+      var saved = JSON.parse(localStorage.getItem(teamStoreKey(session)) || "{}");
+      calState.team.hidden = saved.hidden || {};
+      calState.team.weekMode = saved.weekMode === "time" ? "time" : "people";
+    } catch (e) { /* private window: keep defaults */ }
+  }
+
+  function saveTeamChoice(session) {
+    try {
+      localStorage.setItem(teamStoreKey(session), JSON.stringify({ hidden: calState.team.hidden, weekMode: calState.team.weekMode }));
+    } catch (e) { /* ignore */ }
+  }
+
+  function teamShown(key) {
+    return !calState.team.hidden[key];
+  }
+
+  function paintTeamControls(session) {
+    var wrap = $("calTeamWrap");
+    var seg = $("calWeekMode");
+    var legend = $("calLegend");
+    var team = !!session.teamMode;
+    if (wrap) wrap.classList.toggle("hidden", !team);
+    if (seg) {
+      seg.classList.toggle("hidden", !team || calState.view !== "week");
+      seg.querySelectorAll("[data-week-mode]").forEach(function (b) {
+        b.classList.toggle("is-on", b.getAttribute("data-week-mode") === calState.team.weekMode);
+      });
+    }
+    var roster = teamRoster(session).filter(function (r) { return r.key !== "unassigned"; });
+    var hiddenCount = roster.filter(function (r) { return !teamShown(r.key); }).length;
+    var btn = $("calTeam");
+    if (btn) btn.textContent = (hiddenCount ? "Team · " + (roster.length - hiddenCount) + " of " + roster.length : "Team: everyone") + " ▾";
+    var menu = $("calTeamMenu");
+    if (menu) {
+      menu.innerHTML =
+        '<button type="button" class="app-pop-item" data-team-all="1">' + (hiddenCount ? "Show everyone" : "Everyone is shown") + "</button>" +
+        teamRoster(session).map(function (r) {
+          return '<label class="app-cal-team-opt"><input type="checkbox" data-team-key="' + esc(r.key) + '"' + (teamShown(r.key) ? " checked" : "") + ">" +
+            '<i style="background:' + r.color + '"></i>' + esc(r.name) + "</label>";
+        }).join("");
+    }
+    // A color key wherever people aren't already labeled as columns or rows.
+    var showLegend = team && (calState.view === "month" || (calState.view === "week" && calState.team.weekMode === "time"));
+    if (legend) {
+      legend.classList.toggle("hidden", !showLegend);
+      legend.innerHTML = showLegend ? teamRoster(session).filter(function (r) { return teamShown(r.key); }).map(function (r) {
+        return '<span><i style="background:' + r.color + '"></i>' + esc(r.name) + "</span>";
+      }).join("") : "";
+    }
+  }
+
   function staffColumns(session, dayBookings) {
     if (!session.teamMode) {
       return [
@@ -433,7 +521,8 @@
     if (hasUnassigned) {
       cols.push({ key: "unassigned", name: "Unassigned", uid: "" });
     }
-    return cols;
+    var shown = cols.filter(function (c) { return teamShown(c.key); });
+    return shown.length ? shown : cols.slice(0, 1);
   }
 
   function columnFor(booking, cols, teamMode) {
@@ -836,6 +925,7 @@
     return scoped(calState.bookings, session).filter(function (b) {
       if (!occupies(b.status, charter) || !b.start) return false;
       if (calState.serviceFilter && b.serviceName !== calState.serviceFilter) return false;
+      if (session.teamMode && !teamShown(teamKey(b))) return false;
       return true;
     });
   }
@@ -865,12 +955,15 @@
     var top = (topMin / 60) * HOUR_PX;
     var height = Math.max(28, ((visEnd - topMin) / 60) * HOUR_PX - 4);
     var sub = extra || b.serviceName || formatTime(b.start);
+    var session = calState.session;
+    var member = session && session.teamMode ? "--member:" + teamColor(session, teamKey(b)) + ";" : "";
     return (
       '<button type="button" class="app-cal-block' +
+      (member ? " has-member" : "") +
       (hold ? " is-hold" : "") +
       '" data-booking-id="' +
       esc(b.id) +
-      '" style="top:' +
+      '" style="' + member + "top:" +
       top +
       "px;height:" +
       height +
@@ -919,7 +1012,53 @@
     grid.innerHTML = timesHtml() + colHtml;
   }
 
+  /** Team week: a row per person, a column per day, appointments as chips. */
+  function paintTeamWeek(session, occupying, board, head, grid) {
+    var start = startOfWeek(calState.day);
+    var days = [];
+    for (var i = 0; i < 7; i++) {
+      var d = new Date(start);
+      d.setDate(start.getDate() + i);
+      days.push(d);
+    }
+    var today = startOfDay(new Date());
+    head.innerHTML = "<span>Team</span>" + days.map(function (d) {
+      return '<span class="' + (sameDay(d, today) ? "is-today" : "") + '">' +
+        esc(d.toLocaleDateString("en-US", { weekday: "short" }) + " " + d.getDate()) + "</span>";
+    }).join("");
+    var weekEnd = new Date(days[6]);
+    weekEnd.setDate(weekEnd.getDate() + 1);
+    var inWeek = occupying.filter(function (b) {
+      return b.start >= days[0] && b.start < weekEnd;
+    });
+    var roster = teamRoster(session).filter(function (r) {
+      if (!teamShown(r.key)) return false;
+      if (r.key !== "unassigned") return true;
+      return inWeek.some(function (b) { return !b.assignedUid; });
+    });
+    grid.innerHTML = roster.map(function (r) {
+      var mine = inWeek.filter(function (b) { return teamKey(b) === r.key; });
+      var row = '<div class="app-cal-tw-name"><i style="background:' + r.color + '"></i><span><strong>' + esc(r.name) +
+        "</strong><em>" + (mine.length === 1 ? "1 appointment" : mine.length + " appointments") + "</em></span></div>";
+      days.forEach(function (d) {
+        var chips = mine.filter(function (b) { return sameDay(b.start, d); })
+          .sort(function (a, b) { return a.start - b.start; })
+          .map(function (b) {
+            return '<button type="button" class="app-cal-tw-chip' + (b.status !== "confirmed" ? " is-hold" : "") +
+              '" style="--member:' + r.color + '" data-booking-id="' + esc(b.id) + '"><time>' + esc(formatTime(b.start)) +
+              "</time><span>" + esc(b.customerName) + (b.serviceName ? " · " + esc(b.serviceName) : "") + "</span></button>";
+          }).join("");
+        row += '<div class="app-cal-tw-cell' + (sameDay(d, today) ? " is-today" : "") + '" data-cal-day="' + isoDate(d) + '">' + chips + "</div>";
+      });
+      return row;
+    }).join("") || '<p class="app-empty">Pick at least one person in the Team menu.</p>';
+  }
+
   function paintWeek(session, occupying, board, head, grid) {
+    if (session.teamMode && calState.team.weekMode === "people") {
+      paintTeamWeek(session, occupying, board, head, grid);
+      return;
+    }
     var start = startOfWeek(calState.day);
     board.style.setProperty("--staff-count", "7");
     var headHtml = "<span></span>";
@@ -995,10 +1134,12 @@
       var bars = events
         .slice(0, 3)
         .map(function (b) {
+          var member = session.teamMode ? ' style="--member:' + teamColor(session, teamKey(b)) + '"' : "";
           return (
             '<span class="app-cal-pill' +
+            (member ? " has-member" : "") +
             (b.status !== "confirmed" ? " is-hold" : "") +
-            '" data-booking-id="' +
+            '"' + member + ' data-booking-id="' +
             esc(b.id) +
             '">' +
             esc(b.customerName) +
@@ -1007,7 +1148,7 @@
         })
         .join("");
       if (events.length > 3) {
-        bars += '<span class="app-cal-more">view more</span>';
+        bars += '<span class="app-cal-more">+' + (events.length - 3) + " more</span>";
       }
       cells +=
         '<button type="button" class="' +
@@ -1100,8 +1241,12 @@
     var grid = $("calGrid");
     if (!session || !board || !head || !grid) return;
     if (!calState.day) calState.day = startOfDay(new Date());
-    board.classList.toggle("is-week", calState.view === "week");
+    loadTeamChoice(session);
+    var teamWeek = !!session.teamMode && calState.view === "week" && calState.team.weekMode === "people";
+    board.classList.toggle("is-week", calState.view === "week" && !teamWeek);
+    board.classList.toggle("is-teamweek", teamWeek);
     board.classList.toggle("is-month", calState.view === "month");
+    paintTeamControls(session);
     board.style.setProperty("--cal-hour", HOUR_PX + "px");
     board.style.setProperty("--hour-count", String(HOUR_COUNT));
     paintDateLabel();
@@ -1136,6 +1281,10 @@
     var btn = $("calService");
     if (menu) menu.classList.add("hidden");
     if (btn) btn.setAttribute("aria-expanded", "false");
+    var tmenu = $("calTeamMenu");
+    var tbtn = $("calTeam");
+    if (tmenu) tmenu.classList.add("hidden");
+    if (tbtn) tbtn.setAttribute("aria-expanded", "false");
   }
 
   function togglePop(btnId, menuId) {
@@ -1589,6 +1738,40 @@
         paintCalendar();
       });
     });
+    var teamBtn = $("calTeam");
+    if (teamBtn) {
+      teamBtn.addEventListener("click", function (ev) {
+        ev.stopPropagation();
+        togglePop("calTeam", "calTeamMenu");
+      });
+    }
+    var teamMenu = $("calTeamMenu");
+    if (teamMenu) {
+      teamMenu.addEventListener("change", function (ev) {
+        var key = ev.target.getAttribute("data-team-key");
+        if (!key) return;
+        if (ev.target.checked) delete calState.team.hidden[key];
+        else calState.team.hidden[key] = true;
+        saveTeamChoice(calState.session);
+        paintCalendar();
+      });
+      teamMenu.addEventListener("click", function (ev) {
+        if (!ev.target.closest("[data-team-all]")) return;
+        calState.team.hidden = {};
+        saveTeamChoice(calState.session);
+        paintCalendar();
+      });
+    }
+    var weekMode = $("calWeekMode");
+    if (weekMode) {
+      weekMode.addEventListener("click", function (ev) {
+        var b = ev.target.closest("[data-week-mode]");
+        if (!b) return;
+        calState.team.weekMode = b.getAttribute("data-week-mode");
+        saveTeamChoice(calState.session);
+        paintCalendar();
+      });
+    }
     var serviceBtn = $("calService");
     if (serviceBtn) {
       serviceBtn.addEventListener("click", function (ev) {

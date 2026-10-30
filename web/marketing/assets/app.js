@@ -168,7 +168,7 @@
       shop: "Shop",
       payments: "Client payments",
       payouts: "Team payouts",
-      website: "Website",
+      website: "Website builder",
       billing: "Plan & billing",
       account: "Your account",
       settings: "Settings",

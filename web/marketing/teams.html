@@ -39,7 +39,7 @@
   <link rel="stylesheet" href="assets/legal.css" />
   <link rel="stylesheet" href="assets/footer.css?v=2" />
   <link rel="stylesheet" href="assets/messaging.css?v=1" />
-  <link rel="stylesheet" href="assets/team.css?v=9" />
+  <link rel="stylesheet" href="assets/team.css?v=10" />
   <link rel="stylesheet" href="assets/nav.css?v=22" />
 </head>
 <body>
@@ -373,22 +373,22 @@
           <h2>Everyone sees what they need. Nothing more.</h2>
           <p>Give each person a role and a job title that fits your business, like Barber, Stylist, Artist, or Captain.</p>
         </div>
-        <div class="tm-roles">
-          <article class="msg-card">
-            <div class="msg-card-icon" aria-hidden="true">★</div>
+        <div class="tm-ladder">
+          <div class="tm-rung">
             <h3>Owner</h3>
             <p>Full control of the business, billing, booking rules, payouts, and the team.</p>
-          </article>
-          <article class="msg-card">
-            <div class="msg-card-icon" aria-hidden="true">◆</div>
+            <span class="tm-rung-tag">Full access</span>
+          </div>
+          <div class="tm-rung">
             <h3>Manager</h3>
-            <p>Helps run the floor, with only the permissions you switch on. Gets alerts for new bookings and cancellations, plus an optional daily summary email.</p>
-          </article>
-          <article class="msg-card">
-            <div class="msg-card-icon" aria-hidden="true">●</div>
+            <p>Helps run the floor with only the permissions you switch on. Gets alerts for new bookings and cancellations, plus an optional daily summary email.</p>
+            <span class="tm-rung-tag">Access you choose</span>
+          </div>
+          <div class="tm-rung">
             <h3>Team member</h3>
             <p>Their own login, calendar, booking page, and payouts.</p>
-          </article>
+            <span class="tm-rung-tag">Their own work</span>
+          </div>
         </div>
         <div class="tm-roles-detail">
           <img class="tm-roles-phone" src="assets/team/team-list-iphone.png?v=2" width="480" height="975" loading="lazy" alt="The Team screen in the app, listing each team member with their job title, booking approval setting, and payment split">
@@ -566,7 +566,7 @@
       });
 
       // Card grids: one after another
-      all(".tm-bento, .tm-roles, .tm-steps, .tm-plans", function (grid) {
+      all(".tm-bento, .tm-ladder, .tm-steps, .tm-plans", function (grid) {
         Array.prototype.forEach.call(grid.children, function (el, i) {
           add(el, null, (i % 4) * 0.08);
         });

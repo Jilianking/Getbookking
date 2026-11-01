@@ -587,11 +587,19 @@
   height: auto;
 }
 
+.tm-perms-group {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+}
+
 .tm-perms-sub {
-  grid-column: 1 / -1;
   margin-bottom: 2px;
-  color: var(--text-tertiary);
-  font-size: 13px;
+  color: var(--brand-warm);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
 /* ---------- Steps ---------- */

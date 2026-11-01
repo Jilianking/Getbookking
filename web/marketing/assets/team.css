@@ -491,6 +491,13 @@
   height: auto;
 }
 
+.tm-perms-sub {
+  grid-column: 1 / -1;
+  margin-bottom: 2px;
+  color: var(--text-tertiary);
+  font-size: 13px;
+}
+
 /* ---------- Steps ---------- */
 
 .tm-steps {

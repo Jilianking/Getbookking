@@ -461,6 +461,36 @@
   font-weight: 500;
 }
 
+.tm-roles-detail {
+  display: grid;
+  grid-template-columns: minmax(0, 260px) minmax(0, 1fr);
+  gap: 40px;
+  align-items: center;
+}
+
+.tm-roles-phone {
+  display: block;
+  width: 100%;
+  height: auto;
+  filter: drop-shadow(0 24px 30px rgba(26, 20, 16, 0.22));
+}
+
+/* App screenshot shown zoomed in, no device frame */
+.tm-shot {
+  margin: 0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 22px;
+  background: #fdf9f6;
+  box-shadow: 0 24px 50px rgba(26, 20, 16, 0.12);
+}
+
+.tm-shot img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
 /* ---------- Steps ---------- */
 
 .tm-steps {
@@ -561,8 +591,19 @@
     grid-template-columns: 1fr;
   }
 
-  .tm-split-mock {
+  .tm-split-mock,
+  .tm-shot {
     order: 2;
+  }
+
+  .tm-roles-detail {
+    grid-template-columns: 1fr;
+    gap: 28px;
+  }
+
+  .tm-roles-phone {
+    width: min(240px, 70%);
+    margin: 0 auto;
   }
 }
 

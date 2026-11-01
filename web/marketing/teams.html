@@ -39,7 +39,7 @@
   <link rel="stylesheet" href="assets/legal.css" />
   <link rel="stylesheet" href="assets/footer.css?v=2" />
   <link rel="stylesheet" href="assets/messaging.css?v=1" />
-  <link rel="stylesheet" href="assets/team.css?v=6" />
+  <link rel="stylesheet" href="assets/team.css?v=8" />
   <link rel="stylesheet" href="assets/nav.css?v=22" />
 </head>
 <body>
@@ -540,6 +540,56 @@
   <script src="js/firebase-config.js"></script>
   <script src="assets/nav.js"></script>
   <script src="assets/nav-auth.js?v=4"></script>
+  <script>
+    // Sections fade up or slide in as they scroll into view (same effect as the home page).
+    (function () {
+      var reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      if (reduce || !("IntersectionObserver" in window)) return;
+
+      var items = [];
+      function add(el, dir, delay) {
+        if (!el || el.classList.contains("tm-reveal")) return;
+        el.classList.add("tm-reveal");
+        if (dir) el.classList.add("tm-reveal--" + dir);
+        if (delay) el.style.transitionDelay = delay + "s";
+        items.push(el);
+      }
+      function all(sel, fn) { document.querySelectorAll(sel).forEach(fn); }
+
+      all("main .msg-heading", function (el) { add(el); });
+
+      // Two-column sections: each side slides in from its own edge
+      all(".msg-split", function (row) {
+        Array.prototype.forEach.call(row.children, function (el, i) {
+          add(el, i === 0 ? "left" : "right", i * 0.06);
+        });
+      });
+
+      // Card grids: one after another
+      all(".tm-bento, .tm-roles, .tm-steps, .tm-plans", function (grid) {
+        Array.prototype.forEach.call(grid.children, function (el, i) {
+          add(el, null, (i % 4) * 0.08);
+        });
+      });
+
+      add(document.querySelector(".tm-reel"));
+      add(document.querySelector(".tm-live-links"));
+      add(document.querySelector(".tm-roles-phone"), "left");
+      add(document.querySelector(".tm-perms"), "right", 0.06);
+      add(document.querySelector(".tm-plans-note"));
+      all(".msg-cta > *", function (el, i) { add(el, null, i * 0.08); });
+
+      document.documentElement.classList.add("js-reveal");
+      var observer = new IntersectionObserver(function (entries) {
+        entries.forEach(function (entry) {
+          if (!entry.isIntersecting) return;
+          entry.target.classList.add("is-in");
+          observer.unobserve(entry.target);
+        });
+      }, { threshold: 0.15, rootMargin: "0px 0px -6% 0px" });
+      items.forEach(function (el) { observer.observe(el); });
+    })();
+  </script>
   <script src="assets/lazy-video.js?v=1" defer></script>
 </body>
 </html>

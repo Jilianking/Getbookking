@@ -665,3 +665,54 @@
     grid-row: auto;
   }
 }
+
+/* ---------- Scroll reveal (same effect as the home and pricing pages) ---------- */
+
+.js-reveal .tm-reveal {
+  opacity: 0;
+  transform: translateY(28px);
+  transition: opacity 0.7s ease, transform 0.7s ease;
+}
+
+.js-reveal .tm-reveal--left {
+  transform: translateX(-44px);
+}
+
+.js-reveal .tm-reveal--right {
+  transform: translateX(44px);
+}
+
+.js-reveal .tm-reveal.is-in {
+  opacity: 1;
+  transform: none;
+}
+
+@media (max-width: 960px) {
+  /* Side slides can push past the screen edge on phones, so fade up instead */
+  .js-reveal .tm-reveal--left,
+  .js-reveal .tm-reveal--right {
+    transform: translateY(28px);
+  }
+}
+
+/* Hero fades in on page load, so the top of the page is never blank */
+@keyframes tm-rise {
+  from { opacity: 0; transform: translateY(24px); }
+  to { opacity: 1; transform: none; }
+}
+
+.tm-hero .msg-hero-copy,
+.tm-hero-visual {
+  animation: tm-rise 0.8s ease both;
+}
+
+.tm-hero-visual {
+  animation-delay: 0.15s;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tm-hero .msg-hero-copy,
+  .tm-hero-visual {
+    animation: none;
+  }
+}

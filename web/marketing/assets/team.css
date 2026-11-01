@@ -400,10 +400,44 @@
 }
 
 .tm-cal-who {
-  padding-bottom: 6px;
+  padding: 4px 0 6px;
+  border: 0;
+  border-radius: 7px;
+  background: none;
   color: var(--text-primary);
+  font: inherit;
   font-weight: 500;
   text-align: center;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+.tm-cal-who:hover,
+.tm-cal-who:focus-visible {
+  background: var(--brand-cream);
+}
+
+.tm-cal.is-single {
+  grid-template-columns: 44px minmax(0, 1fr);
+}
+
+.tm-cal.is-single .tm-cal-slot--empty {
+  color: var(--text-tertiary);
+}
+
+.tm-cal.is-swapping {
+  animation: tm-cal-in 0.35s ease;
+}
+
+@keyframes tm-cal-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+
+.tm-cal-sum {
+  margin-top: 14px;
+  color: var(--text-tertiary);
+  font-size: 12px;
 }
 
 .tm-cal-time {
@@ -427,6 +461,19 @@
   flex-wrap: wrap;
   gap: 6px;
   margin-bottom: 14px;
+}
+
+.tm-cal-filter .tm-pill {
+  border: 0;
+  font: inherit;
+  font-size: 12px;
+  padding: 5px 12px;
+  cursor: pointer;
+  transition: background 0.2s ease, color 0.2s ease;
+}
+
+.tm-cal-filter .tm-pill:hover {
+  background: #eadfc6;
 }
 
 .tm-cal-filter .tm-pill.is-on {
@@ -713,6 +760,12 @@
 @media (prefers-reduced-motion: reduce) {
   .tm-hero .msg-hero-copy,
   .tm-hero-visual {
+    animation: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tm-cal.is-swapping {
     animation: none;
   }
 }

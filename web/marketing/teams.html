@@ -39,7 +39,7 @@
   <link rel="stylesheet" href="assets/legal.css" />
   <link rel="stylesheet" href="assets/footer.css?v=2" />
   <link rel="stylesheet" href="assets/messaging.css?v=1" />
-  <link rel="stylesheet" href="assets/team.css?v=8" />
+  <link rel="stylesheet" href="assets/team.css?v=9" />
   <link rel="stylesheet" href="assets/nav.css?v=22" />
 </head>
 <body>
@@ -326,18 +326,18 @@
 
     <section class="msg-section msg-section--alt" id="calendar">
       <div class="msg-inner msg-split">
-        <div class="tm-mock" aria-label="Example shared team calendar">
-          <div class="tm-cal-filter">
-            <span class="tm-pill is-on">Everyone</span>
-            <span class="tm-pill">Marcus</span>
-            <span class="tm-pill">James</span>
-            <span class="tm-pill">Diego</span>
+        <div class="tm-mock tm-cal-mock" aria-label="Example shared team calendar">
+          <div class="tm-cal-filter" role="group" aria-label="Show bookings for">
+            <button type="button" class="tm-pill is-on" data-cal-who="all" aria-pressed="true">Everyone</button>
+            <button type="button" class="tm-pill" data-cal-who="marcus" aria-pressed="false">Marcus</button>
+            <button type="button" class="tm-pill" data-cal-who="james" aria-pressed="false">James</button>
+            <button type="button" class="tm-pill" data-cal-who="diego" aria-pressed="false">Diego</button>
           </div>
-          <div class="tm-cal">
+          <div class="tm-cal" aria-live="polite">
             <span></span>
-            <span class="tm-cal-who">Marcus</span>
-            <span class="tm-cal-who">James</span>
-            <span class="tm-cal-who">Diego</span>
+            <button type="button" class="tm-cal-who" data-cal-who="marcus">Marcus</button>
+            <button type="button" class="tm-cal-who" data-cal-who="james">James</button>
+            <button type="button" class="tm-cal-who" data-cal-who="diego">Diego</button>
             <span class="tm-cal-time">9:00</span>
             <span class="tm-cal-slot tm-cal-slot--a">Signature fade</span>
             <span class="tm-cal-slot tm-cal-slot--empty"></span>
@@ -351,6 +351,7 @@
             <span class="tm-cal-slot tm-cal-slot--b">Kids cut</span>
             <span class="tm-cal-slot tm-cal-slot--empty"></span>
           </div>
+          <div class="tm-cal-sum">6 bookings today · Tap a name to see their day</div>
         </div>
         <div class="msg-split-copy">
           <div class="msg-label">Shared calendar</div>
@@ -588,6 +589,75 @@
         });
       }, { threshold: 0.15, rootMargin: "0px 0px -6% 0px" });
       items.forEach(function (el) { observer.observe(el); });
+    })();
+  </script>
+  <script>
+    // Shared calendar demo: tap a name to see just that person's day.
+    (function () {
+      var mock = document.querySelector(".tm-cal-mock");
+      if (!mock) return;
+      var cal = mock.querySelector(".tm-cal");
+      var sum = mock.querySelector(".tm-cal-sum");
+      var times = ["9:00", "10:30", "12:00", "1:30", "3:00"];
+      var team = {
+        marcus: { name: "Marcus", tone: "a", day: ["Signature fade", "", "The Full Stone Cut", "Beard sculpt", ""] },
+        james: { name: "James", tone: "b", day: ["", "Hot towel shave", "Kids cut", "", "Signature fade"] },
+        diego: { name: "Diego", tone: "c", day: ["Beard sculpt", "Signature fade", "", "Signature fade", "Hot towel shave"] }
+      };
+      var order = ["marcus", "james", "diego"];
+
+      function el(tag, cls, text) {
+        var e = document.createElement(tag);
+        if (cls) e.className = cls;
+        if (text) e.textContent = text;
+        return e;
+      }
+
+      function slot(service, tone) {
+        return el("span", "tm-cal-slot tm-cal-slot--" + (service ? tone : "empty"), service);
+      }
+
+      function render(who) {
+        cal.innerHTML = "";
+        var people = who === "all" ? order : [who];
+        cal.classList.toggle("is-single", who !== "all");
+        cal.appendChild(el("span"));
+        people.forEach(function (key) {
+          var b = el("button", "tm-cal-who", team[key].name);
+          b.type = "button";
+          b.setAttribute("data-cal-who", who === "all" ? key : "all");
+          b.title = who === "all" ? "Show " + team[key].name + "’s day" : "Show everyone";
+          cal.appendChild(b);
+        });
+        var count = 0;
+        times.forEach(function (t, i) {
+          cal.appendChild(el("span", "tm-cal-time", t));
+          people.forEach(function (key) {
+            var service = team[key].day[i];
+            if (service) count++;
+            var s = slot(service, team[key].tone);
+            if (!service && who !== "all") s.textContent = "Open";
+            cal.appendChild(s);
+          });
+        });
+        sum.textContent = who === "all"
+          ? count + " bookings today · Tap a name to see their day"
+          : team[who].name + " has " + count + " bookings today";
+        mock.querySelectorAll(".tm-cal-filter .tm-pill").forEach(function (p) {
+          var on = p.getAttribute("data-cal-who") === who;
+          p.classList.toggle("is-on", on);
+          p.setAttribute("aria-pressed", on ? "true" : "false");
+        });
+        cal.classList.remove("is-swapping");
+        void cal.offsetWidth;
+        cal.classList.add("is-swapping");
+      }
+
+      mock.addEventListener("click", function (e) {
+        var b = e.target.closest("[data-cal-who]");
+        if (b) render(b.getAttribute("data-cal-who"));
+      });
+      render("all");
     })();
   </script>
   <script src="assets/lazy-video.js?v=1" defer></script>

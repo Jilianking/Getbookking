@@ -351,7 +351,6 @@
             <span class="tm-cal-slot tm-cal-slot--b">Kids cut</span>
             <span class="tm-cal-slot tm-cal-slot--empty"></span>
           </div>
-          <div class="tm-cal-sum">6 bookings today · Tap a name to see their day</div>
         </div>
         <div class="msg-split-copy">
           <div class="msg-label">Shared calendar</div>
@@ -597,7 +596,6 @@
       var mock = document.querySelector(".tm-cal-mock");
       if (!mock) return;
       var cal = mock.querySelector(".tm-cal");
-      var sum = mock.querySelector(".tm-cal-sum");
       var times = ["9:00", "10:30", "12:00", "1:30", "3:00"];
       var team = {
         marcus: { name: "Marcus", tone: "a", day: ["Signature fade", "", "The Full Stone Cut", "Beard sculpt", ""] },
@@ -629,20 +627,15 @@
           b.title = who === "all" ? "Show " + team[key].name + "’s day" : "Show everyone";
           cal.appendChild(b);
         });
-        var count = 0;
         times.forEach(function (t, i) {
           cal.appendChild(el("span", "tm-cal-time", t));
           people.forEach(function (key) {
             var service = team[key].day[i];
-            if (service) count++;
             var s = slot(service, team[key].tone);
             if (!service && who !== "all") s.textContent = "Open";
             cal.appendChild(s);
           });
         });
-        sum.textContent = who === "all"
-          ? count + " bookings today · Tap a name to see their day"
-          : team[who].name + " has " + count + " bookings today";
         mock.querySelectorAll(".tm-cal-filter .tm-pill").forEach(function (p) {
           var on = p.getAttribute("data-cal-who") === who;
           p.classList.toggle("is-on", on);

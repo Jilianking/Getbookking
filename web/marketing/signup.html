@@ -1157,9 +1157,9 @@
       <div class="subscription-charge-summary">
         <div class="subscription-charge-row">
           <span>Charged today</span>
-          <strong id="subscriptionStartPrice">$39</strong>
+          <strong id="subscriptionStartPrice">$39.99</strong>
         </div>
-        <small id="subscriptionStartRenewal">Then $39 monthly until canceled.</small>
+        <small id="subscriptionStartRenewal">Then $39.99 monthly until canceled.</small>
       </div>
       <p class="subscription-start-error" id="subscriptionStartError" role="alert"></p>
       <div class="subscription-start-actions">
@@ -1186,34 +1186,34 @@
               <div class="plan-pick-name">Solo</div>
               <div class="plan-pick-desc">Just you</div>
             </div>
-            <div class="plan-pick-price">$39<span style="font-family:'DM Sans';font-size:13px;color:var(--text-tertiary)">/mo</span></div>
+            <div class="plan-pick-price">$39.99<span style="font-family:'DM Sans';font-size:13px;color:var(--text-tertiary)">/mo</span></div>
           </div>
           <div class="plan-pick" data-value="studio" onclick="pickPlan(this)">
             <div class="plan-pick-left">
               <div class="plan-pick-name">Studio</div>
               <div class="plan-pick-desc">2–5 people</div>
             </div>
-            <div class="plan-pick-price">$79<span style="font-family:'DM Sans';font-size:13px;color:var(--text-tertiary)">/mo</span></div>
+            <div class="plan-pick-price">$79.99<span style="font-family:'DM Sans';font-size:13px;color:var(--text-tertiary)">/mo</span></div>
           </div>
           <div class="plan-pick" data-value="shop" onclick="pickPlan(this)">
             <div class="plan-pick-left">
               <div class="plan-pick-name">Shop</div>
               <div class="plan-pick-desc">6–10 people</div>
             </div>
-            <div class="plan-pick-price">$149<span style="font-family:'DM Sans';font-size:13px;color:var(--text-tertiary)">/mo</span></div>
+            <div class="plan-pick-price">$149.99<span style="font-family:'DM Sans';font-size:13px;color:var(--text-tertiary)">/mo</span></div>
           </div>
           <div class="plan-pick" data-value="charter" onclick="pickPlan(this)">
             <div class="plan-pick-left">
               <div class="plan-pick-name">Charter</div>
               <div class="plan-pick-desc">Fishing charters and guides</div>
             </div>
-            <div class="plan-pick-price">$24<span style="font-family:'DM Sans';font-size:13px;color:var(--text-tertiary)">/mo</span></div>
+            <div class="plan-pick-price">$24.99<span style="font-family:'DM Sans';font-size:13px;color:var(--text-tertiary)">/mo</span></div>
           </div>
         </div>
         <div class="start-options hidden" id="startOptions" role="radiogroup" aria-label="How to start">
           <button type="button" class="start-opt is-on" data-start="trial" role="radio" aria-checked="true">
             <span class="start-opt-head"><strong>Start free trial</strong><span class="start-opt-price">$0 today</span></span>
-            <span class="start-opt-sub">Then <span data-plan-price>$39</span>/month starting <span data-trial-end></span>. Cancel anytime before then.</span>
+            <span class="start-opt-sub">Then <span data-plan-price>$39.99</span>/month starting <span data-trial-end></span>. Cancel anytime before then.</span>
             <span class="start-opt-list">
               <span class="is-yes">Website builder and your booking site</span>
               <span class="is-yes">Calendar, booking requests, and clients</span>
@@ -1222,8 +1222,8 @@
             </span>
           </button>
           <button type="button" class="start-opt" data-start="today" role="radio" aria-checked="false">
-            <span class="start-opt-head"><strong>Start today</strong><span class="start-opt-price"><span data-plan-price>$39</span> today</span></span>
-            <span class="start-opt-sub">Then <span data-plan-price>$39</span> every month. Everything unlocked now.</span>
+            <span class="start-opt-head"><strong>Start today</strong><span class="start-opt-price"><span data-plan-price>$39.99</span> today</span></span>
+            <span class="start-opt-sub">Then <span data-plan-price>$39.99</span> every month. Everything unlocked now.</span>
             <span class="start-opt-list">
               <span class="is-yes">Everything in the free trial</span>
               <span class="is-yes">Client texting with your own business number</span>
@@ -1495,10 +1495,10 @@
     }
 
     var PLAN_CHECKOUT_INFO = {
-      solo: { name: 'Solo', price: '$39' },
-      studio: { name: 'Studio', price: '$79' },
-      shop: { name: 'Shop', price: '$149' },
-      charter: { name: 'Charter', price: '$24' },
+      solo: { name: 'Solo', price: '$39.99' },
+      studio: { name: 'Studio', price: '$79.99' },
+      shop: { name: 'Shop', price: '$149.99' },
+      charter: { name: 'Charter', price: '$24.99' },
     };
 
     function applySignupPathUI() {

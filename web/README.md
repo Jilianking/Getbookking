@@ -35,3 +35,13 @@ To deploy Firestore rules as well: `firebase deploy`
 ## Local testing
 
 Use a static server that supports SPA routing (e.g. `npx serve web` or Firebase emulator).
+
+## Editing the site script
+
+The booking site's script is built from small source files:
+
+- **Edit:** `web/src/site/` — `core.js`, `styles.js`, `booking.js`, `shop.js`, `gallery.js`, `team.js`, and one file per template in `templates/`. Load-time statements live in `00-setup.js` and must keep their order.
+- **Build:** `node scripts/build-site.js` writes `web/js/site.js` and stamps its version into `web/index.html`. Use `--watch` while developing and `--check` to confirm the built file is current.
+- **Don't edit** `web/js/site.js` directly; it is generated. Hosting deploys run the build first.
+
+All source files share one scope, so any top-level function can call any other regardless of file.

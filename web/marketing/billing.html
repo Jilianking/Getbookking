@@ -2,30 +2,37 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
+  <script>
+    (function () {
+      var embed = new URLSearchParams(location.search).get("embed") === "1";
+      try { embed = embed || window.self !== window.top; } catch (e) { embed = true; }
+      if (embed) document.documentElement.classList.add("bk-embed");
+      // Opened on its own: show it inside the shop app (same page, with the sidebar), keeping any return info.
+      else if (location.protocol !== "file:") location.replace("/app/billing" + location.search + location.hash);
+    })();
+  </script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <!-- Google Tag Manager -->
-  <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
-  new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
-  j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
-  'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
-  })(window,document,'script','dataLayer','GTM-PHZKXCNL');</script>
-  <!-- End Google Tag Manager -->
   <script src="assets/gtm-events.js?v=2"></script>
-  <script src="assets/oaiq-pixel.js?v=1"></script>
+  <script src="assets/cookie-consent.js?v=5"></script>
   <title>Billing — Get Bookking</title>
   <link rel="icon" type="image/png" sizes="32x32" href="assets/brand/favicon-32.png?v=13" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500&display=swap" rel="stylesheet" />
   <meta name="billing-copy" content="sms-billing-assign-v3" />
-  <link rel="stylesheet" href="assets/account.css?v=5" />
+  <link rel="stylesheet" href="assets/account.css?v=9" />
   <link rel="stylesheet" href="assets/billing.css?v=12" />
+  <script>
+    /** Leaves the page; inside the shop app it takes over the whole window (Stripe pages can't load in a frame). */
+    function bkGo(url) {
+      try {
+        if (window.top !== window.self) { window.top.location.href = new URL(url, location.href).href; return; }
+      } catch (e) {}
+      window.location.href = url;
+    }
+  </script>
 </head>
 <body>
-  <!-- Google Tag Manager (noscript) -->
-  <noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-PHZKXCNL"
-  height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
-  <!-- End Google Tag Manager (noscript) -->
 
   <header class="acct-header">
     <a class="brand" href="index.html" aria-label="Get Bookking — home">
@@ -591,7 +598,7 @@
         marketingOrigin: window.location.origin
       }).then(function(res) {
         if (res.data && res.data.url) {
-          window.location.href = res.data.url;
+          bkGo(res.data.url);
         } else {
           setPortalLoading(false);
         }
@@ -615,7 +622,7 @@
         marketingOrigin: window.location.origin
       }).then(function(res) {
         if (res.data && res.data.url) {
-          window.location.href = res.data.url;
+          bkGo(res.data.url);
           return;
         }
         throw new Error('Stripe did not return a checkout URL.');
@@ -828,6 +835,10 @@
         }
         if (typeof Stripe !== 'function') {
           throw new Error('Stripe.js did not load.');
+        }
+        // Stripe's live checkout only loads on a secure (https) page, so local http previews would spin forever.
+        if (pk.indexOf('pk_live') === 0 && window.location.protocol !== 'https:') {
+          throw new Error("Secure checkout can't load on this page. Open billing on getbookking.com to continue.");
         }
         var stripe = Stripe(pk);
         var opts = {
@@ -1110,7 +1121,7 @@
             return loadConnectStatus();
           }
           if (data.url) {
-            window.location.href = data.url;
+            bkGo(data.url);
             return;
           }
           throw new Error('Could not start Stripe Connect setup.');
@@ -1121,7 +1132,7 @@
         return fns.httpsCallable('createExpressDashboardLink')({}).then(function(result) {
           var data = (result && result.data) || {};
           if (data.url) {
-            window.location.href = data.url;
+            bkGo(data.url);
             return;
           }
           throw new Error('Could not open your Stripe Connect account.');
@@ -1974,7 +1985,7 @@
 
     function loadDomainSection() {
       domainShow('domainSection', true);
-      return fns.httpsCallable('getCustomDomainStatus')({}).then(function(res) {
+      return fns.httpsCallable('getCustomDomainStatus')({ source: 'web' }).then(function(res) {
         renderDomainSection(res.data || {});
         return loadDomainHistory();
       }).catch(function(err) {
@@ -2087,7 +2098,7 @@
       resetDomainCheckout();
       var btn = domainEl('domainSearchBtn');
       btn.disabled = true;
-      fns.httpsCallable('searchDomains')({ query: q }).then(function(res) {
+      fns.httpsCallable('searchDomains')({ query: q, source: 'web' }).then(function(res) {
         var d = res.data || {};
         var list = domainEl('domainResults');
         list.innerHTML = '';

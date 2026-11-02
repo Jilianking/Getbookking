@@ -3,8 +3,9 @@
     {
       "target": "booking",
       "public": "web",
+      "predeploy": ["node scripts/build-site.js"],
       "cleanUrls": true,
-      "ignore": ["firebase.json", "**/.*", "**/node_modules/**", "marketing/**"],
+      "ignore": ["firebase.json", "**/.*", "**/node_modules/**", "marketing/**", "src/**"],
       "rewrites": [
         { "source": "/join", "destination": "/join.html" },
         { "source": "**", "destination": "/index.html" }
@@ -15,11 +16,20 @@
           "headers": [
             {
               "key": "Cache-Control",
-              "value": "public, max-age=0, must-revalidate"
+              "value": "no-store"
             },
             {
               "key": "Content-Security-Policy",
-              "value": "frame-ancestors 'self' https://getbookking.com https://www.getbookking.com https://getbooking.com https://www.getbooking.com https://test-app-96812.web.app https://test-app-96812-marketing.web.app"
+              "value": "frame-ancestors 'self' https://getbookking.com https://www.getbookking.com https://getbooking.com https://www.getbooking.com https://test-app-96812.web.app https://test-app-96812-marketing.web.app http://localhost:* http://127.0.0.1:*"
+            }
+          ]
+        },
+        {
+          "source": "**/*.@(js|css|json|map|txt|xml)",
+          "headers": [
+            {
+              "key": "Cache-Control",
+              "value": "public, max-age=0, must-revalidate"
             }
           ]
         },
@@ -63,7 +73,8 @@
         { "source": "/hair-salon-software.html", "destination": "/hair-salon-software", "type": 301 },
         { "source": "/nail-salon-software.html", "destination": "/nail-salon-software", "type": 301 },
         { "source": "/tattoo-studio-software.html", "destination": "/tattoo-studio-software", "type": 301 },
-        { "source": "/personal-trainer-software.html", "destination": "/personal-trainer-software", "type": 301 }
+        { "source": "/personal-trainer-software.html", "destination": "/personal-trainer-software", "type": 301 },
+        { "source": "/app/website", "destination": "/design", "type": 302 }
       ],
       "rewrites": [
         { "source": "/fishing-charter-software", "destination": "/fishing-charter-software.html" },
@@ -81,6 +92,24 @@
         { "source": "/signup", "destination": "/signup.html" },
         { "source": "/pricing", "destination": "/pricing.html" },
         { "source": "/login", "destination": "/login.html" },
+        { "source": "/design", "destination": "/design.html" },
+        { "source": "/billing", "destination": "/billing.html" },
+        { "source": "/account", "destination": "/account.html" },
+        { "source": "/settings", "destination": "/settings.html" },
+        { "source": "/app", "destination": "/app.html" },
+        { "source": "/app/requests", "destination": "/app.html" },
+        { "source": "/app/messages", "destination": "/app.html" },
+        { "source": "/app/team", "destination": "/app.html" },
+        { "source": "/app/insights", "destination": "/app.html" },
+        { "source": "/app/profile", "destination": "/app.html" },
+        { "source": "/app/calendar", "destination": "/app.html" },
+        { "source": "/app/clients", "destination": "/app.html" },
+        { "source": "/app/shop", "destination": "/app.html" },
+        { "source": "/app/payments", "destination": "/app.html" },
+        { "source": "/app/payouts", "destination": "/app.html" },
+        { "source": "/app/billing", "destination": "/app.html" },
+        { "source": "/app/account", "destination": "/app.html" },
+        { "source": "/app/settings", "destination": "/app.html" },
         { "source": "/reset-password", "destination": "/reset-password.html" }
       ],
       "headers": [
@@ -89,7 +118,7 @@
           "headers": [
             {
               "key": "Cache-Control",
-              "value": "public, max-age=0, must-revalidate"
+              "value": "no-store"
             }
           ]
         },

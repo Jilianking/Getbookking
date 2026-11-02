@@ -71,7 +71,8 @@ Quick Edit supports:
 - Persisted tenant-specific overrides
 
 Changes to Builder behavior commonly involve both the Swift files under
-`Test/` and the template implementation in `web/index.html`.
+`Test/` and the template implementation in `web/js/site.js` (styles in
+`web/css/site.css`; `web/index.html` only loads them).
 
 ## Technology
 

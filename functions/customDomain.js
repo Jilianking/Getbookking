@@ -94,14 +94,22 @@ const FALLBACK_TRANSFER_USD = { com: 13.98, net: 14.98, org: 13.98, co: 11.98 };
 const BLOCK_DOMAIN_PURCHASING_DURING_TESTFLIGHT = true;
 const TESTFLIGHT_DOMAIN_PURCHASE_BLOCK_MESSAGE = "Unavailable.";
 
-/** A shop with `domainPurchaseBlockExempt` (set by scripts/set-shop-access.js) may buy while blocked. */
-function isDomainPurchasingBlockedDuringTestFlight(tenant) {
+/**
+ * The block only applies in the iPhone app; the website (requests sent with source "web") can always buy.
+ * A shop with `domainPurchaseBlockExempt` (set by scripts/set-shop-access.js) may buy in the app too.
+ */
+function isDomainPurchasingBlockedDuringTestFlight(tenant, fromWeb) {
+  if (fromWeb === true) return false;
   if (BLOCK_DOMAIN_PURCHASING_DURING_TESTFLIGHT !== true) return false;
   return !(tenant && tenant.domainPurchaseBlockExempt === true);
 }
 
-function domainPurchaseBlockReason(tenant) {
-  if (isDomainPurchasingBlockedDuringTestFlight(tenant)) {
+function isWebRequest(data) {
+  return !!(data && data.source === "web");
+}
+
+function domainPurchaseBlockReason(tenant, fromWeb) {
+  if (isDomainPurchasingBlockedDuringTestFlight(tenant, fromWeb)) {
     return TESTFLIGHT_DOMAIN_PURCHASE_BLOCK_MESSAGE;
   }
   return null;
@@ -601,14 +609,14 @@ function domainStatusHint(tenant, statusLower) {
   return { hint: "", detail: "" };
 }
 
-function statusPayload(tenant, tenantId, extras) {
+function statusPayload(tenant, tenantId, extras, fromWeb) {
   const domain = (tenant.customDomain || "").toString().trim().toLowerCase();
   const status = (tenant.customDomainStatus || "").toString().trim() || (domain ? "unknown" : "none");
   const source = (tenant.customDomainSource || "").toString().trim() || null;
   const subdomain = (tenant.slug || "").toString().trim().toLowerCase();
   const configured = namecheapConfigured();
-  const domainBlocked = isDomainPurchasingBlockedDuringTestFlight(tenant);
-  const domainBlockMessage = domainPurchaseBlockReason(tenant) || "";
+  const domainBlocked = isDomainPurchasingBlockedDuringTestFlight(tenant, fromWeb);
+  const domainBlockMessage = domainPurchaseBlockReason(tenant, fromWeb) || "";
   const sandbox = isSandboxHost();
   const statusLower = status.toLowerCase();
   const hasDomain = !!domain && statusLower !== "none";
@@ -2247,7 +2255,7 @@ function registerCustomDomainFunctions(exportsObj, options) {
       }
     }
 
-    return statusPayload(tenant, tenantId, extras);
+    return statusPayload(tenant, tenantId, extras, isWebRequest(data));
   });
 
   exportsObj.checkDomainAvailability = functions
@@ -2334,8 +2342,8 @@ function registerCustomDomainFunctions(exportsObj, options) {
       }
 
       const markup = readMarkupConfig();
-      const domainBlocked = isDomainPurchasingBlockedDuringTestFlight(searchTenant);
-      const domainBlockMessage = domainPurchaseBlockReason(searchTenant) || "";
+      const domainBlocked = isDomainPurchasingBlockedDuringTestFlight(searchTenant, isWebRequest(data));
+      const domainBlockMessage = domainPurchaseBlockReason(searchTenant, isWebRequest(data)) || "";
       if (!namecheapConfigured() || !(namecheapApiKey.value() || "").trim()) {
         return {
           ok: true,
@@ -2482,7 +2490,7 @@ function registerCustomDomainFunctions(exportsObj, options) {
       const tenantId = await resolveUidTenant(uid);
       const tenantDoc = await assertTenantOwner(uid, tenantId);
       const tenant = tenantDoc.data() || {};
-      const domainBlock = domainPurchaseBlockReason(tenant);
+      const domainBlock = domainPurchaseBlockReason(tenant, isWebRequest(data));
       if (domainBlock) {
         throw new functions.https.HttpsError("failed-precondition", domainBlock);
       }
@@ -2613,7 +2621,7 @@ function registerCustomDomainFunctions(exportsObj, options) {
       const tenantId = await resolveUidTenant(uid);
       const tenantDoc = await assertTenantOwner(uid, tenantId);
       const tenant = tenantDoc.data() || {};
-      const domainBlock = domainPurchaseBlockReason(tenant);
+      const domainBlock = domainPurchaseBlockReason(tenant, isWebRequest(data));
       if (domainBlock) {
         throw new functions.https.HttpsError("failed-precondition", domainBlock);
       }

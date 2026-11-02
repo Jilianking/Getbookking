@@ -1,0 +1,163 @@
+/* Sections owners add in the web editor (text box, FAQ, policies, hours and map) and the header logo.
+   They take the template's colors and fonts so they fit every template. */
+.bk-block {
+  padding: clamp(40px, 5vw, 64px) 20px;
+  color: inherit;
+}
+.bk-block-inner {
+  max-width: 880px;
+  margin: 0 auto;
+}
+.bk-block--center .bk-block-inner { text-align: center; }
+/* Two added sections in a row read as one run of content, not two far-apart bands. */
+.bk-block + .bk-block { padding-top: 0; }
+.bk-block-title {
+  font-family: var(--font-hero, var(--font-display, var(--sc-display-font, inherit)));
+  font-size: clamp(1.7rem, 3.4vw, 2.4rem);
+  font-weight: 500;
+  line-height: 1.15;
+  margin: 0 0 20px;
+  color: inherit;
+}
+.blade-page .bk-block-title { font-family: 'Bebas Neue', sans-serif; letter-spacing: 0.02em; font-size: clamp(2.2rem, 4.4vw, 3.2rem); }
+.studio12-page .bk-block-title { font-family: "Cormorant Garamond", serif; }
+.bk-block-body,
+.bk-block-a {
+  font-size: 1.02rem;
+  line-height: 1.7;
+  margin: 0;
+  opacity: 0.85;
+  white-space: normal;
+}
+.bk-block-hint { font-style: italic; opacity: 0.6; }
+.bk-block-list { display: grid; gap: 0; text-align: left; }
+.bk-block--center .bk-block-list { max-width: 680px; margin: 0 auto; }
+.bk-block-faq-item,
+.bk-block-policy {
+  border-top: 1px solid color-mix(in srgb, currentColor 16%, transparent);
+  padding: 18px 0;
+}
+.bk-block-faq-item:last-child,
+.bk-block-policy:last-child { border-bottom: 1px solid color-mix(in srgb, currentColor 16%, transparent); }
+.bk-block-q {
+  font-size: 1.08rem;
+  font-weight: 600;
+  margin: 0;
+  color: inherit;
+}
+.bk-block-faq-item summary {
+  cursor: pointer;
+  list-style: none;
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+}
+.bk-block-faq-item summary::-webkit-details-marker { display: none; }
+.bk-block-faq-item summary::after {
+  content: '+';
+  color: var(--bk-accent, currentColor);
+  font-weight: 400;
+  font-size: 1.3rem;
+  line-height: 1;
+}
+.bk-block-faq-item[open] summary::after { content: '–'; }
+.bk-block-faq-item .bk-block-a,
+.bk-block-policy .bk-block-a { margin-top: 8px; }
+.bk-block-hours-wrap {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr);
+  gap: 32px;
+  align-items: start;
+  text-align: left;
+}
+.bk-block-hours-wrap > div:only-child { grid-column: 1 / -1; }
+.bk-block-hours-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 8px 0;
+  border-bottom: 1px solid color-mix(in srgb, currentColor 12%, transparent);
+}
+.bk-block-hours-row .is-closed { opacity: 0.55; }
+.bk-block-address { margin: 20px 0 0; line-height: 1.6; }
+.bk-block-address a { color: inherit; text-decoration: underline; text-underline-offset: 3px; }
+.bk-block-map iframe {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  border: 0;
+  border-radius: 10px;
+  display: block;
+}
+@media (max-width: 720px) {
+  .bk-block-hours-wrap { grid-template-columns: 1fr; gap: 24px; }
+  .bk-block--center .bk-block-hours-wrap > div:first-child { text-align: center; }
+}
+
+/* Header logo (webHeaderBrand: name, logo, or both). With just the name, the wrapper adds nothing. */
+.bk-nav-brand { display: contents; }
+.bk-nav-brand .bk-nav-logo { display: none; }
+.bk-nav-brand[data-has-logo][data-mode="logo"],
+.bk-nav-brand[data-has-logo][data-mode="both"] { display: inline-flex; align-items: center; gap: 10px; }
+.bk-nav-brand[data-has-logo][data-mode="logo"] .bk-nav-logo,
+.bk-nav-brand[data-has-logo][data-mode="both"] .bk-nav-logo { display: inline-block; }
+.bk-nav-brand[data-has-logo][data-mode="logo"] .bk-nav-name {
+  position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap;
+}
+.bk-nav-logo {
+  height: var(--bk-logo-h, 40px);
+  width: auto;
+  max-width: calc(var(--bk-logo-h, 40px) * 4);
+  object-fit: contain;
+  vertical-align: middle;
+}
+@media (max-width: 720px) {
+  .bk-nav-logo { height: calc(var(--bk-logo-h, 40px) * 0.75); max-width: min(calc(var(--bk-logo-h, 40px) * 3), 45vw); }
+}
+
+/* Photo beside a section's content (Photo layout: left or right). */
+.bk-sec-photo-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: clamp(24px, 4vw, 56px);
+  align-items: center;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 clamp(16px, 3vw, 32px);
+  box-sizing: border-box;
+  width: 100%;
+}
+.bk-sec-photo-grid[data-photo-side="right"] .bk-sec-photo { order: 2; }
+.bk-sec-photo-body { min-width: 0; }
+.bk-sec-photo img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 4 / 5;
+  max-height: 620px;
+  object-fit: cover;
+  border-radius: 10px;
+}
+@media (max-width: 720px) {
+  .bk-sec-photo-grid { grid-template-columns: 1fr; gap: 24px; }
+  .bk-sec-photo-grid[data-photo-side="right"] .bk-sec-photo { order: 0; }
+  .bk-sec-photo img { aspect-ratio: 4 / 3; }
+}
+
+/* Button looks (webButtonStyles), set per button in the web editor. Solid is each template's own style. */
+[data-cta-key][data-bk-btn-style="pill"] { border-radius: 999px !important; }
+[data-cta-key][data-bk-btn-style="outline"] {
+  background: transparent !important;
+  border: 1.5px solid currentColor !important;
+  box-shadow: none !important;
+}
+[data-cta-key][data-bk-btn-style="outline"]:not([style*="color"]) { color: var(--bk-accent, currentColor) !important; }
+[data-cta-key][data-bk-btn-style="link"] {
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+  min-height: 0 !important;
+  text-decoration: underline !important;
+  text-underline-offset: 4px;
+}
+[data-cta-key][data-bk-btn-style="link"]:not([style*="color"]) { color: inherit !important; }

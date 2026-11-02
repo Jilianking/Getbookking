@@ -1,0 +1,402 @@
+/**
+ * Shop portal shell: auth gate, Harbor rail, client routes.
+ */
+(function () {
+  "use strict";
+
+  firebase.initializeApp(window.firebaseConfig);
+  var auth = firebase.auth();
+
+  function $(id) {
+    return document.getElementById(id);
+  }
+
+  function showGate(id) {
+    ["gateLoading", "gateLogin", "gateNoShop", "appShell"].forEach(function (gid) {
+      $(gid).classList.toggle("hidden", gid !== id);
+    });
+  }
+
+  var ROUTES = [
+    "dashboard",
+    "requests",
+    "messages",
+    "team",
+    "insights",
+    "profile",
+    "calendar",
+    "clients",
+    "shop",
+    "payments",
+    "payouts",
+    "website",
+    "billing",
+    "account",
+    "settings",
+  ];
+  var FRAME_SRC = {
+    billing: "/billing?embed=1",
+    account: "/account?embed=1",
+    settings: "/settings?embed=1",
+  };
+  var FRAME_FILE = {
+    billing: "billing.html?embed=1",
+    account: "account.html?embed=1",
+    settings: "settings.html?embed=1",
+  };
+  var FRAME_ID = {
+    billing: "frameBilling",
+    account: "frameAccount",
+    settings: "frameSettings",
+  };
+
+  function frameUrl(route) {
+    if (location.protocol === "file:") return FRAME_FILE[route] || "";
+    return FRAME_SRC[route] || "";
+  }
+
+  function routeFromLocation() {
+    var path = (location.pathname || "").replace(/\/+$/, "") || "/app";
+    var view = new URLSearchParams(location.search).get("view");
+    if (view && ROUTES.indexOf(view) !== -1 && (path === "/app" || path.indexOf("app.html") !== -1)) {
+      return view;
+    }
+    if (path.indexOf("app.html") !== -1) {
+      var q = new URLSearchParams(location.search).get("view");
+      if (ROUTES.indexOf(q) !== -1) return q;
+      return "dashboard";
+    }
+    if (path.indexOf("/app/requests") !== -1) return "requests";
+    if (path.indexOf("/app/messages") !== -1) return "messages";
+    if (path.indexOf("/app/team") !== -1) return "team";
+    if (path.indexOf("/app/insights") !== -1) return "insights";
+    if (path.indexOf("/app/profile") !== -1) return "profile";
+    if (path.indexOf("/app/calendar") !== -1) return "calendar";
+    if (path.indexOf("/app/clients") !== -1) return "clients";
+    if (path.indexOf("/app/shop") !== -1) return "shop";
+    if (path.indexOf("/app/payouts") !== -1) return "payouts";
+    if (path.indexOf("/app/payments") !== -1) return "payments";
+    if (path.indexOf("/app/website") !== -1) return "website";
+    if (path.indexOf("/app/billing") !== -1) return "billing";
+    if (path.indexOf("/app/settings") !== -1) return "settings";
+    if (path.indexOf("/app/account") !== -1) return "account";
+    return "dashboard";
+  }
+
+  function hrefFor(route) {
+    if (route === "website") {
+      return location.protocol === "file:" ? "design.html" : "/design";
+    }
+    if (location.protocol === "file:") {
+      return "app.html" + (route === "dashboard" ? "" : "?view=" + route);
+    }
+    if (route === "dashboard") return "/app";
+    if (route === "settings") return "/app?view=settings";
+    return "/app/" + route;
+  }
+
+  function viewId(name) {
+    return "view" + name.charAt(0).toUpperCase() + name.slice(1);
+  }
+
+  /**
+   * Links like /billing?checkout=success forward to /app/billing?checkout=success. Hand that return
+   * info (and any #section) to the page inside the frame once, then tidy the address bar.
+   */
+  var handedOff = false;
+  function frameExtras(route) {
+    if (handedOff || routeFromLocation() !== route) return "";
+    handedOff = true;
+    var params = new URLSearchParams(location.search);
+    params.delete("view");
+    params.delete("embed");
+    var q = params.toString();
+    var extra = (q ? "&" + q : "") + (location.hash || "");
+    if (extra && location.protocol !== "file:") {
+      try { history.replaceState(null, "", "/app/" + route); } catch (e) {}
+    }
+    return extra;
+  }
+
+  function ensureFrame(route) {
+    var id = FRAME_ID[route];
+    if (!id) return;
+    var frame = $(id);
+    if (!frame) return;
+    var extra = frameExtras(route);
+    var url = frameUrl(route);
+    if (extra) {
+      frame.src = url + extra;
+      return;
+    }
+    if (frame.getAttribute("src") === url) return;
+    frame.src = url;
+  }
+
+  function isNarrow() {
+    return window.matchMedia("(max-width: 960px)").matches;
+  }
+
+  function setRailCollapsed(collapsed) {
+    var shell = $("appShell");
+    if (!shell) return;
+    shell.classList.toggle("is-rail-collapsed", collapsed);
+    var btn = $("railToggle");
+    if (btn) {
+      btn.textContent = collapsed ? "›" : "‹";
+      btn.setAttribute("aria-expanded", collapsed ? "false" : "true");
+      btn.setAttribute("aria-label", collapsed ? "Show sidebar" : "Hide sidebar");
+    }
+    try {
+      sessionStorage.setItem("bk-rail-collapsed", collapsed ? "1" : "0");
+    } catch (e) {}
+  }
+
+  function initRail() {
+    var stored = null;
+    try {
+      stored = sessionStorage.getItem("bk-rail-collapsed");
+    } catch (e) {}
+    var collapsed;
+    if (stored === "1") collapsed = true;
+    else if (stored === "0") collapsed = false;
+    else collapsed = isNarrow();
+    setRailCollapsed(collapsed);
+  }
+
+  var ROUTE_ACCESS = { messages: "messages", profile: "websiteProfile", team: "team", clients: "clients", website: "website", billing: "billing", shop: "shop", payments: "payments", payouts: "payments" };
+
+  function setRoute(route, session) {
+    // A link or bookmark to a page this person can't use lands on the dashboard.
+    if (session && ROUTE_ACCESS[route] && window.ShopAppAccess && !ShopAppAccess.can(session, ROUTE_ACCESS[route])) {
+      route = "dashboard";
+    }
+    if (route === "website") {
+      window.location.replace(hrefFor("website"));
+      return;
+    }
+    if (route === "payouts" && session && !(session.teamMode && session.isOwner)) {
+      route = "payments";
+    }
+    ROUTES.forEach(function (name) {
+      var view = $(viewId(name));
+      if (view) view.classList.toggle("hidden", name !== route);
+    });
+    ensureFrame(route);
+    var canvas = $("appCanvas");
+    if (canvas) canvas.classList.toggle("is-frame", !!FRAME_ID[route]);
+    document.querySelectorAll(".app-nav[data-route]").forEach(function (link) {
+      link.classList.toggle("is-active", link.getAttribute("data-route") === route);
+    });
+    var folder = $("paymentsFolder");
+    if (folder) {
+      folder.classList.toggle("is-open", route === "payments" || route === "payouts");
+    }
+    var titles = {
+      dashboard: "Dashboard",
+      requests: "Requests",
+      messages: "Messages",
+      team: "Team",
+      insights: "Insights",
+      profile: "Your website profile",
+      calendar: "Calendar",
+      clients: "Clients",
+      shop: "Shop",
+      payments: "Payments",
+      payouts: "Team payouts",
+      website: "Website builder",
+      billing: "Plan & billing",
+      account: "Your account",
+      settings: "Settings",
+    };
+    document.title = (titles[route] || "Shop") + " — Get Bookking";
+    if (route === "payments" && window.ShopAppPayments) {
+      ShopAppPayments.load(session);
+    }
+    if (route === "payouts" && window.ShopAppPayouts) {
+      ShopAppPayouts.load(session);
+    }
+    if (route === "team" && window.ShopAppTeam) {
+      ShopAppTeam.load(session);
+    }
+    if (route === "profile" && window.ShopAppProfile) {
+      ShopAppProfile.load(session);
+    }
+    if (route === "insights" && window.ShopAppInsights) {
+      ShopAppInsights.load(session);
+    }
+    if (route === "messages" && window.ShopAppMessages) {
+      ShopAppMessages.load(session);
+    }
+    if (route === "requests" && window.ShopAppRequests) {
+      ShopAppRequests.load(session);
+    }
+    if (route === "clients" && window.ShopAppClients) {
+      ShopAppClients.load(session);
+    }
+    if (route === "shop" && window.ShopAppShop) {
+      ShopAppShop.load(session);
+    }
+  }
+
+  function formatToday() {
+    return new Date().toLocaleDateString("en-US", {
+      weekday: "long",
+      month: "short",
+      day: "numeric",
+    });
+  }
+
+  function paintSession(session) {
+    $("shopName").textContent = session.shopName;
+    $("shopKind").textContent = session.shopKind;
+    $("userName").textContent =
+      session.user.displayName || session.firstName || session.user.email || "Account";
+    $("userRole").textContent = session.isOwner ? "Owner" : "Team";
+    var initial = ($("userName").textContent || "?").charAt(0).toUpperCase();
+    $("userInitial").textContent = initial;
+
+    // Hide what this person isn't allowed to open (Team → Permissions for managers).
+    [["dashRecordPay", "payments"], ["dashDue", "payments"], ["dashNewClient", "clients"]].forEach(function (pair) {
+      var el = $(pair[0]);
+      if (el) el.classList.toggle("hidden", !ShopAppAccess.can(session, pair[1]));
+    });
+    var can = function (w) { return ShopAppAccess.can(session, w); };
+    var navFor = function (route) { return document.querySelectorAll('.app-nav[data-route="' + route + '"]'); };
+    // Owners edit the whole site in the Website builder; team members with permission get their profile.
+    navFor("profile").forEach(function (el) { el.classList.toggle("hidden", session.isOwner || !can("websiteProfile")); });
+    [["messages", "messages"], ["team", "team"], ["clients", "clients"], ["website", "website"], ["billing", "billing"], ["shop", "shop"], ["payouts", "payments"]]
+      .forEach(function (pair) {
+        navFor(pair[0]).forEach(function (el) { el.classList.toggle("hidden", !can(pair[1])); });
+      });
+    // Owners of team shops get Client payments + Team payouts; everyone else gets one "Payments" link.
+    var ownerTeam = session.teamMode && session.isOwner;
+    $("paymentsFolder").classList.toggle("hidden", !ownerTeam);
+    $("paymentsFlat").classList.toggle("hidden", ownerTeam);
+    var flatLink = document.querySelector('#paymentsFlat .app-nav');
+    if (flatLink) flatLink.textContent = "Payments";
+    if (!can("payments")) {
+      $("paymentsFlat").classList.add("hidden");
+      $("paymentsFolder").classList.add("hidden");
+    }
+
+    var greet = session.salutation;
+    if (session.firstName) greet += ", " + session.firstName;
+    $("dashGreeting").textContent = greet;
+    if ($("todayLabel")) $("todayLabel").textContent = formatToday();
+    $("calDate").textContent = new Date().toLocaleDateString("en-US", {
+      weekday: "long",
+      month: "long",
+      day: "numeric",
+      year: "numeric",
+    });
+
+    document.querySelectorAll("a[data-route]").forEach(function (a) {
+      a.setAttribute("href", hrefFor(a.getAttribute("data-route")));
+    });
+  }
+
+  /* On iPhone, the Website builder button offers the iPhone app (the desktop editor is cramped on a phone). */
+  // Swap for the App Store link once the app is approved.
+  var IPHONE_APP_URL = "https://testflight.apple.com/join/GD8AUjpS";
+  var IPHONE_APP_LABEL = "Open in TestFlight";
+
+  function isIPhone() {
+    return /iPhone|iPod/.test(navigator.userAgent || "");
+  }
+
+  function setOpenAppSheet(open) {
+    var sheet = $("appOpenSheet");
+    var scrim = $("appOpenScrim");
+    if (!sheet || !scrim) return false;
+    sheet.classList.toggle("hidden", !open);
+    scrim.classList.toggle("hidden", !open);
+    return true;
+  }
+
+  function wireOpenApp() {
+    var go = $("appOpenGo");
+    if (!go) return;
+    go.href = IPHONE_APP_URL;
+    go.textContent = IPHONE_APP_LABEL;
+    ["appOpenClose", "appOpenScrim"].forEach(function (id) {
+      $(id).addEventListener("click", function () { setOpenAppSheet(false); });
+    });
+    document.addEventListener("click", function (ev) {
+      if (!isIPhone()) return;
+      var link = ev.target.closest && ev.target.closest('a[data-route="website"], a[href="/design"]:not(#appOpenWeb)');
+      if (!link) return;
+      ev.preventDefault();
+      if (isNarrow()) setRailCollapsed(true);
+      setOpenAppSheet(true);
+    }, true);
+  }
+
+  function wireNav(session) {
+    document.querySelectorAll("a[data-route]").forEach(function (a) {
+      a.addEventListener("click", function (ev) {
+        if (ev.metaKey || ev.ctrlKey || ev.shiftKey || ev.altKey) return;
+        var route = a.getAttribute("data-route");
+        if (route === "website") return;
+        ev.preventDefault();
+        var href = hrefFor(route);
+        if (location.pathname + location.search !== href) {
+          history.pushState({ route: route }, "", href);
+        }
+        setRoute(route, session);
+        if (isNarrow()) setRailCollapsed(true);
+      });
+    });
+    window.addEventListener("popstate", function () {
+      setRoute(routeFromLocation(), session);
+    });
+    initRail();
+    $("railToggle").addEventListener("click", function () {
+      setRailCollapsed(!$("appShell").classList.contains("is-rail-collapsed"));
+    });
+    $("railScrim").addEventListener("click", function () {
+      setRailCollapsed(true);
+    });
+    $("railSignOut").addEventListener("click", function () {
+      auth.signOut().then(function () {
+        window.location.href = "/";
+      });
+    });
+  }
+
+  wireOpenApp();
+
+  auth.onAuthStateChanged(function (user) {
+    if (!user) {
+      // After logging in, come back to this exact page (and any return info on it).
+      var back = (location.pathname + location.search + location.hash).replace(/^\/+/, "");
+      var loginLink = document.querySelector("#gateLogin a[href*='login']");
+      if (loginLink && back) loginLink.href = "/login.html?next=" + encodeURIComponent(back);
+      showGate("gateLogin");
+      return;
+    }
+    ShopAppSession.load(user)
+      .then(function (session) {
+        paintSession(session);
+        wireNav(session);
+        showGate("appShell");
+        if (window.ShopAppPayments) ShopAppPayments.attach(session);
+        if (window.ShopAppClients) ShopAppClients.attach(session);
+        if (window.ShopAppShop) ShopAppShop.attach(session);
+        if (window.ShopAppRequests) ShopAppRequests.attach(session);
+        if (window.ShopAppMessages && ShopAppAccess.can(session, "messages")) ShopAppMessages.attach(session);
+        setRoute(routeFromLocation(), session);
+        if (window.ShopAppDashboard) ShopAppDashboard.load(session);
+        if (window.ShopAppDashCharts) ShopAppDashCharts.load(session);
+      })
+      .catch(function (err) {
+        if (err && err.code === "no-shop") {
+          showGate("gateNoShop");
+          return;
+        }
+        $("gateNoShopMsg").textContent =
+          (err && err.message) || "Could not load your shop.";
+        showGate("gateNoShop");
+      });
+  });
+})();

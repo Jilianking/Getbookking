@@ -747,15 +747,16 @@ struct DesignView: View {
 
     private var previewContent: some View {
         VStack(spacing: 0) {
+            // Only while a custom domain is still connecting; a live domain needs no note.
             if let domain = viewModel.customDomain, !domain.isEmpty,
-               viewModel.customDomainStatus.lowercased() != "none" {
+               ["connecting", "transferring", "pending"].contains(viewModel.customDomainStatus.lowercased()) {
                 HStack(spacing: 8) {
                     Image(systemName: "globe")
                         .font(.caption.weight(.semibold))
                     VStack(alignment: .leading, spacing: 2) {
                         Text(domain)
                             .font(.subheadline.weight(.semibold))
-                        Text("Blank starter ready — build here. Visitors will use this domain when DNS is live.")
+                        Text("Connecting your domain. Keep building here; visitors will see it at this address once it's live.")
                             .font(.caption2)
                             .foregroundStyle(.secondary)
                     }

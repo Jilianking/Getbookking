@@ -183,7 +183,7 @@ body > nav .nav-cta--filled:hover {
   }
 }
 
-/* Center links in header on wide screens; auth buttons always visible */
+/* Center links in header on wide screens; auth buttons hide when the drawer is showing */
 body > nav > .nav-links {
   display: flex;
 }
@@ -549,7 +549,7 @@ body.nav-open {
   overflow: hidden;
 }
 
-@media (max-width: 768px) {
+@media (max-width: 900px) {
   body > nav {
     justify-content: space-between;
     padding: 0 20px;

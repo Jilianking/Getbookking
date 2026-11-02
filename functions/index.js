@@ -231,8 +231,8 @@ function providerTrialEndUnixFromTenant(tenant) {
 
 function planListPriceCents(planNorm) {
   const plan = normalizeSubscriptionPlan(planNorm);
-  const map = { solo: 3900, studio: 7900, shop: 14900, charter: 2400 };
-  return map[plan] || 3900;
+  const map = { solo: 3999, studio: 7999, shop: 14999, charter: 2499 };
+  return map[plan] || 3999;
 }
 
 function stripePriceIdForPlan(planNorm) {
@@ -2467,12 +2467,14 @@ exports.updateStatementDescriptor = functions
         "Statement descriptor must be 5–22 characters."
       );
     }
-    if (!/^[A-Z0-9 ]+$/.test(descriptor)) {
+    if (!/^[A-Z0-9. ]+$/.test(descriptor)) {
       throw new functions.https.HttpsError(
         "invalid-argument",
-        "Use letters, numbers, and spaces only."
+        "Use letters, numbers, periods, and spaces only."
       );
     }
+
+    // Periods are valid Stripe statement characters (e.g. BLEUSTATTOOS.COM).
 
     let prefix;
     if (data?.statementDescriptorPrefix !== undefined) {
@@ -2490,10 +2492,10 @@ exports.updateStatementDescriptor = functions
         "Card prefix must be 2–10 characters."
       );
     }
-    if (!/^[A-Z0-9 ]+$/.test(prefix)) {
+    if (!/^[A-Z0-9. ]+$/.test(prefix)) {
       throw new functions.https.HttpsError(
         "invalid-argument",
-        "Card prefix: use letters, numbers, and spaces only."
+        "Card prefix: use letters, numbers, periods, and spaces only."
       );
     }
 
@@ -2513,7 +2515,30 @@ exports.updateStatementDescriptor = functions
       );
     }
 
+    const currentDescriptor = (
+      account.settings?.payments?.statement_descriptor || ""
+    )
+      .toString()
+      .trim()
+      .toUpperCase()
+      .replace(/\s+/g, " ");
+    const currentPrefix = (
+      account.settings?.card_payments?.statement_descriptor_prefix || ""
+    )
+      .toString()
+      .trim()
+      .toUpperCase()
+      .replace(/\s+/g, " ");
+    if (currentDescriptor === descriptor) {
+      return {
+        statementDescriptor: currentDescriptor,
+        statementDescriptorPrefix: currentPrefix || prefix,
+        prefixOnly: false,
+      };
+    }
+
     let updated;
+    let prefixOnly = false;
     try {
       updated = await stripe.accounts.update(stripeAccountId, {
         settings: {
@@ -2522,11 +2547,30 @@ exports.updateStatementDescriptor = functions
         },
       });
     } catch (err) {
-      console.error("updateStatementDescriptor", err);
-      const msg =
-        (err && err.message) ||
-        "Could not update statement descriptor. Try a name closer to your business.";
-      throw new functions.https.HttpsError("invalid-argument", msg);
+      const paymentsLocked = /required permissions for the parameter ['"]payments['"]/i.test(
+        String((err && err.message) || "")
+      );
+      if (!paymentsLocked) {
+        console.error("updateStatementDescriptor", err);
+        const msg =
+          (err && err.message) ||
+          "Could not update statement descriptor. Try a name closer to your business.";
+        throw new functions.https.HttpsError("invalid-argument", msg);
+      }
+      try {
+        updated = await stripe.accounts.update(stripeAccountId, {
+          settings: {
+            card_payments: { statement_descriptor_prefix: prefix },
+          },
+        });
+        prefixOnly = true;
+      } catch (prefixErr) {
+        console.error("updateStatementDescriptor prefix", prefixErr);
+        throw new functions.https.HttpsError(
+          "failed-precondition",
+          "Stripe manages the full statement name on this account. Open Stripe dashboard to change it."
+        );
+      }
     }
 
     return {
@@ -2537,6 +2581,7 @@ exports.updateStatementDescriptor = functions
         (updated.settings?.card_payments?.statement_descriptor_prefix || "")
           .toString()
           .trim() || prefix,
+      prefixOnly,
     };
   });
 
@@ -9247,6 +9292,17 @@ exports.completeProviderSignupWithoutCheckout = functions.https.onCall(async (da
     subscriptionStatus: "trialing",
   });
   await pendingRef.delete().catch(() => {});
+  // Marketing email choice from the sign-up checkbox (separate from the Terms). Kept as proof of consent.
+  if (data && typeof data.marketingEmailOptIn === "boolean") {
+    await db.collection("users").doc(uid).set(
+      {
+        marketingEmailOptIn: data.marketingEmailOptIn,
+        marketingEmailOptInAt: admin.firestore.FieldValue.serverTimestamp(),
+        marketingEmailOptInSource: "web_signup",
+      },
+      { merge: true }
+    ).catch((e) => console.warn("marketingEmailOptIn save failed", e.message || e));
+  }
   return result;
 });
 
@@ -11658,6 +11714,135 @@ exports.listTenantMembers = functions
   };
 });
 
+/**
+ * Owner-only: team payout overview for the web Team payouts page.
+ * Params: { fromMs?, toMs? } (defaults to the current month).
+ * Returns { members, entries, truncated } — members carry payout settings, Stripe status, and
+ * period totals; entries are paymentLedger rows in the range (newest first, max 500).
+ */
+exports.getTeamPayoutSummary = functions
+  .runWith({ secrets: [stripeSecretKey] })
+  .https.onCall(async (data, context) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError("unauthenticated", "Must be signed in.");
+    }
+    const ctx = await getMemberAccessContext(context.auth.uid);
+    if (!ctx.isOwner) {
+      throw new functions.https.HttpsError("permission-denied", "Only the shop owner can view team payouts.");
+    }
+    const tenantId = ctx.tenantId;
+    const tenant = ctx.tenant;
+    const ownerUid = (tenant.ownerUid || "").toString();
+
+    const now = new Date();
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+    let fromMs = Number(data && data.fromMs);
+    let toMs = Number(data && data.toMs);
+    if (!Number.isFinite(fromMs) || fromMs <= 0) fromMs = monthStart;
+    if (!Number.isFinite(toMs) || toMs <= 0) toMs = now.getTime();
+    if (toMs < fromMs) [fromMs, toMs] = [toMs, fromMs];
+
+    const MAX_ENTRIES = 500;
+    const [usersSnap, ledgerSnap] = await Promise.all([
+      db.collection("users").where("tenantId", "==", tenantId).get(),
+      db
+        .collection("tenants")
+        .doc(tenantId)
+        .collection("paymentLedger")
+        .where("createdAt", ">=", admin.firestore.Timestamp.fromMillis(fromMs))
+        .where("createdAt", "<=", admin.firestore.Timestamp.fromMillis(toMs))
+        .orderBy("createdAt", "desc")
+        .limit(MAX_ENTRIES + 1)
+        .get(),
+    ]);
+
+    const secretKey = stripeSecretKey.value();
+    const stripe = secretKey ? new Stripe(secretKey, { apiVersion: "2024-11-20.acacia" }) : null;
+
+    async function stripeStatus(accountId) {
+      if (!accountId) return "not_connected";
+      if (!stripe) return "unknown";
+      try {
+        const account = await stripe.accounts.retrieve(accountId);
+        if (account.charges_enabled && account.payouts_enabled) return "active";
+        if (account.details_submitted) return "restricted";
+        return "incomplete";
+      } catch (err) {
+        console.warn("getTeamPayoutSummary account", accountId, err.message);
+        return "unknown";
+      }
+    }
+
+    const members = await Promise.all(
+      usersSnap.docs.map(async (doc) => {
+        const d = doc.data() || {};
+        const isOwner = doc.id === ownerUid;
+        const settings = normalizeMemberSettings(d.memberSettings);
+        const accountId = (isOwner ? tenant.stripeAccountId : d.stripeAccountId || "").toString().trim();
+        const fn = (d.firstName || "").toString().trim();
+        const ln = (d.lastName || "").toString().trim();
+        return {
+          uid: doc.id,
+          displayName: (d.displayName || d.name || `${fn} ${ln}`.trim() || "Member").toString(),
+          profilePhotoUrl: (d.profilePhotoUrl || "").toString(),
+          isOwner,
+          payoutMode: isOwner ? null : settings.payoutMode,
+          paymentSplitEnabled: !isOwner && settings.paymentSplitEnabled,
+          paymentSplitPercent: isOwner ? 0 : settings.paymentSplitPercent,
+          paymentSplitAppliesTo: settings.paymentSplitAppliesTo,
+          canTakePayments: isOwner || settings.canTakePayments !== false,
+          stripeStatus: await stripeStatus(accountId),
+          totals: { count: 0, grossCents: 0, memberCents: 0, studioCents: 0, studioReturnedCents: 0, feeCents: 0 },
+        };
+      })
+    );
+    const byUid = {};
+    members.forEach((m) => { byUid[m.uid] = m; });
+
+    const docs = ledgerSnap.docs.slice(0, MAX_ENTRIES);
+    const entries = docs.map((doc) => {
+      const l = doc.data() || {};
+      const memberUid = (l.attributedMemberUid || ownerUid).toString();
+      const isOwnerEntry = memberUid === ownerUid;
+      const service = Math.round(Number(l.serviceCents) || 0);
+      const split = l.splitApplied === true;
+      // Owner charges are all studio money; a member keeps their split share, or all of it when no split applies.
+      const memberCents = isOwnerEntry ? 0 : split ? Math.round(Number(l.artistShareCents) || 0) : service;
+      const studioCents = isOwnerEntry ? service : split ? Math.round(Number(l.studioServiceShareCents) || 0) : 0;
+      const entry = {
+        id: doc.id,
+        createdAtMs: l.createdAt && l.createdAt.toMillis ? l.createdAt.toMillis() : null,
+        memberUid,
+        paymentKind: (l.paymentKind || "service").toString(),
+        grossCents: Math.round(Number(l.grossCents) || 0),
+        serviceCents: service,
+        feeCents: Math.round(Number(l.stripeFeeCents) || 0),
+        splitApplied: split,
+        splitPercentApplied: Math.round(Number(l.splitPercentApplied) || 0),
+        memberCents,
+        studioCents,
+        studioShareStatus: (l.studioShareStatus || (split ? "pending" : "not_applicable")).toString(),
+        studioReturnedCents: Math.round(Number(l.studioShareReversedCents) || 0),
+      };
+      const m = byUid[memberUid];
+      if (m) {
+        m.totals.count += 1;
+        m.totals.grossCents += entry.grossCents;
+        m.totals.memberCents += entry.memberCents;
+        m.totals.studioCents += entry.studioCents;
+        m.totals.studioReturnedCents += entry.studioReturnedCents;
+        m.totals.feeCents += entry.feeCents;
+      }
+      return entry;
+    });
+
+    members.sort((a, b) => {
+      if (a.isOwner !== b.isOwner) return a.isOwner ? -1 : 1;
+      return (a.displayName || "").localeCompare(b.displayName || "");
+    });
+    return { fromMs, toMs, members, entries, truncated: ledgerSnap.size > MAX_ENTRIES };
+  });
+
 /** Owner-only: save manager permission toggles and notification prefs on tenant. */
 exports.updateTenantManagerPolicy = functions.https.onCall(async (data, context) => {
   if (!context.auth) {
@@ -13839,6 +14024,136 @@ exports.completeInitialSubscriptionCheckout = functions
       );
     }
     return result;
+  });
+
+/**
+ * Web sign-up, card before the account is finished (Terms §8: a card is required for the free trial).
+ * Step 1: a Stripe SetupIntent for the new owner, so the card form on the plan step can save the card.
+ * Returns { clientSecret, publishableKey }.
+ */
+async function assertSignupTrialOwner(uid) {
+  const ctx = await getMemberAccessContext(uid);
+  if (!ctx.isOwner) {
+    throw new functions.https.HttpsError("permission-denied", "Only the business owner can add billing.");
+  }
+  if ((ctx.tenant.stripeSubscriptionId || "").toString().trim()) {
+    throw new functions.https.HttpsError("failed-precondition", "Billing is already set up for this business.");
+  }
+  if (sms.resolveSubscriptionStatus(ctx.tenant, ctx.ownerUserData) !== "trialing") {
+    throw new functions.https.HttpsError("failed-precondition", "Your trial has ended or billing is not available in this state. Contact support.");
+  }
+  return ctx;
+}
+
+exports.createSignupCardSetup = functions
+  .runWith({ secrets: [stripeSecretKey] })
+  .https.onCall(async (data, context) => {
+    if (!context.auth) throw new functions.https.HttpsError("unauthenticated", "Must be signed in.");
+    if (sms.isSubscriptionPaymentGateBypassed()) {
+      throw new functions.https.HttpsError("failed-precondition", "Paid checkout is temporarily disabled for testing. Features are unlocked without paying.");
+    }
+    const uid = context.auth.uid;
+    const ctx = await assertSignupTrialOwner(uid);
+    const secretKey = stripeSecretKey.value();
+    if (!secretKey) throw new functions.https.HttpsError("failed-precondition", "Stripe is not configured.");
+    const stripe = new Stripe(secretKey, { apiVersion: "2024-11-20.acacia" });
+
+    // Reuse the customer from an earlier try (e.g. a declined card) instead of making another.
+    let customerId = (ctx.tenant.signupStripeCustomerId || "").toString().trim();
+    if (!customerId) {
+      const email =
+        (ctx.ownerUserData && ctx.ownerUserData.email) || context.auth.token.email || undefined;
+      const customer = await stripe.customers.create({
+        email,
+        name: (ctx.tenant.businessName || ctx.tenant.displayName || "").toString() || undefined,
+        metadata: { firebaseUid: uid, tenantId: ctx.tenantId },
+      });
+      customerId = customer.id;
+      await db.collection("tenants").doc(ctx.tenantId).set({ signupStripeCustomerId: customerId }, { merge: true });
+    }
+    const setupIntent = await stripe.setupIntents.create({
+      customer: customerId,
+      usage: "off_session",
+      payment_method_types: ["card"],
+      metadata: { firebaseUid: uid, tenantId: ctx.tenantId, purpose: "signup_trial" },
+    });
+    return {
+      clientSecret: setupIntent.client_secret,
+      publishableKey: stripePublishableKeyParam.value().trim() || null,
+    };
+  });
+
+/**
+ * Step 2: after the card is saved, start the plan. Default: a 14-day trial that charges that card when
+ * the trial ends (same as "Start billing when the trial ends" in Plan & billing). With startToday, the
+ * plan starts and is charged now (same as "Start today"), unlocking texting and payments right away.
+ * Params: { setupIntentId, startToday? }.
+ */
+exports.startSignupTrialSubscription = functions
+  .runWith({ secrets: [stripeSecretKey, stripeSubscriptionPriceIds] })
+  .https.onCall(async (data, context) => {
+    if (!context.auth) throw new functions.https.HttpsError("unauthenticated", "Must be signed in.");
+    const uid = context.auth.uid;
+    const setupIntentId = ((data && data.setupIntentId) || "").toString().trim();
+    if (!setupIntentId.startsWith("seti_")) {
+      throw new functions.https.HttpsError("invalid-argument", "setupIntentId is required.");
+    }
+    const ctx = await assertSignupTrialOwner(uid);
+    const secretKey = stripeSecretKey.value();
+    if (!secretKey) throw new functions.https.HttpsError("failed-precondition", "Stripe is not configured.");
+    const stripe = new Stripe(secretKey, { apiVersion: "2024-11-20.acacia" });
+
+    const customerId = (ctx.tenant.signupStripeCustomerId || "").toString().trim();
+    const si = await stripe.setupIntents.retrieve(setupIntentId);
+    const siCustomer = typeof si.customer === "string" ? si.customer : si.customer && si.customer.id;
+    if (!customerId || siCustomer !== customerId || (si.metadata && si.metadata.tenantId) !== ctx.tenantId) {
+      throw new functions.https.HttpsError("permission-denied", "This card setup doesn't belong to your business.");
+    }
+    if (si.status !== "succeeded") {
+      throw new functions.https.HttpsError("failed-precondition", "The card wasn't saved. Check the card and try again.");
+    }
+    const paymentMethodId = typeof si.payment_method === "string" ? si.payment_method : si.payment_method && si.payment_method.id;
+    await stripe.customers.update(customerId, { invoice_settings: { default_payment_method: paymentMethodId } });
+
+    const startToday = !!(data && data.startToday);
+    const plan = normalizeSubscriptionPlan(ctx.tenant.subscriptionPlan);
+    const meta = {
+      firebaseUid: uid,
+      tenantId: ctx.tenantId,
+      checkoutKind: startToday ? "initial_today" : "initial_trial_end",
+      plan,
+    };
+    const subParams = {
+      customer: customerId,
+      items: [{ price: stripePriceIdForPlan(plan) }],
+      default_payment_method: paymentMethodId,
+      metadata: meta,
+      expand: ["items.data.price"],
+    };
+    if (startToday) {
+      // Charge now; if the bank declines, nothing is created and the owner can fix the card or pick the trial.
+      subParams.payment_behavior = "error_if_incomplete";
+    } else {
+      subParams.trial_end = providerTrialEndUnixFromTenant(ctx.tenant);
+    }
+    let sub;
+    try {
+      sub = await stripe.subscriptions.create(subParams, {
+        idempotencyKey: `signup_${startToday ? "today" : "trial"}_${ctx.tenantId}_${setupIntentId}`,
+      });
+    } catch (stripeErr) {
+      console.error("startSignupTrialSubscription Stripe", stripeErr);
+      throw new functions.https.HttpsError("failed-precondition", `Stripe could not start your trial: ${stripeErrorMessage(stripeErr)}`);
+    }
+
+    const syncPatch = { stripeSubscriptionId: sub.id, stripeCustomerId: customerId };
+    const planNorm = subscriptionPlanFromStripe(ctx.tenant && ctx.tenant.subscriptionPlan, planNormFromStripeSubscription(sub), sub);
+    if (planNorm) {
+      syncPatch.subscriptionPlan = planNorm;
+      Object.assign(syncPatch, subscriptionPlanEntitlementPatch(ctx.tenant, planNorm));
+    }
+    await sms.syncSubscriptionStatusForTenant(ctx.tenantId, sub.status, syncPatch);
+    return { ok: true, tenantId: ctx.tenantId, subscriptionStatus: sub.status };
   });
 
 /** After resubscribe Checkout, verify payment and sync Firestore billing. */
@@ -16612,6 +16927,8 @@ registerPublicSiteFunctions(exports, { assertPlatformAdmin });
 
 const { registerTapToPayLaunchEmailFunctions } = require("./tapToPayLaunchEmail");
 registerTapToPayLaunchEmailFunctions(exports);
+const { registerTrialReminderFunctions } = require("./trialReminderEmail");
+registerTrialReminderFunctions(exports, { stripeSecretKey, Stripe });
 
 const { registerCustomDomainFunctions } = require("./customDomain");
 registerCustomDomainFunctions(exports, {

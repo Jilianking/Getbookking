@@ -87,6 +87,10 @@
 
   function updateNavUI(user) {
     var loggedIn = !!user;
+    // Footer shop button: "Open your shop" once signed in.
+    document.querySelectorAll("[data-shop-login]").forEach(function (el) {
+      el.firstChild.nodeValue = loggedIn ? "Open your shop " : "Log in to your shop ";
+    });
     var name = displayNameFromUser(user);
     var email = user && user.email ? user.email : "";
     var initial = initialFromUser(user);

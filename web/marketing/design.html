@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Design — Get Bookking</title>
+  <link rel="icon" type="image/png" sizes="32x32" href="assets/brand/favicon-32.png?v=13" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,300;6..72,400;6..72,500&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="assets/design.css?v=53" />
+</head>
+<body>
+  <div id="gateLoading" class="design-gate">
+    <div class="design-gate-card">
+      <img class="design-gate-logo" src="assets/brand/gb-crown.png" alt="" width="96" height="81" />
+      <p class="design-kicker">Site builder</p>
+      <h1>Design</h1>
+      <p>Checking your account…</p>
+    </div>
+  </div>
+
+  <div id="gateLogin" class="design-gate hidden">
+    <div class="design-gate-card">
+      <img class="design-gate-logo" src="assets/brand/gb-crown.png" alt="" width="96" height="81" />
+      <p class="design-kicker">Site builder</p>
+      <h1>Design your site</h1>
+      <p>Sign in to open your live Get Bookking website in the desktop editor.</p>
+      <a class="design-btn design-btn--primary" href="login.html?next=design.html">Log in</a>
+    </div>
+  </div>
+
+  <div id="gateNoSite" class="design-gate hidden">
+    <div class="design-gate-card">
+      <img class="design-gate-logo" src="assets/brand/gb-crown.png" alt="" width="96" height="81" />
+      <p class="design-kicker">Site builder</p>
+      <h1>No website yet</h1>
+      <p id="gateNoSiteMsg">We couldn’t find a booking site on this account. Finish setup in the Get Bookking app, then come back here.</p>
+      <div class="design-gate-actions">
+        <a class="design-btn design-btn--ghost" href="account.html">Account</a>
+        <a class="design-btn design-btn--primary" href="index.html">Get Bookking</a>
+      </div>
+    </div>
+  </div>
+
+  <div id="designApp" class="design-app hidden" aria-label="Website design editor">
+    <header class="design-top">
+      <a class="design-mark" id="doneBtn" href="/app" title="Done — back to shop"><img src="assets/brand/gb-crown.png" alt="" width="22" height="19" /></a>
+      <div class="design-shop-name" id="shopTitle">Site</div>
+      <div class="design-top-rule" aria-hidden="true"></div>
+      <!-- Mode tab strip -->
+      <div class="design-top-tabs" role="tablist" aria-label="Editor mode">
+        <button type="button" class="design-top-tab" data-tab="templates" role="tab">Templates</button>
+        <button type="button" class="design-top-tab is-active" data-tab="editor" role="tab" aria-selected="true">Editor</button>
+      </div>
+      <button type="button" class="design-edit-toggle is-on" id="editModeBtn" aria-pressed="true" title="Edit is on. Turn off to click through the site.">
+        <span>Edit</span>
+        <span class="design-edit-knob" aria-hidden="true"></span>
+      </button>
+      <div class="design-top-rule" aria-hidden="true"></div>
+      <div class="design-history" role="group" aria-label="History">
+        <button type="button" class="design-mini" id="undoBtn" disabled>Undo</button>
+        <button type="button" class="design-mini" id="redoBtn" disabled>Redo</button>
+      </div>
+      <div class="design-palette-wrap">
+        <button type="button" class="design-mini design-palette-btn" id="paletteBtn" aria-haspopup="dialog" aria-expanded="false">
+          <span class="design-palette-dots" id="paletteBtnDots" aria-hidden="true"></span>Palettes
+        </button>
+        <div class="design-palette-pop" id="palettePop" role="dialog" aria-label="Color palettes" hidden>
+          <div class="design-palette-head">
+            <strong>Color palettes</strong>
+            <div class="design-palette-tones" role="group" aria-label="Palette tone">
+              <button type="button" data-tone="all">All</button>
+              <button type="button" data-tone="light">Light</button>
+              <button type="button" data-tone="dark">Dark</button>
+            </div>
+          </div>
+          <div class="design-palette-grid" id="paletteGrid"></div>
+          <div class="design-palette-accents" id="paletteAccents" hidden>
+            <span class="design-palette-sub">Accent</span>
+            <div class="design-palette-chips" id="paletteChips"></div>
+          </div>
+          <p class="design-palette-note">Choosing a palette replaces custom colors. Undo brings them back.</p>
+        </div>
+      </div>
+      <div class="design-top-spacer"></div>
+      <div class="design-device" role="group" aria-label="Preview width">
+        <button type="button" class="is-active" data-device="desktop">Desktop</button>
+        <button type="button" data-device="tablet">Tablet</button>
+        <button type="button" data-device="mobile">Mobile</button>
+      </div>
+      <span class="design-status" id="saveStatus">Saved</span>
+      <a class="design-btn design-btn--ghost" id="openLiveBtn" href="#" target="_blank" rel="noopener noreferrer">Preview</a>
+      <button type="button" class="design-btn design-btn--save" id="saveBtn" disabled>Publish</button>
+    </header>
+
+    <div class="design-body">
+      <nav class="design-icon-rail" aria-label="Design tools">
+        <button type="button" class="design-icon is-active" data-panel="pages" title="Pages" aria-label="Pages">
+          <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 2.5h6L13 6v7.5h-9.5z"/><path d="M9.5 2.5V6H13"/></svg>
+        </button>
+        <button type="button" class="design-icon" data-panel="booking" title="Booking" aria-label="Booking">
+          <svg viewBox="0 0 16 16" aria-hidden="true"><rect x="2.5" y="3.25" width="11" height="10.25" rx="1.25"/><path d="M2.5 6.5h11M5.5 2.25v2M10.5 2.25v2"/></svg>
+        </button>
+        <button type="button" class="design-icon" data-panel="photos" title="Photos" aria-label="Photos">
+          <svg viewBox="0 0 16 16" aria-hidden="true"><rect x="2.25" y="3.25" width="11.5" height="9.5" rx="1.25"/><circle class="fill" cx="5.4" cy="6.1" r="0.85"/><path d="M3.2 11.4 5.7 8.6l1.8 1.6 2-2.2 3.3 3.4"/></svg>
+        </button>
+        <button type="button" class="design-icon" data-panel="content" title="Business info" aria-label="Business info">
+          <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 4.75h10M3 8h6.5M3 11.25h10"/></svg>
+        </button>
+        <button type="button" class="design-icon" data-panel="settings" title="Settings" aria-label="Settings">
+          <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 5H4.4M7.6 5H13.5M2.5 11H8.4M11.6 11H13.5"/><circle cx="6" cy="5" r="1.65"/><circle cx="10" cy="11" r="1.65"/></svg>
+        </button>
+      </nav>
+
+      <aside class="design-panel" aria-label="Tool panel">
+        <div class="design-panel-head">
+          <div id="panelTitle">Pages</div>
+          <div id="panelMeta">6</div>
+        </div>
+
+        <div id="panelSection" class="design-panel-body hidden">
+          <button type="button" class="design-text-btn design-section-done" id="sectionDoneBtn">Done</button>
+          <div id="sectionBody"></div>
+        </div>
+
+        <div id="panelPages" class="design-panel-body">
+          <div class="design-nav-btn is-active" data-path="/" role="button" tabindex="0">
+            <span class="design-nav-slot" aria-hidden="true"></span>
+            <span class="design-nav-name">Home</span>
+            <span class="design-nav-meta">/</span>
+          </div>
+          <div class="design-nav-btn" data-path="/book" role="button" tabindex="0">
+            <input type="checkbox" class="design-nav-check" id="toggleBookPage" aria-label="Show Book page" />
+            <span class="design-nav-name">Book</span>
+            <span class="design-nav-meta">/book</span>
+          </div>
+          <div class="design-nav-btn" data-path="/gallery" role="button" tabindex="0">
+            <input type="checkbox" class="design-nav-check" id="toggleGalleryPage" aria-label="Show Gallery page" />
+            <span class="design-nav-name">Gallery</span>
+            <span class="design-nav-meta">/gallery</span>
+          </div>
+          <div class="design-nav-btn" data-path="/about" role="button" tabindex="0">
+            <input type="checkbox" class="design-nav-check" id="toggleAboutPage" aria-label="Show About page" />
+            <span class="design-nav-name">About</span>
+            <span class="design-nav-meta">/about</span>
+          </div>
+          <div class="design-nav-btn" data-path="/team" role="button" tabindex="0">
+            <input type="checkbox" class="design-nav-check" id="toggleTeamPage" aria-label="Show Team page" />
+            <span class="design-nav-name">Team</span>
+            <span class="design-nav-meta">/team</span>
+          </div>
+          <div class="design-nav-btn" data-path="/shop" role="button" tabindex="0">
+            <input type="checkbox" class="design-nav-check" id="toggleShop" aria-label="Show shop" />
+            <span class="design-nav-name">Shop</span>
+            <span class="design-nav-meta">/shop</span>
+          </div>
+        </div>
+
+        <div id="panelPhotos" class="design-panel-body hidden">
+          <p class="design-panel-lead">Logo, hero, featured, and gallery photos. Photos are cropped, then saved to this site.</p>
+          <section class="design-photo-block">
+            <h3>Logo</h3>
+            <div class="design-logo-row">
+              <div class="design-logo-thumb" data-logo-thumb aria-hidden="true"></div>
+              <div class="design-logo-actions">
+                <button type="button" class="design-btn design-btn--ghost design-btn--small" data-logo-upload>Upload logo</button>
+                <button type="button" class="design-text-btn" data-logo-remove>Remove</button>
+              </div>
+            </div>
+            <p class="design-hint">A PNG with a see-through background looks best.</p>
+            <div class="design-field">
+              <label>Header shows</label>
+              <div class="design-seg" role="radiogroup">
+                <button type="button" role="radio" class="design-seg-opt" data-header-brand="name">Name</button>
+                <button type="button" role="radio" class="design-seg-opt" data-header-brand="logo">Logo</button>
+                <button type="button" role="radio" class="design-seg-opt" data-header-brand="both">Both</button>
+              </div>
+            </div>
+            <div class="design-field">
+              <label>Logo size</label>
+              <input type="range" class="design-range" min="24" max="96" step="2" value="40" data-logo-height aria-label="Logo size">
+            </div>
+            <div class="design-field">
+              <label>Browser tab icon</label>
+              <div class="design-seg" role="radiogroup">
+                <button type="button" role="radio" class="design-seg-opt" data-tab-icon="logo">Logo</button>
+                <button type="button" role="radio" class="design-seg-opt" data-tab-icon="letter">First letter</button>
+              </div>
+              <div class="design-tab-preview" data-tab-preview aria-hidden="true"></div>
+            </div>
+          </section>
+          <section class="design-photo-block">
+            <h3>Hero</h3>
+            <div class="design-photo-hero" id="heroPhotoPreview">
+              <span class="design-photo-empty">No hero photo yet</span>
+            </div>
+            <button type="button" class="design-btn design-btn--primary" id="uploadHeroBtn">Upload hero</button>
+          </section>
+          <section class="design-photo-block">
+            <h3>Featured on home</h3>
+            <div class="design-photo-grid" id="featuredPhotoGrid"></div>
+            <button type="button" class="design-btn design-btn--ghost" id="addFeaturedBtn">Add featured</button>
+          </section>
+          <section class="design-photo-block">
+            <h3>Gallery</h3>
+            <div class="design-photo-grid" id="galleryPhotoGrid"></div>
+            <button type="button" class="design-btn design-btn--ghost" id="addGalleryBtn">Add gallery</button>
+          </section>
+          <section class="design-photo-block" id="studio12PhotoBlock">
+            <h3>Studio 12 extras</h3>
+            <div class="design-photo-row">
+              <div>
+                <div class="design-photo-thumb" id="philosophyPhotoPreview"><span>Philosophy</span></div>
+                <button type="button" class="design-btn design-btn--ghost design-btn--small" id="uploadPhilosophyBtn">Upload</button>
+              </div>
+              <div>
+                <div class="design-photo-thumb" id="bookCtaPhotoPreview"><span>Book CTA</span></div>
+                <button type="button" class="design-btn design-btn--ghost design-btn--small" id="uploadBookCtaBtn">Upload</button>
+              </div>
+            </div>
+          </section>
+        </div>
+
+        <div id="panelStyle" class="design-panel-body hidden">
+          <h2>Selected</h2>
+          <div id="inspectorEmpty" class="design-inspector-empty">
+            Click text, a color band, or a photo in the preview.
+          </div>
+          <div id="inspectorField" class="hidden">
+            <div class="design-field">
+              <label id="inspectorFieldLabel" for="inspectorFieldInput">Field</label>
+              <textarea id="inspectorFieldInput" rows="3"></textarea>
+            </div>
+            <p class="design-hint" id="inspectorFieldHint"></p>
+          </div>
+          <div id="inspectorColor" class="hidden">
+            <div class="design-field">
+              <label id="inspectorColorLabel" for="inspectorColorInput">Section color</label>
+              <div class="design-swatch-row">
+                <input type="text" id="inspectorColorText" placeholder="#1a1a1a" maxlength="7" />
+                <input type="color" id="inspectorColorInput" value="#1a1a1a" />
+              </div>
+            </div>
+          </div>
+          <div id="inspectorSheet" class="hidden">
+            <p class="design-hint" id="inspectorSheetHint">Double-click the photo in the preview, or upload here.</p>
+            <button type="button" class="design-btn design-btn--primary" id="inspectorUploadBtn">Upload photo</button>
+          </div>
+
+
+        </div>
+
+        <div id="panelContent" class="design-panel-body hidden">
+          <p class="design-panel-lead">Your business details. Changes here update every spot on your site that shows them (header, about, footer, contact).</p>
+          <div class="design-field">
+            <label for="contentDisplayName">Website name</label>
+            <input type="text" id="contentDisplayName" maxlength="80" />
+          </div>
+          <div class="design-field">
+            <label for="contentTagline">Tagline</label>
+            <input type="text" id="contentTagline" maxlength="120" />
+          </div>
+          <div class="design-field">
+            <label for="contentAbout">About</label>
+            <textarea id="contentAbout" rows="5" maxlength="2000"></textarea>
+          </div>
+          <div class="design-field">
+            <label for="contentPhone">Phone</label>
+            <input type="text" id="contentPhone" maxlength="40" />
+          </div>
+          <div class="design-field">
+            <label for="contentEmail">Email</label>
+            <input type="text" id="contentEmail" maxlength="120" />
+          </div>
+          <div class="design-field">
+            <label for="contentAddress">Address</label>
+            <input type="text" id="contentAddress" maxlength="200" />
+          </div>
+          <div class="design-field">
+            <label for="contentSuite">Suite / unit</label>
+            <input type="text" id="contentSuite" maxlength="40" />
+          </div>
+        </div>
+
+        <div id="panelBooking" class="design-panel-body hidden">
+          <h2>Booking form</h2>
+          <div class="design-field">
+            <label for="bookFormStyle">Form style</label>
+            <select id="bookFormStyle">
+              <option value="standard">Standard</option>
+              <option value="guided">Guided</option>
+            </select>
+          </div>
+          <p class="design-hint" id="bookFormStyleHint"></p>
+          <button type="button" class="design-sec-row" id="bookFieldsToggle">
+            <span><strong id="bookFieldsTitle">Form fields</strong><em id="bookFieldsMeta">0 fields</em></span>
+            <span class="design-nav-meta" id="bookFieldsEditLabel">Edit</span>
+          </button>
+          <div id="bookFieldsEditor" class="design-book-editor hidden"></div>
+          <div class="design-field">
+            <label for="bookSubmitLabel">Confirm booking button</label>
+            <input type="text" id="bookSubmitLabel" maxlength="40" placeholder="Request booking" />
+          </div>
+          <div class="design-field">
+            <label for="bookSubmitColorText">Button color</label>
+            <div class="design-swatch-row">
+              <input type="text" id="bookSubmitColorText" maxlength="7" spellcheck="false" />
+              <input type="color" id="bookSubmitColor" aria-label="Button color" />
+            </div>
+          </div>
+          <div class="design-divider"></div>
+          <h2>Services</h2>
+          <p class="design-hint">Name, price, and length. These save right away.</p>
+          <div id="bookServices"></div>
+          <button type="button" class="design-text-btn" id="addServiceBtn">Add service</button>
+          <div id="bookReviewsWrap">
+            <div class="design-divider"></div>
+            <h2>Reviews</h2>
+            <p class="design-hint">Shown next to Book on the home page. Up to 3.</p>
+            <div id="bookReviews"></div>
+            <button type="button" class="design-text-btn" id="addReviewBtn">Add review</button>
+          </div>
+        </div>
+        <div id="panelSettings" class="design-panel-body hidden">
+          <h2>Your web address</h2>
+          <div class="design-address" id="addressBox">
+            <div class="design-address-row">
+              <span class="design-address-label">Free link</span>
+              <span class="design-address-url" id="addressFree">—</span>
+              <span class="design-address-btns">
+                <button type="button" class="design-text-btn" id="addressCopy">Copy</button>
+                <a class="design-text-btn" id="addressOpen" href="#" target="_blank" rel="noopener">Open</a>
+              </span>
+            </div>
+            <div class="design-address-row">
+              <span class="design-address-label">Custom domain</span>
+              <span class="design-address-url" id="addressDomain">None yet</span>
+              <span class="design-address-status hidden" id="addressStatus"></span>
+            </div>
+            <a class="design-btn design-btn--ghost design-address-manage" id="addressManage" href="/billing#domain" target="_blank" rel="noopener">Get a domain</a>
+            <p class="design-hint">Domains are bought and managed in Plan &amp; billing. It opens in a new tab so your editor stays open.</p>
+          </div>
+        </div>
+      </aside>
+
+      <main class="design-canvas-wrap">
+        <div class="design-canvas-bar">
+          <span id="viewportLabel">Desktop · 1440 px</span>
+          <button type="button" class="design-canvas-link" id="closeTemplatesBtn">Back to canvas</button>
+          <button type="button" class="design-canvas-link" id="reloadPreviewBtn">Refresh</button>
+        </div>
+
+        <div id="workspacePreview" class="design-workspace">
+          <div class="design-canvas">
+            <div class="design-frame-shell" id="frameShell" data-device="desktop">
+              <iframe id="previewFrame" title="Your website preview" sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox"></iframe>
+            </div>
+          </div>
+          <div id="editBar" class="design-edit-bar" hidden>
+            <button type="button" class="design-edit-bar-grip" id="editBarGrip" aria-label="Move toolbar" title="Drag to move">
+              <svg width="10" height="16" viewBox="0 0 10 16" aria-hidden="true"><g fill="currentColor"><circle cx="2" cy="3" r="1.4"/><circle cx="8" cy="3" r="1.4"/><circle cx="2" cy="8" r="1.4"/><circle cx="8" cy="8" r="1.4"/><circle cx="2" cy="13" r="1.4"/><circle cx="8" cy="13" r="1.4"/></g></svg>
+            </button>
+            <div class="design-edit-bar-body">
+              <span class="design-edit-bar-label" id="editBarLabel">Click text, a section, or a photo to edit it.</span>
+              <span class="design-edit-bar-group" id="editBarTextGroup" hidden>
+                <span class="design-edit-bar-size" id="editBarSize" role="group" aria-label="Text size">
+                  <button type="button" id="editBarSizeDown" aria-label="Smaller text">A−</button>
+                  <output id="editBarSizeValue" aria-live="polite">16</output>
+                  <button type="button" id="editBarSizeUp" aria-label="Larger text">A+</button>
+                </span>
+                <button type="button" class="design-swatch-btn" id="editBarTextColorBtn" aria-haspopup="dialog" aria-expanded="false">
+                  <span class="design-swatch" id="editBarTextSwatch" aria-hidden="true"></span>Text color
+                </button>
+              </span>
+              <span class="design-edit-bar-group" id="editBarSectionGroup" hidden>
+                <button type="button" class="design-swatch-btn" id="editBarBgBtn" aria-haspopup="dialog" aria-expanded="false">
+                  <span class="design-swatch" id="editBarBgSwatch" aria-hidden="true"></span>Background
+                </button>
+              </span>
+              <span class="design-edit-bar-group" id="editBarPhotoGroup" hidden>
+                <button type="button" class="design-swatch-btn" id="editBarPhotoBtn">Replace photo</button>
+              </span>
+            </div>
+            <button type="button" class="design-edit-bar-chevron" id="editBarChevron" aria-expanded="true" aria-label="Collapse toolbar">⌄</button>
+            <div class="design-color-pop" id="editBarColorPop" role="dialog" aria-labelledby="editBarColorPopTitle" hidden>
+              <p class="design-color-pop-title" id="editBarColorPopTitle">Background</p>
+              <p class="design-color-pop-sub">Your site’s colors</p>
+              <div class="design-color-row" id="editBarSiteColors"></div>
+              <p class="design-color-pop-sub" id="editBarRecentLabel" hidden>Recent</p>
+              <div class="design-color-row" id="editBarRecentColors"></div>
+              <p class="design-color-pop-sub">Custom</p>
+              <div class="design-color-custom">
+                <input type="color" id="editBarColor" value="#ffffff" aria-label="Pick a custom color" />
+                <input type="text" id="editBarHex" maxlength="7" spellcheck="false" placeholder="#000000" aria-label="Color hex code" />
+              </div>
+              <button type="button" class="design-text-btn" id="editBarColorReset">Reset to the template’s color</button>
+            </div>
+          </div>
+        </div>
+
+        <div id="workspaceTemplates" class="design-workspace hidden">
+          <p class="design-panel-lead design-templates-lead">Your Get Bookking templates. Switching updates the live layout — brand colors stay yours unless you change them.</p>
+          <div class="design-templates" id="templateGrid"></div>
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <input type="file" id="filePicker" class="hidden" accept="image/*" multiple />
+
+  <!-- Photo preview / re-crop modal -->
+  <div id="photoPreviewModal" class="design-modal hidden" aria-hidden="true">
+    <div class="design-modal-card design-modal-card--preview">
+      <div class="design-modal-head">
+        <h2 id="photoPreviewTitle">Photo</h2>
+        <button type="button" class="design-modal-close" id="photoPreviewClose" aria-label="Close">&times;</button>
+      </div>
+      <div class="design-preview-img-wrap">
+        <img id="photoPreviewImg" src="" alt="">
+      </div>
+      <div class="design-modal-actions design-modal-actions--spread">
+        <button type="button" class="design-btn design-btn--ghost design-btn--danger" id="photoPreviewRemove">Remove</button>
+        <div class="design-modal-actions-right">
+          <button type="button" class="design-btn design-btn--ghost" id="photoPreviewReplace">Replace photo</button>
+          <button type="button" class="design-btn design-btn--primary" id="photoPreviewRecrop">Resize &amp; re-crop</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="cropModal" class="design-modal hidden" aria-hidden="true">
+    <div class="design-modal-card design-modal-card--crop">
+      <div class="design-modal-head">
+        <h2>Adjust photo</h2>
+        <button type="button" class="design-modal-close" id="cropCancelBtn" aria-label="Close">&times;</button>
+      </div>
+      <div class="design-frame-picker" id="cropFramePicker" role="group" aria-label="Frame ratio">
+        <button type="button" class="design-frame-btn" data-ratio="1"     data-label="1:1">Square</button>
+        <button type="button" class="design-frame-btn" data-ratio="0.8"   data-label="4:5">Portrait</button>
+        <button type="button" class="design-frame-btn" data-ratio="1.333" data-label="4:3">Landscape</button>
+        <button type="button" class="design-frame-btn" data-ratio="1.778" data-label="16:9">Wide</button>
+        <button type="button" class="design-frame-btn" data-ratio="2.333" data-label="21:9">Cinema</button>
+      </div>
+      <p class="design-hint" id="cropHint">Drag to reposition. Scroll or use the slider to zoom.</p>
+      <div class="design-crop-stage" id="cropStage">
+        <canvas id="cropCanvas" width="720" height="480"></canvas>
+      </div>
+      <div class="design-crop-zoom">
+        <span class="design-crop-zoom-icon">&#128269;&#x2212;</span>
+        <input type="range" id="cropZoom" min="0" max="100" value="0" class="design-crop-zoom-slider" aria-label="Zoom">
+        <span class="design-crop-zoom-icon">&#128269;&#x2B;</span>
+      </div>
+      <div class="design-modal-actions">
+        <button type="button" class="design-btn design-btn--ghost" id="cropCancelBtn2">Cancel</button>
+        <button type="button" class="design-btn design-btn--primary" id="cropConfirmBtn">Use photo</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="confirmModal" class="design-modal hidden" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="confirmModalTitle">
+    <div class="design-modal-card design-modal-card--confirm">
+      <div class="design-modal-head">
+        <h2 id="confirmModalTitle">Remove service</h2>
+        <button type="button" class="design-modal-close" id="confirmModalClose" aria-label="Close">&times;</button>
+      </div>
+      <p class="design-modal-copy" id="confirmModalBody"></p>
+      <div class="design-modal-actions">
+        <button type="button" class="design-btn design-btn--ghost" id="confirmModalCancel">Cancel</button>
+        <button type="button" class="design-btn design-btn--primary" id="confirmModalOk">Remove</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-storage-compat.js"></script>
+  <script src="js/firebase-config.js"></script>
+  <script src="assets/design-palettes.js?v=1"></script>
+  <script src="assets/design-app.js?v=90"></script>
+</body>
+</html>

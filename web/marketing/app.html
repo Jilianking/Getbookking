@@ -1,0 +1,1056 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Shop — Get Bookking</title>
+  <link rel="icon" type="image/png" sizes="32x32" href="/assets/brand/favicon-32.png?v=13" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap" rel="stylesheet" />
+  <base href="/" />
+  <link rel="stylesheet" href="/assets/app.css?v=73" />
+</head>
+<body>
+  <div id="gateLoading" class="app-gate">
+    <div class="app-gate-card">
+      <img src="/assets/brand/gb-crown.png" alt="" width="96" height="81" />
+      <h1>Shop</h1>
+      <p>Checking your account…</p>
+    </div>
+  </div>
+
+  <div id="gateLogin" class="app-gate hidden">
+    <div class="app-gate-card">
+      <img src="/assets/brand/gb-crown.png" alt="" width="96" height="81" />
+      <h1>Open your shop</h1>
+      <p>Sign in to manage bookings, clients, payments, and your website.</p>
+      <a class="app-btn app-btn--primary" href="/login.html?next=app.html">Log in</a>
+    </div>
+  </div>
+
+  <div id="gateNoShop" class="app-gate hidden">
+    <div class="app-gate-card">
+      <img src="/assets/brand/gb-crown.png" alt="" width="96" height="81" />
+      <h1>No shop yet</h1>
+      <p id="gateNoShopMsg">We couldn’t find a business on this account. Finish setup in the Get Bookking app, then come back.</p>
+      <a class="app-btn app-btn--ghost" href="/account.html">Account</a>
+    </div>
+  </div>
+
+  <div id="appShell" class="app-shell hidden">
+    <button type="button" class="app-rail-toggle" id="railToggle" aria-label="Hide sidebar" aria-expanded="true">‹</button>
+    <aside class="app-rail" id="rail">
+      <a class="app-rail-brand" href="/app" data-route="dashboard">
+        <img class="app-rail-mark" src="/assets/brand/gb-crown.png" alt="" width="36" height="30" />
+        <span>
+          <span class="app-rail-name" id="shopName">Shop</span>
+          <span class="app-rail-kind" id="shopKind">Shop</span>
+        </span>
+      </a>
+      <nav class="app-rail-nav" id="railNav" aria-label="Shop">
+        <div class="app-rail-group">
+          <div class="app-rail-label">Main</div>
+          <div class="app-rail-tree">
+            <a class="app-nav" data-route="dashboard" href="/app">Dashboard</a>
+            <a class="app-nav" data-route="requests" href="/app/requests">Requests <span class="app-badge app-nav-badge hidden" id="navRequestsBadge">0</span></a>
+            <a class="app-nav" data-route="messages" href="/app/messages">Messages <span class="app-badge app-nav-badge hidden" id="navMessagesBadge">0</span></a>
+            <a class="app-nav" data-route="calendar" href="/app/calendar">Calendar</a>
+            <a class="app-nav" data-route="clients" href="/app/clients">Clients</a>
+          </div>
+        </div>
+        <div class="app-rail-group">
+          <div class="app-rail-label">Business</div>
+          <div class="app-rail-tree">
+            <a class="app-nav" data-route="website" href="/design">Website builder</a>
+            <a class="app-nav hidden" data-route="profile" href="/app/profile" id="navProfile">Your website profile</a>
+            <a class="app-nav" data-route="shop" href="/app/shop">Shop</a>
+            <a class="app-nav" data-route="team" href="/app/team" id="navTeam">Team</a>
+            <a class="app-nav" data-route="insights" href="/app/insights">Insights</a>
+            <div id="paymentsFlat">
+              <a class="app-nav" data-route="payments" href="/app/payments">Payments</a>
+            </div>
+            <div id="paymentsFolder" class="hidden">
+              <div class="app-folder-head">
+                <span>Payments</span>
+                <span aria-hidden="true">▾</span>
+              </div>
+              <div class="app-folder-items app-rail-tree">
+                <a class="app-nav" data-route="payments" href="/app/payments">Client payments</a>
+                <a class="app-nav" data-route="payouts" href="/app/payouts">Team payouts</a>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="app-rail-group">
+          <div class="app-rail-label">Account</div>
+          <div class="app-rail-tree">
+            <a class="app-nav" data-route="billing" href="/app/billing">Plan &amp; billing</a>
+            <a class="app-nav" data-route="account" href="/app/account">Your account</a>
+            <a class="app-nav" data-route="settings" href="/app?view=settings">Settings</a>
+            <button type="button" class="app-nav" id="railSignOut">Sign out</button>
+          </div>
+        </div>
+      </nav>
+      <div class="app-rail-foot">
+        <span class="app-rail-avatar" id="userInitial">?</span>
+        <span>
+          <span class="app-rail-user" id="userName">—</span>
+          <span class="app-rail-role" id="userRole">Owner</span>
+        </span>
+      </div>
+    </aside>
+    <button type="button" class="app-rail-scrim" id="railScrim" aria-label="Close sidebar"></button>
+
+    <main class="app-canvas" id="appCanvas">
+      <section id="viewDashboard" class="app-view hidden" data-view="dashboard">
+        <header class="app-dash-hero">
+          <div class="app-dash-hero-top">
+            <p id="dashSub">—</p>
+            <div class="app-dash-inbox-wrap">
+              <button type="button" class="app-dash-inbox" id="dashInboxBtn" aria-label="Inbox" aria-expanded="false" aria-haspopup="true">
+                <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                  <path d="M4.2 15.2V8.4a5.8 5.8 0 0 1 11.6 0v6.8M2.8 15.2h14.4M8.4 17.2h3.2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+                </svg>
+                <span class="app-badge hidden" id="dashInboxBadge">0</span>
+              </button>
+              <div class="app-dash-inbox-pop hidden" id="dashInboxPop" role="dialog" aria-label="Inbox">
+                <div id="notifList"></div>
+                <p class="app-empty" id="notifEmpty">You’re caught up.</p>
+              </div>
+            </div>
+          </div>
+          <h1 id="dashGreeting">Hello</h1>
+        </header>
+        <div class="app-dash-body">
+          <div class="app-dash-actions">
+            <button type="button" class="app-btn app-btn--primary" id="dashNewAppt">+ New appointment</button>
+            <button type="button" class="app-btn app-btn--gold" id="dashWalkIn"><span class="app-dash-label-full">Walk-in appointment</span><span class="app-dash-label-short">Walk-in</span></button>
+            <button type="button" class="app-btn app-btn--ghost" id="dashNewClient">+ New client</button>
+            <button type="button" class="app-btn app-btn--warm" id="dashRecordPay">Record payment</button>
+          </div>
+          <div class="app-dash-grid">
+            <article class="app-card app-dash-today">
+              <div class="app-card-head app-dash-today-head">
+                <div>
+                  <h2>Today</h2>
+                  <p id="todayLabel">—</p>
+                </div>
+                <div class="app-dash-today-tools">
+                  <a class="app-btn app-btn--warm" data-route="calendar" href="/app/calendar">Open calendar</a>
+                  <div class="app-seg" role="group" aria-label="Schedule view">
+                    <button type="button" class="is-on" data-dash-view="day">Day</button>
+                    <button type="button" data-dash-view="week">Week</button>
+                    <button type="button" data-dash-view="month">Month</button>
+                  </div>
+                </div>
+              </div>
+              <div class="app-dash-cal is-day" id="dashCalBoard"></div>
+              <div class="app-dash-empty hidden" id="dashCalEmpty">
+                <div>
+                  <strong>No appointments today</strong>
+                  <p>Bookings show up on this timeline with client, service and duration. Walk-ins land at the current time.</p>
+                </div>
+                <div class="app-dash-empty-actions">
+                  <button type="button" class="app-btn app-btn--gold" id="dashEmptyWalkIn">Walk-in</button>
+                  <button type="button" class="app-btn app-btn--ghost" id="dashEmptyAdd">Add appointment</button>
+                </div>
+              </div>
+            </article>
+            <aside class="app-dash-side">
+              <article class="app-card" id="dashDue">
+                <div class="app-card-head">
+                  <h2>Payments due</h2>
+                  <a class="app-btn app-btn--warm" data-route="payments" href="/app/payments">All payments</a>
+                </div>
+                <div id="dueList"></div>
+                <p class="app-empty" id="dueEmpty">No outstanding invoices. Unpaid balances and overdue deposits show up here.</p>
+              </article>
+              <article class="app-card">
+                <div class="app-card-head">
+                  <h2>Upcoming</h2>
+                  <a class="app-btn app-btn--warm" data-route="calendar" href="/app/calendar">View calendar</a>
+                </div>
+                <div id="upcomingList"></div>
+                <p class="app-empty" id="upcomingEmpty">Nothing on the books after today. Next 7 days are open.</p>
+              </article>
+              <article class="app-card app-chart-card hidden" id="dashRevenue">
+                <div class="app-card-head">
+                  <h2>Revenue</h2>
+                  <span class="app-chart-range">Last 8 weeks</span>
+                </div>
+                <div id="dashRevenueBody"></div>
+              </article>
+              <article class="app-card app-chart-card" id="dashBookings">
+                <div class="app-card-head">
+                  <h2>Bookings</h2>
+                  <span class="app-chart-range">Last 8 weeks</span>
+                </div>
+                <div id="dashBookingsBody"></div>
+              </article>
+              <article class="app-card app-dash-setup hidden" id="dashSetup">
+                <div class="app-card-head">
+                  <h2>Setup</h2>
+                </div>
+                <p class="app-empty app-dash-setup-copy">Add services and hours to start taking bookings.</p>
+                <p class="app-dash-setup-link">Finish setup in the Get Bookking app →</p>
+              </article>
+            </aside>
+          </div>
+        </div>
+      </section>
+
+      <section id="viewCalendar" class="app-view hidden" data-view="calendar">
+        <div class="app-greeting">
+          <h1>Calendar</h1>
+        </div>
+        <div class="app-toolbar">
+          <div class="app-toolbar-cluster">
+            <button type="button" class="app-icon-btn" id="calPrev" aria-label="Previous">‹</button>
+            <strong id="calDate">—</strong>
+            <button type="button" class="app-icon-btn" id="calNext" aria-label="Next">›</button>
+          </div>
+          <div class="app-toolbar-cluster">
+            <button type="button" class="app-chip" id="calToday">Today</button>
+            <div class="app-seg" role="group" aria-label="View">
+              <button type="button" class="is-on" id="calViewDay" data-cal-view="day">Day</button>
+              <button type="button" id="calViewWeek" data-cal-view="week">Week</button>
+              <button type="button" id="calViewMonth" data-cal-view="month">Month</button>
+            </div>
+            <div class="app-seg hidden" role="group" aria-label="Week layout" id="calWeekMode">
+              <button type="button" class="is-on" data-week-mode="people">By person</button>
+              <button type="button" data-week-mode="time">By time</button>
+            </div>
+            <div class="app-pop-wrap hidden" id="calTeamWrap">
+              <button type="button" class="app-chip" id="calTeam" aria-haspopup="true" aria-expanded="false">Team: everyone ▾</button>
+              <div class="app-pop app-cal-team-menu hidden" id="calTeamMenu"></div>
+            </div>
+            <div class="app-pop-wrap" id="calServiceWrap">
+              <button type="button" class="app-chip" id="calService" aria-haspopup="listbox" aria-expanded="false">Service ▾</button>
+              <div class="app-pop hidden" id="calServiceMenu" role="listbox"></div>
+            </div>
+            <button type="button" class="app-icon-btn" id="calRefresh" aria-label="Refresh">↻</button>
+            <button type="button" class="app-btn app-btn--primary" id="calNew">+ New appointment</button>
+          </div>
+        </div>
+        <div class="app-cal-legend hidden" id="calLegend" aria-label="Team colors"></div>
+        <div class="app-cal-board" id="calBoard">
+          <div class="app-cal-head" id="calHead"></div>
+          <div class="app-cal-grid" id="calGrid"></div>
+        </div>
+      </section>
+
+      <div class="app-sheet-scrim hidden" id="calSheetScrim"></div>
+      <div class="app-sheet hidden" id="calSheet" role="dialog" aria-modal="true" aria-labelledby="calSheetTitle">
+        <div class="app-sheet-top">
+          <h2 id="calSheetTitle">New booking</h2>
+          <button type="button" class="app-icon-btn" id="calSheetClose" aria-label="Close">×</button>
+        </div>
+        <form id="calNewForm">
+          <div class="app-field">
+            <label for="calNewName">Client name</label>
+            <input id="calNewName" name="name" type="text" autocomplete="name" required />
+          </div>
+          <div class="app-field">
+            <label for="calNewEmail">Email</label>
+            <input id="calNewEmail" name="email" type="email" autocomplete="email" required />
+          </div>
+          <div class="app-field">
+            <label for="calNewPhone">Phone</label>
+            <input id="calNewPhone" name="phone" type="tel" inputmode="tel" autocomplete="tel" required />
+          </div>
+          <div class="app-field">
+            <label for="calNewService" id="calNewServiceLabel">Service</label>
+            <select id="calNewService" name="service" required></select>
+          </div>
+          <div class="app-field-row">
+            <div class="app-field">
+              <label for="calNewDate">Date</label>
+              <input id="calNewDate" name="date" type="date" required />
+            </div>
+            <div class="app-field">
+              <label for="calNewTime">Time</label>
+              <input id="calNewTime" name="time" type="time" required />
+            </div>
+          </div>
+          <div class="app-field hidden" id="calNewStaffRow">
+            <label for="calNewStaff">Staff</label>
+            <select id="calNewStaff" name="staff"></select>
+          </div>
+          <div class="app-field hidden" id="calNewBoatRow">
+            <label for="calNewBoat">Boat</label>
+            <select id="calNewBoat" name="boat"></select>
+          </div>
+          <div class="app-field">
+            <label for="calNewNotes">Notes (optional)</label>
+            <textarea id="calNewNotes" name="notes" rows="2"></textarea>
+          </div>
+          <div class="app-deposit hidden" id="calNewDeposit">
+            <p class="app-deposit-kicker">Deposit required</p>
+            <div class="app-field">
+              <label for="calNewDepositAmt">Deposit amount</label>
+              <div class="app-deposit-amt">
+                <input id="calNewDepositAmt" name="deposit" type="text" inputmode="decimal" placeholder="0.00" autocomplete="off" />
+                <span>USD</span>
+              </div>
+              <p class="app-hint" id="calNewDepositHint">Set the deposit for this appointment — it can differ from your default in Settings.</p>
+            </div>
+            <p class="app-hint" id="calNewDepositCaption"></p>
+            <p class="app-hint app-hint--send hidden" id="calNewDepositWillSend">The deposit link will be texted on confirm</p>
+          </div>
+          <p class="app-sheet-error hidden" id="calNewError"></p>
+          <div class="app-sheet-actions">
+            <button type="button" class="app-btn app-btn--ghost" id="calSheetCancel">Cancel</button>
+            <button type="submit" class="app-btn app-btn--primary" id="calNewSave">Confirm</button>
+          </div>
+        </form>
+      </div>
+
+      <div class="app-sheet-scrim hidden" id="calDetailScrim"></div>
+      <div class="app-sheet hidden" id="calDetailSheet" role="dialog" aria-modal="true" aria-labelledby="calDetailTitle">
+        <div class="app-sheet-top">
+          <h2 id="calDetailTitle">Appointment</h2>
+          <button type="button" class="app-icon-btn" id="calDetailClose" aria-label="Close">×</button>
+        </div>
+        <p class="app-detail-status" id="calDetailStatus"></p>
+        <dl class="app-detail-list" id="calDetailList"></dl>
+        <div class="app-sheet-actions">
+          <button type="button" class="app-btn app-btn--ghost" id="calDetailDone">Close</button>
+        </div>
+      </div>
+
+      <section id="viewRequests" class="app-view hidden" data-view="requests">
+        <div class="app-greeting app-pay-head">
+          <div>
+            <h1>Requests</h1>
+            <p>Bookings from your website. Confirm a time, ask for a deposit, or decline.</p>
+          </div>
+        </div>
+        <div class="app-toolbar">
+          <div class="app-seg" role="tablist" aria-label="Request status" id="reqTabs"></div>
+        </div>
+        <div class="app-req-layout">
+          <article class="app-card app-req-listcard">
+            <div id="reqList"></div>
+            <div class="app-req-empty hidden" id="reqEmpty"></div>
+          </article>
+          <div class="app-sheet-scrim hidden" id="reqDetailScrim"></div>
+          <aside class="app-sheet app-req-panel hidden" id="reqDetailSheet" role="dialog" aria-labelledby="reqDetailTitle">
+            <div class="app-sheet-top">
+              <h2 id="reqDetailTitle">Request</h2>
+              <span class="app-req-chip" id="reqDetailStatus"></span>
+              <button type="button" class="app-icon-btn" id="reqDetailClose" aria-label="Close">×</button>
+            </div>
+            <div id="reqDetailBody"></div>
+            <div class="app-sheet-actions" id="reqDetailActions"></div>
+          </aside>
+          <div class="app-req-placeholder" id="reqPlaceholder">
+            <p><strong>Pick a request</strong>Its details, photos, and actions show here.</p>
+          </div>
+        </div>
+      </section>
+
+      <section id="viewClients" class="app-view hidden" data-view="clients">
+        <div class="app-greeting app-pay-head">
+          <div>
+            <h1>Clients</h1>
+            <p>People who book and buy from your shop.</p>
+          </div>
+          <button type="button" class="app-btn app-btn--primary" id="clientAddBtn">+ Add customer</button>
+        </div>
+        <div class="app-toolbar">
+          <input id="clientSearch" class="app-pay-search" type="search" placeholder="Search clients" autocomplete="off" />
+        </div>
+        <div class="app-req-layout">
+          <article class="app-card app-req-listcard">
+            <div id="clientList"></div>
+            <p class="app-empty" id="clientEmpty">No clients yet. Add a customer to start a record.</p>
+          </article>
+          <div class="app-sheet-scrim hidden" id="clientDetailScrim"></div>
+          <aside class="app-sheet app-req-panel hidden" id="clientDetailSheet" role="dialog" aria-labelledby="clientDetailTitle">
+            <div class="app-sheet-top">
+              <h2 id="clientDetailTitle">Client</h2>
+              <button type="button" class="app-req-chip app-client-vip" id="clientDetailVip">Mark VIP</button>
+              <button type="button" class="app-icon-btn" id="clientDetailClose" aria-label="Close">×</button>
+            </div>
+            <div id="clientDetailBody"></div>
+            <div class="app-sheet-actions">
+              <button type="button" class="app-btn app-btn--primary" id="clientDetailBook">Book appointment</button>
+            </div>
+          </aside>
+          <div class="app-req-placeholder" id="clientPlaceholder">
+            <p><strong>Pick a client</strong>Their bookings, notes, and contact info show here.</p>
+          </div>
+        </div>
+      </section>
+
+      <section id="viewMessages" class="app-view hidden" data-view="messages">
+        <div class="app-greeting app-pay-head">
+          <div>
+            <h1>Messages</h1>
+            <p>Text your clients from your shop's number. Replies show up here and in the app.</p>
+          </div>
+          <div class="app-pay-head-actions">
+            <button type="button" class="app-btn app-btn--ghost" id="msgSettingsBtn">Messaging settings</button>
+            <button type="button" class="app-btn app-btn--primary" id="msgNewBtn">+ New message</button>
+          </div>
+        </div>
+        <div class="app-msg-layout">
+          <article class="app-card app-msg-list">
+            <div class="app-msg-search"><input id="msgSearch" class="app-pay-search" type="search" placeholder="Search conversations" autocomplete="off" /></div>
+            <div id="msgThreads"></div>
+            <div class="app-msg-rowmenu hidden" id="msgRowMenu" role="menu">
+              <button type="button" role="menuitem" data-row-act="open">Open</button>
+              <button type="button" role="menuitem" data-row-act="unread">Mark as unread</button>
+              <button type="button" role="menuitem" class="is-danger" data-row-act="delete">Delete conversation</button>
+            </div>
+          </article>
+          <div class="app-sheet-scrim hidden" id="msgScrim"></div>
+          <section class="app-sheet app-msg-panel hidden" id="msgPanel" aria-labelledby="msgTitle">
+            <div class="app-msg-to hidden" id="msgToRow">
+              <label for="msgTo">To:</label>
+              <div class="app-msg-to-field">
+                <span class="app-msg-to-chip hidden" id="msgToChip"></span>
+                <input id="msgTo" type="text" autocomplete="off" placeholder="Name or phone number" aria-autocomplete="list" aria-controls="msgToSuggest" />
+              </div>
+              <button type="button" class="app-icon-btn" id="msgToCancel" aria-label="Cancel new message">×</button>
+              <div class="app-msg-to-suggest hidden" id="msgToSuggest" role="listbox"></div>
+            </div>
+            <header class="app-msg-head" id="msgHead">
+              <span>
+                <strong id="msgTitle">Conversation</strong>
+                <em id="msgSub"></em>
+              </span>
+              <button type="button" class="app-icon-btn" id="msgClose" aria-label="Close">×</button>
+            </header>
+            <div class="app-msg-thread" id="msgConversation" aria-live="polite"></div>
+            <div class="app-msg-consent hidden" id="msgConsent"></div>
+            <div class="app-msg-composer" id="msgComposer">
+              <div class="app-msg-tray hidden" id="msgActions" role="menu" aria-label="Message actions">
+                <button type="button" class="app-msg-tray-item" data-msg-action="photo"><span class="app-msg-tray-icon" style="background:#3FA764"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="5" width="16" height="14" rx="2.5"/><circle cx="9" cy="10" r="1.6"/><path d="M5 17l4.5-4.5 3 3L15 13l4 4"/></svg></span>Photos</button>
+                <button type="button" class="app-msg-tray-item" data-msg-action="payment"><span class="app-msg-tray-icon" style="background:#3B7BF2"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="6" width="17" height="12" rx="2"/><path d="M3.5 10h17M7 14.5h3"/></svg></span>Request payment</button>
+                <button type="button" class="app-msg-tray-item" data-msg-action="deposit"><span class="app-msg-tray-icon" style="background:#2F8CF2"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 7.5v8M8.5 12.5 12 16l3.5-3.5"/></svg></span>Request deposit</button>
+                <button type="button" class="app-msg-tray-item" data-msg-action="book"><span class="app-msg-tray-icon" style="background:#F08A33"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="5.5" width="16" height="14" rx="2"/><path d="M4 9.5h16M8.5 3.5v4M15.5 3.5v4"/></svg></span>Book session</button>
+                <button type="button" class="app-msg-tray-item" data-msg-action="link"><span class="app-msg-tray-icon" style="background:#8C6647"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 14a4 4 0 0 0 5.7 0l2.6-2.6a4 4 0 0 0-5.7-5.7L11.5 6.8"/><path d="M14 10a4 4 0 0 0-5.7 0l-2.6 2.6a4 4 0 0 0 5.7 5.7l1.1-1.1"/></svg></span>Booking link</button>
+                <button type="button" class="app-msg-tray-item" data-msg-action="quick"><span class="app-msg-tray-icon" style="background:#9A9A9A"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 3 5 13.5h6L10 21l8-10.5h-6z"/></svg></span>Quick reply</button>
+              </div>
+              <div class="app-msg-pop hidden" id="msgPop"></div>
+              <div class="app-msg-attach hidden" id="msgAttachPreview"></div>
+              <p class="app-sheet-error hidden" id="msgError"></p>
+              <div class="app-msg-input">
+                <button type="button" class="app-msg-plus" id="msgPlus" aria-expanded="false" aria-controls="msgActions" aria-label="Message actions"><span aria-hidden="true">+</span></button>
+                <input type="file" accept="image/*" multiple id="msgPhoto" class="app-sr-only" tabindex="-1" />
+                <textarea id="msgInput" rows="1" placeholder="Write a text…" aria-label="Message"></textarea>
+                <button type="button" class="app-btn app-btn--primary" id="msgSend">Send</button>
+              </div>
+            </div>
+            <p class="app-hint app-msg-cantsend hidden" id="msgCantSend">You can read these texts. Sending needs client texting turned on for you.</p>
+          </section>
+          <div class="app-req-placeholder" id="msgPlaceholder">
+            <p><strong>Pick a conversation</strong>Or start one with New message.</p>
+          </div>
+        </div>
+      </section>
+
+      <div class="app-sheet-scrim hidden" id="msgSettingsScrim"></div>
+      <div class="app-sheet app-msg-settings hidden" id="msgSettingsSheet" role="dialog" aria-modal="true" aria-labelledby="msgSettingsTitle">
+        <div class="app-sheet-top">
+          <h2 id="msgSettingsTitle">Messaging settings</h2>
+          <button type="button" class="app-icon-btn" id="msgSettingsClose" aria-label="Close">×</button>
+        </div>
+        <div id="msgSettingsBody"></div>
+      </div>
+
+      <section id="viewTeam" class="app-view hidden" data-view="team">
+        <div class="app-greeting app-pay-head">
+          <div>
+            <h1>Team</h1>
+            <p>The people who work with you. Invite someone, set roles, and choose what managers can do.</p>
+          </div>
+          <button type="button" class="app-btn app-btn--primary hidden" id="teamInviteBtn">+ Invite</button>
+        </div>
+        <div class="app-toolbar">
+          <div class="app-seg" role="tablist" aria-label="Team" id="teamTabs">
+            <button type="button" class="is-on" data-team-tab="people">People</button>
+            <button type="button" data-team-tab="permissions">Permissions</button>
+          </div>
+        </div>
+        <div class="app-team-perms hidden" id="teamPermissions"></div>
+        <div class="app-req-layout" id="teamPeoplePanel">
+          <article class="app-card app-req-listcard">
+            <div id="teamList"></div>
+          </article>
+          <div class="app-sheet-scrim hidden" id="teamDetailScrim"></div>
+          <aside class="app-sheet app-req-panel hidden" id="teamDetailSheet" role="dialog" aria-labelledby="teamDetailTitle">
+            <div class="app-sheet-top">
+              <h2 id="teamDetailTitle">Team member</h2>
+              <button type="button" class="app-icon-btn" id="teamDetailClose" aria-label="Close">×</button>
+            </div>
+            <div id="teamDetailBody"></div>
+            <div class="app-sheet-actions" id="teamDetailActions"></div>
+          </aside>
+          <div class="app-req-placeholder" id="teamPlaceholder">
+            <p><strong>Pick someone</strong>Their role, booking settings, and contact info show here.</p>
+          </div>
+        </div>
+      </section>
+
+      <div class="app-sheet-scrim hidden" id="teamInviteScrim"></div>
+      <div class="app-sheet hidden" id="teamInviteSheet" role="dialog" aria-modal="true" aria-labelledby="teamInviteHeading">
+        <div class="app-sheet-top">
+          <h2 id="teamInviteHeading">Invite to your team</h2>
+          <button type="button" class="app-icon-btn" id="teamInviteClose" aria-label="Close">×</button>
+        </div>
+        <form id="teamInviteForm">
+          <div class="app-field">
+            <label>Role</label>
+            <div class="app-seg" role="radiogroup">
+              <button type="button" class="is-on" data-invite-role="member">Staff</button>
+              <button type="button" data-invite-role="manager">Manager</button>
+            </div>
+          </div>
+          <div class="app-field">
+            <label for="teamInviteTitle">Job title (optional)</label>
+            <input id="teamInviteTitle" type="text" maxlength="40" placeholder="Barber" />
+          </div>
+          <p class="app-hint">You'll get a link to send them. It works once and expires after a few days.</p>
+          <p class="app-sheet-error hidden" id="teamInviteError"></p>
+          <div class="app-sheet-actions">
+            <button type="submit" class="app-btn app-btn--primary" id="teamInviteCreate">Create invite link</button>
+          </div>
+        </form>
+        <div class="hidden" id="teamInviteResult">
+          <div class="app-field">
+            <label for="teamInviteLink">Invite link</label>
+            <input id="teamInviteLink" type="text" readonly />
+          </div>
+          <p class="app-hint">Send this link by text or email. They'll create their login and join your shop.</p>
+          <div class="app-sheet-actions">
+            <button type="button" class="app-btn app-btn--ghost" id="teamInviteDone">Done</button>
+            <button type="button" class="app-btn app-btn--primary" id="teamInviteCopy">Copy link</button>
+          </div>
+        </div>
+      </div>
+
+      <section id="viewProfile" class="app-view hidden" data-view="profile">
+        <div class="app-greeting app-pay-head">
+          <div>
+            <h1>Your website profile</h1>
+            <p>Your part of the shop's website: your bio and the work you want clients to see.</p>
+          </div>
+        </div>
+        <div id="profileBody"></div>
+      </section>
+
+      <section id="viewInsights" class="app-view hidden" data-view="insights">
+        <div class="app-greeting app-pay-head">
+          <div>
+            <h1>Insights</h1>
+            <p>How your business is doing: revenue, bookings, clients, and your busiest days.</p>
+          </div>
+          <div class="app-seg" role="tablist" aria-label="Time range" id="insRange"></div>
+        </div>
+        <div id="insBody"></div>
+      </section>
+
+      <div class="app-sheet-scrim hidden" id="clientSheetScrim"></div>
+      <div class="app-sheet hidden" id="clientSheet" role="dialog" aria-modal="true" aria-labelledby="clientSheetTitle">
+        <div class="app-sheet-top">
+          <h2 id="clientSheetTitle">Add customer</h2>
+          <button type="button" class="app-icon-btn" id="clientSheetClose" aria-label="Close">×</button>
+        </div>
+        <form id="clientNewForm">
+          <div class="app-field">
+            <label for="clientNewName">Name</label>
+            <input id="clientNewName" name="name" type="text" autocomplete="name" required />
+          </div>
+          <div class="app-field">
+            <label for="clientNewEmail">Email</label>
+            <input id="clientNewEmail" name="email" type="email" autocomplete="email" />
+          </div>
+          <div class="app-field">
+            <label for="clientNewPhone">Phone</label>
+            <input id="clientNewPhone" name="phone" type="tel" inputmode="tel" autocomplete="tel" />
+          </div>
+          <p class="app-hint">Name is required. Enter an email or phone number.</p>
+          <p class="app-sheet-error hidden" id="clientNewError"></p>
+          <div class="app-sheet-actions">
+            <button type="button" class="app-btn app-btn--ghost" id="clientSheetCancel">Cancel</button>
+            <button type="submit" class="app-btn app-btn--primary" id="clientNewSave">Save</button>
+          </div>
+        </form>
+      </div>
+
+      <section id="viewShop" class="app-view hidden" data-view="shop">
+        <div class="app-greeting app-pay-head">
+          <div>
+            <h1>Shop</h1>
+            <p>Catalog and orders for products you sell on your site.</p>
+          </div>
+          <div class="app-seg" role="tablist" aria-label="Shop">
+            <button type="button" class="is-on" id="shopTabCatalog" data-shop-tab="catalog">Catalog</button>
+            <button type="button" id="shopTabOrders" data-shop-tab="orders">Orders</button>
+          </div>
+        </div>
+        <div class="app-stats" id="shopStats">
+          <div>
+            <span>Products</span>
+            <strong id="shopStatProducts">0</strong>
+          </div>
+          <div>
+            <span>Orders</span>
+            <strong id="shopStatOrders">0</strong>
+          </div>
+          <div>
+            <span>Revenue</span>
+            <strong id="shopStatRevenue">$0.00</strong>
+          </div>
+        </div>
+        <div id="shopCatalogPanel">
+          <div class="app-product-grid" id="shopProductGrid"></div>
+          <div class="app-req-empty hidden" id="shopProductEmpty">
+            <strong>No products yet</strong>
+            <span>Add your first product and it shows up in the shop on your website.</span>
+            <button type="button" class="app-btn app-btn--primary" data-shop-add>+ Add product</button>
+          </div>
+        </div>
+        <div class="app-sheet-scrim hidden" id="shopSheetScrim"></div>
+        <div class="app-sheet hidden" id="shopSheet" role="dialog" aria-modal="true" aria-labelledby="shopSheetTitle">
+          <div class="app-sheet-top">
+            <h2 id="shopSheetTitle">New product</h2>
+            <button type="button" class="app-icon-btn" id="shopSheetClose" aria-label="Close">×</button>
+          </div>
+          <form id="shopForm" novalidate>
+            <div class="app-shop-photo">
+              <div class="app-shop-photo-box" id="shopPhotoBox"></div>
+              <label class="app-btn app-btn--ghost">
+                <span id="shopPhotoLabel">Add photo</span>
+                <input type="file" accept="image/*" id="shopPhotoInput" class="hidden" />
+              </label>
+            </div>
+            <div class="app-field">
+              <label for="shopProdName">Name</label>
+              <input id="shopProdName" type="text" autocomplete="off" />
+            </div>
+            <div class="app-field-row">
+              <div class="app-field">
+                <label for="shopPrice">Price</label>
+                <input id="shopPrice" type="text" inputmode="decimal" placeholder="0.00" autocomplete="off" />
+              </div>
+              <div class="app-field">
+                <label for="shopSale">Sale price</label>
+                <input id="shopSale" type="text" inputmode="decimal" placeholder="Optional" autocomplete="off" />
+              </div>
+            </div>
+            <div class="app-field">
+              <label for="shopCategory">Category</label>
+              <input id="shopCategory" type="text" placeholder="Optional" autocomplete="off" />
+            </div>
+            <div class="app-field">
+              <label for="shopDesc">Description</label>
+              <textarea id="shopDesc" rows="3" placeholder="Optional"></textarea>
+            </div>
+            <details class="app-shop-ship">
+              <summary>Shipping details (optional)</summary>
+              <p class="app-hint">Used to quote shipping. Left blank, a product ships as 1 lb in a small box.</p>
+              <div class="app-field-row">
+                <div class="app-field"><label for="shopWeight">Weight (oz)</label><input id="shopWeight" type="text" inputmode="decimal" /></div>
+                <div class="app-field"><label for="shopLength">Length (in)</label><input id="shopLength" type="text" inputmode="decimal" /></div>
+              </div>
+              <div class="app-field-row">
+                <div class="app-field"><label for="shopWidth">Width (in)</label><input id="shopWidth" type="text" inputmode="decimal" /></div>
+                <div class="app-field"><label for="shopHeight">Height (in)</label><input id="shopHeight" type="text" inputmode="decimal" /></div>
+              </div>
+            </details>
+            <label class="app-shop-visible">
+              <input type="checkbox" id="shopVisible" checked />
+              <span><strong>Visible on site</strong><em>Turn off to hide it without deleting.</em></span>
+            </label>
+            <p class="app-sheet-error hidden" id="shopError"></p>
+            <div class="app-sheet-actions">
+              <button type="button" class="app-btn app-btn--danger hidden" id="shopDelete">Delete</button>
+              <button type="button" class="app-btn app-btn--ghost" id="shopCancel">Cancel</button>
+              <button type="submit" class="app-btn app-btn--primary" id="shopSave">Add to shop</button>
+            </div>
+          </form>
+        </div>
+        <article class="app-card hidden" id="shopOrdersPanel">
+          <div id="shopOrderList"></div>
+          <p class="app-empty" id="shopOrderEmpty">No shop orders yet.</p>
+        </article>
+      </section>
+
+      <section id="viewPayments" class="app-view hidden" data-view="payments">
+        <div class="app-greeting app-pay-head">
+          <div>
+            <h1>Payments</h1>
+            <p>Charges, payouts, and refunds for your shop. Tap to Pay stays on iPhone.</p>
+          </div>
+          <div class="app-pay-head-actions">
+            <button type="button" class="app-btn app-btn--primary hidden" id="payTakeBtn">Take a payment</button>
+            <button type="button" class="app-icon-btn" id="payRefresh" aria-label="Refresh">↻</button>
+            <div class="app-pay-more">
+              <button type="button" class="app-icon-btn" id="payMoreBtn" aria-label="Payment settings" aria-haspopup="true" aria-expanded="false">⋯</button>
+              <div class="app-pay-menu hidden" id="payMoreMenu" role="menu">
+                <button type="button" role="menuitem" id="payDescriptorBtn">Payment descriptor</button>
+                <button type="button" role="menuitem" class="hidden" id="payTaxBtn">Tax settings</button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <p class="app-sheet-error hidden" id="payError"></p>
+
+        <article class="app-card hidden" id="payBlocked">
+          <p class="app-empty" id="payBlockedMsg">This account can’t take client payments. Team payouts stay with the shop owner.</p>
+        </article>
+
+        <article class="app-card hidden" id="paySetup">
+          <div class="app-card-head">
+            <h2>Stripe Connect</h2>
+          </div>
+          <p class="app-empty" id="paySetupCopy">Set up Stripe to accept deposits, payment links, and in-person charges.</p>
+          <div class="app-pay-setup-actions">
+            <button type="button" class="app-btn app-btn--primary" id="payConnectBtn">Set up Stripe</button>
+          </div>
+        </article>
+
+        <article class="app-pay-hero hidden" id="payHero">
+          <div class="app-pay-hero-top">
+            <div>
+              <p class="app-pay-kicker">Total balance</p>
+              <p class="app-pay-total" id="payTotal">$0.00</p>
+              <p class="app-pay-sub" id="paySub">Available to pay out $0.00 · Available soon $0.00</p>
+            </div>
+            <div class="app-pay-hero-actions">
+              <button type="button" class="app-btn app-btn--cream" id="payWithdrawBtn">Withdraw to bank</button>
+              <button type="button" class="app-btn app-btn--ghost-on-ink" id="payDashboardBtn">Stripe dashboard</button>
+            </div>
+          </div>
+          <div class="app-pay-stats">
+            <div>
+              <span>Available to pay out</span>
+              <strong id="payAvailable">$0.00</strong>
+            </div>
+            <div>
+              <span>Available soon</span>
+              <strong id="payPending">$0.00</strong>
+            </div>
+            <div>
+              <span>This month</span>
+              <strong id="payMonth">+$0.00</strong>
+            </div>
+          </div>
+        </article>
+
+        <article class="app-card" id="payActivityCard">
+          <div class="app-pay-activity-toolbar">
+            <h2>Activity</h2>
+            <input id="payTxSearch" class="app-pay-search" type="search" placeholder="Search activity" autocomplete="off" />
+            <div class="app-pay-filters" role="tablist" aria-label="Activity type">
+              <button type="button" class="is-on" data-filter="all">All</button>
+              <button type="button" data-filter="payments">Payments</button>
+              <button type="button" data-filter="refunds">Refunds</button>
+              <button type="button" data-filter="payouts">Payouts</button>
+            </div>
+          </div>
+          <div id="payTxList"></div>
+          <p class="app-empty" id="payTxEmpty">Charges and payouts will show here after Stripe is connected.</p>
+          <div class="app-pay-activity-foot hidden" id="payTxFoot">
+            <span id="payTxCount">Showing 0 of 0 transactions</span>
+            <div class="app-pay-activity-foot-actions">
+              <button type="button" class="app-btn app-btn--ghost app-btn--compact" id="payExportBtn">Export CSV</button>
+              <button type="button" class="app-btn app-btn--ghost app-btn--compact" id="payLoadMore">Load more</button>
+            </div>
+          </div>
+        </article>
+
+      </section>
+
+      <button type="button" class="app-sheet-scrim hidden" id="payWithdrawScrim" aria-label="Close withdraw"></button>
+      <div class="app-sheet hidden" id="payWithdrawSheet" role="dialog" aria-labelledby="payWithdrawTitle">
+        <div class="app-sheet-top">
+          <h2 id="payWithdrawTitle">Withdraw to bank</h2>
+          <button type="button" class="app-icon-btn" id="payWithdrawClose" aria-label="Close">×</button>
+        </div>
+        <p class="app-hint" id="payWithdrawHint">Available to pay out $0.00</p>
+        <div class="app-field">
+          <label for="payWithdrawAmt">Amount</label>
+          <div class="app-deposit-amt">
+            <input id="payWithdrawAmt" type="text" inputmode="decimal" placeholder="0.00" autocomplete="off" />
+            <span>USD</span>
+          </div>
+        </div>
+        <div class="app-field" id="payMethodWrap">
+          <span class="app-field-label">Speed</span>
+          <label class="app-radio">
+            <input type="radio" name="payMethod" value="standard" checked />
+            <span>Standard · 1–2 business days</span>
+          </label>
+          <label class="app-radio hidden" id="payInstantRow">
+            <input type="radio" name="payMethod" value="instant" />
+            <span id="payInstantLabel">Instant</span>
+          </label>
+        </div>
+        <p class="app-sheet-error hidden" id="payWithdrawError"></p>
+        <div class="app-sheet-actions">
+          <button type="button" class="app-btn app-btn--ghost" id="payWithdrawCancel">Cancel</button>
+          <button type="button" class="app-btn app-btn--primary" id="payWithdrawSave">Withdraw</button>
+        </div>
+      </div>
+
+      <div class="app-sheet-scrim hidden" id="appOpenScrim"></div>
+      <div class="app-sheet app-open-app hidden" id="appOpenSheet" role="dialog" aria-modal="true" aria-labelledby="appOpenTitle">
+        <div class="app-sheet-top">
+          <h2 id="appOpenTitle">Edit your website in the app</h2>
+          <button type="button" class="app-icon-btn" id="appOpenClose" aria-label="Close">×</button>
+        </div>
+        <p class="app-hint">The website builder works best in the Get Bookking app on iPhone. Same website, same changes.</p>
+        <div class="app-open-app-actions">
+          <a class="app-btn app-btn--primary" id="appOpenGo" href="#" rel="noopener">Open in TestFlight</a>
+          <a class="app-btn app-btn--ghost" id="appOpenWeb" href="/design">Continue on web anyway</a>
+        </div>
+      </div>
+
+      <button type="button" class="app-sheet-scrim hidden" id="payTakeScrim" aria-label="Close take a payment"></button>
+      <div class="app-sheet app-take hidden" id="payTakeSheet" role="dialog" aria-labelledby="payTakeTitle">
+        <div class="app-sheet-top">
+          <h2 id="payTakeTitle">Take a payment</h2>
+          <button type="button" class="app-icon-btn" id="payTakeClose" aria-label="Close">×</button>
+        </div>
+
+        <div id="payTakeForm">
+          <label class="app-take-amount">
+            <span>Amount</span>
+            <span class="app-take-amount-row"><b aria-hidden="true">$</b><input id="payTakeAmt" type="text" inputmode="decimal" placeholder="0.00" autocomplete="off" aria-label="Amount in dollars" /></span>
+          </label>
+          <div class="app-field-row">
+            <div class="app-field">
+              <label for="payTakeFor">What it's for</label>
+              <input id="payTakeFor" type="text" placeholder="Haircut" autocomplete="off" />
+            </div>
+            <div class="app-field">
+              <label for="payTakeName">Client</label>
+              <input id="payTakeName" type="text" placeholder="Optional" autocomplete="off" />
+            </div>
+          </div>
+
+          <div class="app-seg app-take-tabs" role="tablist" aria-label="How to pay">
+            <button type="button" class="is-on" id="payTakeTabCard" role="tab" aria-selected="true">Card</button>
+            <button type="button" id="payTakeTabLink" role="tab" aria-selected="false">Send link</button>
+          </div>
+
+          <div id="payTakeCardPane">
+            <div class="hidden" id="payTakeSummary"></div>
+            <div class="app-take-card hidden" id="payTakeCardBox">
+              <div id="payTakeCardEl" class="app-take-card-el"></div>
+              <p class="app-take-secure"><span aria-hidden="true">🔒</span> Secured by Stripe. Card details never touch our servers.</p>
+            </div>
+            <p class="app-hint hidden" id="payTakeCardNote"></p>
+            <button type="button" class="app-btn app-btn--primary app-take-go" id="payTakeContinue">Continue to card</button>
+            <button type="button" class="app-btn app-btn--primary app-take-go hidden" id="payTakeCharge">Charge</button>
+          </div>
+
+          <div class="hidden" id="payTakeLinkPane">
+            <div class="app-field">
+              <label for="payTakePhone">Client phone</label>
+              <input id="payTakePhone" type="tel" inputmode="tel" placeholder="(555) 123-4567" autocomplete="off" />
+            </div>
+            <p class="app-hint">They pay on their own phone. It shows up here once paid.</p>
+            <div class="app-pay-take-actions">
+              <button type="button" class="app-btn app-btn--ghost" id="payTakeCopy">Copy pay link</button>
+              <button type="button" class="app-btn app-btn--primary" id="payTakeText">Text pay link</button>
+            </div>
+          </div>
+
+          <p class="app-sheet-error hidden" id="payTakeError"></p>
+        </div>
+
+        <div class="app-take-done hidden" id="payTakeDone">
+          <div class="app-take-check" aria-hidden="true">✓</div>
+          <strong id="payTakeDoneTitle"></strong>
+          <span id="payTakeDoneSub"></span>
+          <div class="app-field hidden" id="payTakeLinkRow">
+            <label for="payTakeLink">Pay link</label>
+            <input id="payTakeLink" type="text" readonly />
+          </div>
+          <a class="app-btn app-btn--ghost hidden" id="payTakeReceipt" href="#" target="_blank" rel="noopener">View receipt</a>
+          <div class="app-sheet-actions">
+            <button type="button" class="app-btn app-btn--ghost" id="payTakeAgain">New payment</button>
+            <button type="button" class="app-btn app-btn--primary" id="payTakeFinish">Done</button>
+          </div>
+        </div>
+      </div>
+
+      <button type="button" class="app-sheet-scrim hidden" id="payTaxScrim" aria-label="Close tax settings"></button>
+      <div class="app-sheet hidden" id="payTaxSheet" role="dialog" aria-labelledby="payTaxTitle">
+        <div class="app-sheet-top">
+          <h2 id="payTaxTitle">Tax settings</h2>
+          <button type="button" class="app-icon-btn" id="payTaxClose" aria-label="Close">×</button>
+        </div>
+        <div class="app-tax-list">
+          <label class="app-tax-row">
+            <span><strong>Online sales tax</strong><em>Shop and website checkout. Calculated by Stripe Tax.</em></span>
+            <input type="checkbox" id="payTaxOnline" />
+          </label>
+          <label class="app-tax-row">
+            <span><strong>In-person sales tax</strong><em>Manual payment and Tap to Pay. Shown on checkout and receipts.</em></span>
+            <input type="checkbox" id="payTaxInPerson" />
+          </label>
+          <p class="app-hint hidden" id="payTaxMsg"></p>
+        </div>
+      </div>
+
+      <button type="button" class="app-sheet-scrim hidden" id="payDescScrim" aria-label="Close payment descriptor"></button>
+      <div class="app-sheet hidden" id="payDescSheet" role="dialog" aria-labelledby="payDescTitle">
+        <div class="app-sheet-top">
+          <h2 id="payDescTitle">Payment descriptor</h2>
+          <button type="button" class="app-icon-btn" id="payDescClose" aria-label="Close">×</button>
+        </div>
+        <p class="app-hint" id="payDescHint">Shows on your customer’s bank or card statement. This is not the Tap to Pay screen name.</p>
+        <div class="app-field">
+          <label for="payDescInput">Statement descriptor</label>
+          <input id="payDescInput" type="text" maxlength="22" autocomplete="off" placeholder="YOUR BUSINESS" />
+        </div>
+        <p class="app-hint">5–22 characters. Letters, numbers, periods, and spaces. Must match your business.</p>
+        <p class="app-sheet-error hidden" id="payDescError"></p>
+        <p class="app-hint app-hint--ok hidden" id="payDescOk">Saved — new charges will use this on bank/card statements.</p>
+        <div class="app-sheet-actions">
+          <button type="button" class="app-btn app-btn--ghost" id="payDescCancel">Cancel</button>
+          <button type="button" class="app-btn app-btn--primary" id="payDescSave">Save</button>
+        </div>
+      </div>
+
+      <button type="button" class="app-sheet-scrim hidden" id="payDetailScrim" aria-label="Close payment details"></button>
+      <div class="app-sheet app-pay-detail hidden" id="payDetailSheet" role="dialog" aria-labelledby="payDetailTitle">
+        <div class="app-sheet-top">
+          <h2 id="payDetailTitle">Payment</h2>
+          <button type="button" class="app-icon-btn" id="payDetailClose" aria-label="Close">×</button>
+        </div>
+        <div class="app-pay-detail-amount">
+          <strong id="payDetailAmount">$0.00</strong>
+          <span class="app-pay-chip hidden" id="payDetailChip"></span>
+        </div>
+        <p class="app-hint" id="payDetailWhen"></p>
+        <p class="app-empty" id="payDetailLoading">Loading details…</p>
+        <dl class="app-pay-detail-rows" id="payDetailRows"></dl>
+        <div class="app-pay-detail-lines hidden" id="payDetailLines"></div>
+        <p class="app-sheet-error hidden" id="payDetailError"></p>
+        <div class="app-sheet-actions app-pay-detail-actions" id="payDetailActions">
+          <a class="app-btn app-btn--ghost hidden" id="payDetailReceipt" href="#" target="_blank" rel="noopener noreferrer">View receipt</a>
+          <button type="button" class="app-btn app-btn--primary hidden" id="payDetailRefundBtn">Refund</button>
+        </div>
+
+        <div class="app-pay-refund hidden" id="payRefundPanel">
+          <h3>Refund</h3>
+          <p class="app-hint" id="payRefundHint">Up to $0.00 can be refunded.</p>
+          <div class="app-field">
+            <label for="payRefundAmt">Amount</label>
+            <div class="app-deposit-amt">
+              <input id="payRefundAmt" type="text" inputmode="decimal" placeholder="0.00" autocomplete="off" />
+              <span>USD</span>
+            </div>
+          </div>
+          <div class="app-field">
+            <label for="payRefundReason">Reason</label>
+            <select id="payRefundReason">
+              <option value="requested_by_customer">Requested by client</option>
+              <option value="duplicate">Duplicate charge</option>
+              <option value="fraudulent">Fraudulent</option>
+            </select>
+          </div>
+          <p class="app-hint">The client usually sees the money in 5–10 business days. Stripe fees aren’t returned.</p>
+          <p class="app-sheet-error hidden" id="payRefundError"></p>
+          <div class="app-sheet-actions">
+            <button type="button" class="app-btn app-btn--ghost" id="payRefundCancel">Cancel</button>
+            <button type="button" class="app-btn app-btn--danger" id="payRefundSubmit">Refund</button>
+          </div>
+        </div>
+      </div>
+
+      <section id="viewPayouts" class="app-view hidden" data-view="payouts">
+        <div class="app-greeting app-pay-head">
+          <div>
+            <h1>Team payouts</h1>
+            <p>What each team member collected, what they kept, and the studio’s share.</p>
+          </div>
+          <div class="app-pay-head-actions">
+            <button type="button" class="app-icon-btn" id="tpRefresh" aria-label="Refresh">↻</button>
+          </div>
+        </div>
+        <div class="app-pay-filters app-tp-periods" role="tablist" aria-label="Period">
+          <button type="button" class="is-on" data-period="month">This month</button>
+          <button type="button" data-period="lastMonth">Last month</button>
+          <button type="button" data-period="30d">Last 30 days</button>
+          <button type="button" data-period="year">This year</button>
+        </div>
+        <p class="app-sheet-error hidden" id="tpError"></p>
+        <article class="app-card hidden" id="tpBlocked">
+          <p class="app-empty">Only the shop owner can see team payouts. Your own payments are under Payments.</p>
+        </article>
+
+        <article class="app-pay-hero hidden" id="tpHero">
+          <p class="app-pay-kicker" id="tpPeriodLabel">This month</p>
+          <p class="app-pay-total" id="tpGross">$0.00</p>
+          <p class="app-pay-sub" id="tpSub">Collected by the team</p>
+          <div class="app-pay-stats">
+            <div><span>Studio share</span><strong id="tpStudio">$0.00</strong></div>
+            <div><span>Kept by team</span><strong id="tpMembers">$0.00</strong></div>
+            <div><span>Payments</span><strong id="tpCount">0</strong></div>
+          </div>
+        </article>
+
+        <article class="app-card hidden" id="tpTeamCard">
+          <div class="app-pay-activity-toolbar">
+            <h2>Team</h2>
+            <span class="app-tp-note">Change payout modes and splits in the iPhone app under Team.</span>
+          </div>
+          <div id="tpTeamList"></div>
+        </article>
+
+        <article class="app-card hidden" id="tpActivityCard">
+          <div class="app-pay-activity-toolbar">
+            <h2>Split activity</h2>
+            <select id="tpMemberFilter" class="app-pay-search" aria-label="Filter by team member">
+              <option value="">Everyone</option>
+            </select>
+            <button type="button" class="app-btn app-btn--ghost app-btn--compact" id="tpExportBtn">Export CSV</button>
+          </div>
+          <div id="tpActivityList"></div>
+          <p class="app-empty" id="tpActivityEmpty">No team payments in this period.</p>
+          <p class="app-hint app-tp-truncated hidden" id="tpTruncated">Showing the latest 500 payments. Pick a shorter period to see everything.</p>
+        </article>
+      </section>
+
+      <section id="viewBilling" class="app-view app-view--frame hidden" data-view="billing">
+        <iframe id="frameBilling" class="app-frame" title="Plan and billing"></iframe>
+      </section>
+      <section id="viewAccount" class="app-view app-view--frame hidden" data-view="account">
+        <iframe id="frameAccount" class="app-frame" title="Your account"></iframe>
+      </section>
+      <section id="viewSettings" class="app-view app-view--frame hidden" data-view="settings">
+        <iframe id="frameSettings" class="app-frame" title="Settings"></iframe>
+      </section>
+    </main>
+  </div>
+
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-functions-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-storage-compat.js"></script>
+  <script src="/js/firebase-config.js"></script>
+  <script src="/assets/app-session.js?v=7"></script>
+  <script src="/assets/app-dashboard.js?v=22"></script>
+  <script src="/assets/app-requests.js?v=5"></script>
+  <script src="/assets/app-dash-charts.js?v=6"></script>
+  <script src="/assets/app-team.js?v=5"></script>
+  <script src="/assets/app-profile.js?v=1"></script>
+  <script src="/assets/app-messages.js?v=9"></script>
+  <script src="/assets/app-insights.js?v=3"></script>
+  <script src="/assets/app-payments.js?v=13"></script>
+  <script src="/assets/app-payouts.js?v=2"></script>
+  <script src="/assets/app-clients.js?v=4"></script>
+  <script src="/assets/app-shop.js?v=5"></script>
+  <script src="/assets/app.js?v=30"></script>
+</body>
+</html>

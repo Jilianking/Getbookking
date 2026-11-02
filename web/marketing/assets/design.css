@@ -1831,3 +1831,71 @@ button.design-sec-row {
 /* Photo crop: a compact window so the frame, zoom, and buttons all fit at once. */
 .design-modal-card--crop { width: min(580px, 100%); }
 .design-modal-card--crop .design-crop-stage { display: flex; justify-content: center; }
+
+/* Settings → Your web address */
+.design-address { display: flex; flex-direction: column; gap: 10px; }
+.design-address-row { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
+.design-address-label { width: 100%; font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--bk-muted, #8a7a6a); }
+.design-address-url { font-size: 14px; font-weight: 500; overflow-wrap: anywhere; flex: 1; min-width: 0; }
+.design-address-btns { display: inline-flex; gap: 10px; }
+.design-address-btns a { text-decoration: none; }
+.design-address-status { font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 999px; background: rgba(196, 123, 26, 0.12); color: #8a5512; }
+.design-address-status.is-ok { background: rgba(27, 175, 122, 0.12); color: #0f6b4a; }
+.design-address-status.is-bad { background: rgba(227, 73, 72, 0.12); color: #a12c2b; }
+.design-address-manage { align-self: flex-start; text-decoration: none; }
+
+/* —— Palettes (next to Undo / Redo) —— */
+.design-palette-wrap { position: relative; display: inline-flex; margin-left: 6px; }
+.design-palette-btn { display: inline-flex; align-items: center; gap: 6px; }
+.design-palette-dots { display: inline-flex; }
+.design-palette-dots i { width: 10px; height: 10px; border-radius: 50%; border: 1px solid rgba(0,0,0,0.15); margin-right: -3px; }
+.design-palette-dots i:last-child { margin-right: 0; }
+.design-palette-pop {
+  position: fixed; top: 56px; left: 0; z-index: 200;
+  width: 380px; max-height: min(70vh, 560px); overflow: auto;
+  background: #fff; border: 1px solid var(--bk-line); border-radius: 10px;
+  box-shadow: 0 18px 48px rgba(26, 20, 16, 0.16); padding: 14px;
+}
+.design-palette-pop[hidden] { display: none; }
+.design-palette-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 12px; }
+.design-palette-head strong { font-size: 13px; font-weight: 600; color: var(--bk-ink); }
+.design-palette-tones { display: inline-flex; border: 1px solid var(--bk-line); border-radius: 6px; overflow: hidden; }
+.design-palette-tones button {
+  border: none; background: #fff; padding: 5px 10px; cursor: pointer;
+  font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--bk-ink);
+}
+.design-palette-tones button + button { border-left: 1px solid var(--bk-line); }
+.design-palette-tones button.is-on { background: var(--bk-ink); color: #fff; }
+.design-palette-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.design-palette-card {
+  display: flex; flex-direction: column; gap: 6px; padding: 6px; text-align: left; cursor: pointer;
+  background: #fff; border: 1px solid var(--bk-line); border-radius: 8px; font: inherit;
+}
+.design-palette-card:hover { border-color: var(--bk-ink); }
+.design-palette-card.is-active { border-color: var(--bk-ink); box-shadow: 0 0 0 1px var(--bk-ink); }
+.design-palette-strip { display: flex; height: 28px; border-radius: 5px; overflow: hidden; border: 1px solid rgba(0,0,0,0.08); }
+.design-palette-strip i { flex: 1; }
+.design-palette-name { font-size: 12px; color: var(--bk-ink); display: flex; justify-content: space-between; gap: 6px; }
+.design-palette-name em { font-style: normal; color: var(--bk-faint); font-size: 11px; }
+.design-palette-accents { margin-top: 14px; }
+.design-palette-accents[hidden] { display: none; }
+.design-palette-sub { display: block; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--bk-faint); margin-bottom: 8px; }
+.design-palette-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.design-palette-chip {
+  display: inline-flex; align-items: center; gap: 6px; padding: 4px 8px 4px 4px; cursor: pointer;
+  border: 1px solid var(--bk-line); border-radius: 999px; background: #fff; font: inherit; font-size: 12px; color: var(--bk-ink);
+}
+.design-palette-chip i { width: 16px; height: 16px; border-radius: 50%; }
+.design-palette-chip.is-active { border-color: var(--bk-ink); box-shadow: 0 0 0 1px var(--bk-ink); }
+.design-palette-note { font-size: 11px; color: var(--bk-faint); margin: 12px 0 0; }
+
+/* Browser tab preview under "Browser tab icon" */
+.design-tab-preview { margin-top: 10px; display: flex; flex-direction: column; gap: 6px; }
+.design-tab-chip {
+  display: inline-flex; align-items: center; gap: 8px; align-self: flex-start; max-width: 100%;
+  padding: 7px 14px 7px 10px; border-radius: 9px 9px 0 0; background: #ecebe8; border: 1px solid var(--bk-line); border-bottom: none;
+  font-size: 12px; color: var(--bk-ink);
+}
+.design-tab-chip img { width: 16px; height: 16px; border-radius: 3px; object-fit: contain; flex: none; }
+.design-tab-chip span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.design-tab-note { font-size: 11px; color: var(--bk-faint); }

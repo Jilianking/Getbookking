@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,300;6..72,400;6..72,500&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="assets/design.css?v=49" />
+  <link rel="stylesheet" href="assets/design.css?v=53" />
 </head>
 <body>
   <div id="gateLoading" class="design-gate">
@@ -62,6 +62,27 @@
         <button type="button" class="design-mini" id="undoBtn" disabled>Undo</button>
         <button type="button" class="design-mini" id="redoBtn" disabled>Redo</button>
       </div>
+      <div class="design-palette-wrap">
+        <button type="button" class="design-mini design-palette-btn" id="paletteBtn" aria-haspopup="dialog" aria-expanded="false">
+          <span class="design-palette-dots" id="paletteBtnDots" aria-hidden="true"></span>Palettes
+        </button>
+        <div class="design-palette-pop" id="palettePop" role="dialog" aria-label="Color palettes" hidden>
+          <div class="design-palette-head">
+            <strong>Color palettes</strong>
+            <div class="design-palette-tones" role="group" aria-label="Palette tone">
+              <button type="button" data-tone="all">All</button>
+              <button type="button" data-tone="light">Light</button>
+              <button type="button" data-tone="dark">Dark</button>
+            </div>
+          </div>
+          <div class="design-palette-grid" id="paletteGrid"></div>
+          <div class="design-palette-accents" id="paletteAccents" hidden>
+            <span class="design-palette-sub">Accent</span>
+            <div class="design-palette-chips" id="paletteChips"></div>
+          </div>
+          <p class="design-palette-note">Choosing a palette replaces custom colors. Undo brings them back.</p>
+        </div>
+      </div>
       <div class="design-top-spacer"></div>
       <div class="design-device" role="group" aria-label="Preview width">
         <button type="button" class="is-active" data-device="desktop">Desktop</button>
@@ -84,10 +105,7 @@
         <button type="button" class="design-icon" data-panel="photos" title="Photos" aria-label="Photos">
           <svg viewBox="0 0 16 16" aria-hidden="true"><rect x="2.25" y="3.25" width="11.5" height="9.5" rx="1.25"/><circle class="fill" cx="5.4" cy="6.1" r="0.85"/><path d="M3.2 11.4 5.7 8.6l1.8 1.6 2-2.2 3.3 3.4"/></svg>
         </button>
-        <button type="button" class="design-icon" data-panel="style" title="Style" aria-label="Style">
-          <svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="5.25"/><path class="fill" d="M8 2.75a5.25 5.25 0 0 0 0 10.5z"/></svg>
-        </button>
-        <button type="button" class="design-icon" data-panel="content" title="Copy" aria-label="Copy">
+        <button type="button" class="design-icon" data-panel="content" title="Business info" aria-label="Business info">
           <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 4.75h10M3 8h6.5M3 11.25h10"/></svg>
         </button>
         <button type="button" class="design-icon" data-panel="settings" title="Settings" aria-label="Settings">
@@ -169,6 +187,7 @@
                 <button type="button" role="radio" class="design-seg-opt" data-tab-icon="logo">Logo</button>
                 <button type="button" role="radio" class="design-seg-opt" data-tab-icon="letter">First letter</button>
               </div>
+              <div class="design-tab-preview" data-tab-preview aria-hidden="true"></div>
             </div>
           </section>
           <section class="design-photo-block">
@@ -229,55 +248,11 @@
             <button type="button" class="design-btn design-btn--primary" id="inspectorUploadBtn">Upload photo</button>
           </div>
 
-          <div class="design-divider"></div>
-          <h2>Brand kit</h2>
-          <div class="design-field">
-            <label for="colorBackground">Page</label>
-            <div class="design-swatch-row">
-              <input type="text" id="colorBackgroundText" maxlength="7" />
-              <input type="color" id="colorBackground" />
-            </div>
-          </div>
-          <div class="design-field">
-            <label for="colorText">Text</label>
-            <div class="design-swatch-row">
-              <input type="text" id="colorTextText" maxlength="7" />
-              <input type="color" id="colorText" />
-            </div>
-          </div>
-          <div class="design-field">
-            <label for="colorPrimary">Accent</label>
-            <div class="design-swatch-row">
-              <input type="text" id="colorPrimaryText" maxlength="7" />
-              <input type="color" id="colorPrimary" />
-            </div>
-          </div>
-          <div class="design-field">
-            <label for="colorCard">Cards</label>
-            <div class="design-swatch-row">
-              <input type="text" id="colorCardText" maxlength="7" />
-              <input type="color" id="colorCard" />
-            </div>
-          </div>
-          <div class="design-field">
-            <label for="colorFeatured">Gallery strip</label>
-            <div class="design-swatch-row">
-              <input type="text" id="colorFeaturedText" maxlength="7" />
-              <input type="color" id="colorFeatured" />
-            </div>
-          </div>
-          <div class="design-field">
-            <label for="colorAbout">About / footer</label>
-            <div class="design-swatch-row">
-              <input type="text" id="colorAboutText" maxlength="7" />
-              <input type="color" id="colorAbout" />
-            </div>
-          </div>
-          <button type="button" class="design-btn design-btn--ghost" id="openTemplatesBtn">Change template</button>
+
         </div>
 
         <div id="panelContent" class="design-panel-body hidden">
-          <p class="design-panel-lead">Website copy and contact. This does not change your account business name.</p>
+          <p class="design-panel-lead">Your business details. Changes here update every spot on your site that shows them (header, about, footer, contact).</p>
           <div class="design-field">
             <label for="contentDisplayName">Website name</label>
             <input type="text" id="contentDisplayName" maxlength="80" />
@@ -348,28 +323,24 @@
           </div>
         </div>
         <div id="panelSettings" class="design-panel-body hidden">
-          <h2>Announcement</h2>
-          <label class="design-check">
-            <input type="checkbox" id="announcementEnabled" />
-            <span>Show banner on site</span>
-          </label>
-          <div class="design-field">
-            <label for="announcementText">Banner text</label>
-            <input type="text" id="announcementText" maxlength="140" placeholder="Closed Mondays · Book ahead for weekends" />
+          <h2>Your web address</h2>
+          <div class="design-address" id="addressBox">
+            <div class="design-address-row">
+              <span class="design-address-label">Free link</span>
+              <span class="design-address-url" id="addressFree">—</span>
+              <span class="design-address-btns">
+                <button type="button" class="design-text-btn" id="addressCopy">Copy</button>
+                <a class="design-text-btn" id="addressOpen" href="#" target="_blank" rel="noopener">Open</a>
+              </span>
+            </div>
+            <div class="design-address-row">
+              <span class="design-address-label">Custom domain</span>
+              <span class="design-address-url" id="addressDomain">None yet</span>
+              <span class="design-address-status hidden" id="addressStatus"></span>
+            </div>
+            <a class="design-btn design-btn--ghost design-address-manage" id="addressManage" href="/billing#domain" target="_blank" rel="noopener">Get a domain</a>
+            <p class="design-hint">Domains are bought and managed in Plan &amp; billing. It opens in a new tab so your editor stays open.</p>
           </div>
-          <div class="design-divider"></div>
-          <h2>SEO</h2>
-          <div class="design-field">
-            <label for="seoTitle">Page title</label>
-            <input type="text" id="seoTitle" maxlength="70" placeholder="Your business name" />
-          </div>
-          <div class="design-field">
-            <label for="seoDescription">Meta description</label>
-            <textarea id="seoDescription" maxlength="160" placeholder="Short line for Google and social previews"></textarea>
-          </div>
-          <div class="design-divider"></div>
-          <h2>Website</h2>
-          <ul class="design-health" id="healthList"></ul>
         </div>
       </aside>
 
@@ -506,6 +477,7 @@
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-storage-compat.js"></script>
   <script src="js/firebase-config.js"></script>
-  <script src="assets/design-app.js?v=78"></script>
+  <script src="assets/design-palettes.js?v=1"></script>
+  <script src="assets/design-app.js?v=90"></script>
 </body>
 </html>

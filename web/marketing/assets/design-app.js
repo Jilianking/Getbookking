@@ -59,6 +59,51 @@
     luxeHomeServicesHeading: 'Services heading'
   };
 
+  /** Page spots (website text labels, every template) filled by each Business info field. */
+  var BUSINESS_INFO_SPOTS = {
+    contactPhone: ['wc.contact.phone'],
+    contactEmail: ['wc.contact.email'],
+    contactAddress: ['wc.contact.address', 'wc.contact.location'],
+    contactAddressSuite: ['wc.contact.address', 'wc.contact.location'],
+    tagline: ['wc.classic.heroTag', 'wc.generic.tagline', 'wc.s12.navSub', 'wc.s12.heroLead'],
+    aboutText: ['wc.classic.aboutBio', 'wc.stonecut.aboutBio', 'wc.luxe.teamBio', 'wc.s12.philBody1']
+  };
+
+  function phoneUS(raw) {
+    var d = String(raw || '').replace(/\D/g, '');
+    if (d.length === 11 && d.charAt(0) === '1') d = d.slice(1);
+    return d.length === 10 ? '(' + d.slice(0, 3) + ') ' + d.slice(3, 6) + '-' + d.slice(6) : String(raw || '').trim();
+  }
+
+  /** Shows a Business info change in every spot on the preview that uses it (same formatting as the site). */
+  function postBusinessInfo(field) {
+    var t = state.tenant || {};
+    var street = String(t.contactAddress || '').trim();
+    var suite = String(t.contactAddressSuite || '').trim();
+    var address = street && suite ? street + '\n' + suite : (street || suite);
+    var send = function (key, value) { if (value) postToFrame('text-patch', { key: key, value: value }); };
+    if (field === 'contactPhone') send('wc.contact.phone', phoneUS(t.contactPhone));
+    if (field === 'contactEmail') send('wc.contact.email', String(t.contactEmail || '').trim());
+    if (field === 'contactAddress' || field === 'contactAddressSuite') {
+      send('wc.contact.address', address);
+      send('wc.contact.location', address || String(t.serviceArea || '').trim());
+    }
+    var tag = String(t.tagline || '').trim();
+    var about = String(t.aboutText || '').trim();
+    // Studio 12 hero intro: tagline, else the start of About (same as the site).
+    var s12Lead = tag || about.slice(0, 200);
+    if (field === 'tagline') {
+      ['wc.classic.heroTag', 'wc.generic.tagline', 'wc.s12.navSub'].forEach(function (k) { send(k, tag); });
+      send('wc.s12.heroLead', s12Lead);
+    }
+    if (field === 'aboutText') {
+      ['wc.classic.aboutBio', 'wc.stonecut.aboutBio', 'wc.luxe.teamBio'].forEach(function (k) { send(k, about); });
+      send('wc.s12.philBody1', about.split(/\n\n+/)[0] || s12Lead);
+      if (!tag) send('wc.s12.heroLead', s12Lead);
+      if (!String(t.bladeHeroDescription || '').trim()) send('bladeHeroDescription', about);
+    }
+  }
+
   /** Tenant fields safe to write from website Design (not identity). */
   var SITE_TEXT_FIELDS = {
     tagline: 1,
@@ -162,6 +207,7 @@
     'aboutSectionBackgroundColor', 'aboutSectionTextColor',
     'sidebarBackgroundColor', 'sidebarTextColor', 'sidebarCloseIconColor',
     'sidebarIconColorHome', 'sidebarIconColorBooking',
+    'webColorPaletteId', 'accentTextColor', 'bookingFormCardBackgroundColor',
     'showGalleryPage', 'showBookPage', 'showAboutPage', 'showTeamPage', 'shopEnabled',
     'siteAnnouncementEnabled', 'siteAnnouncementText', 'seoTitle', 'seoDescription',
     'webThemeId', 'webCopyOverrides', 'webSurfaceColors', 'webButtonColors', 'webTextColors', 'webTextFontSizes',
@@ -268,6 +314,22 @@
     ].join(',');
   }
 
+  /** Current colors for the preview link, so it paints them from the first frame (no flash). */
+  function colorsParam() {
+    var t = state.tenant;
+    if (!t) return '';
+    var keys = ['backgroundColor', 'textColor', 'cardSurfaceColor', 'primaryColor', 'primaryColorHover', 'accentTextColor',
+      'featuredWorkBackgroundColor', 'featuredWorkTextColor', 'galleryPageBackgroundColor', 'galleryPageTextColor',
+      'aboutSectionBackgroundColor', 'aboutSectionTextColor', 'sidebarBackgroundColor', 'sidebarTextColor',
+      'sidebarCloseIconColor', 'sidebarIconColorHome', 'sidebarIconColorBooking'];
+    var out = {};
+    keys.forEach(function (k) { if (t[k]) out[k] = t[k]; });
+    ['webSurfaceColors', 'webButtonColors', 'webTextColors', 'webTextFontSizes'].forEach(function (k) {
+      out[k] = t[k] && typeof t[k] === 'object' ? t[k] : {};
+    });
+    return '&bk_colors=' + encodeURIComponent(JSON.stringify(out));
+  }
+
   function previewSrc() {
     var baseUrl = state.previewUrl || state.siteUrl;
     if (!baseUrl) return '';
@@ -280,7 +342,7 @@
     if (state.tenant && state.tenant.webThemeId) {
       themeParam = '&bk_web_theme=' + encodeURIComponent(state.tenant.webThemeId);
     }
-    return url + join + 'bk_design=1' + themeParam + visibilityParam() + '&_cb=' + Date.now();
+    return url + join + 'bk_design=1' + themeParam + visibilityParam() + colorsParam() + '&_cb=' + Date.now();
   }
 
   function setStatus(text, tone) {
@@ -484,6 +546,7 @@
     });
     markDirty();
     updateHistoryButtons();
+    if (map.backgroundColor || map.primaryColor || map.textColor) renderPaletteDots();
   }
 
   function postToFrame(type, payload) {
@@ -559,7 +622,7 @@
     pages: { title: 'Pages', meta: '6' },
     photos: { title: 'Photos', meta: 'Site' },
     style: { title: 'Style', meta: 'Brand' },
-    content: { title: 'Copy', meta: 'Site' },
+    content: { title: 'Business info', meta: 'Site' },
     booking: { title: 'Booking', meta: '' },
     section: { title: 'Section', meta: 'Card' },
     settings: { title: 'Settings', meta: '' }
@@ -1169,7 +1232,20 @@
       '<div class="design-field"><label>Logo size</label><input type="range" class="design-range" min="24" max="96" step="2" value="40" data-logo-height aria-label="Logo size"></div>' +
       '<div class="design-field"><label>Browser tab icon</label><div class="design-seg" role="radiogroup">' +
       '<button type="button" role="radio" class="design-seg-opt" data-tab-icon="logo">Logo</button>' +
-      '<button type="button" role="radio" class="design-seg-opt" data-tab-icon="letter">First letter</button></div></div>';
+      '<button type="button" role="radio" class="design-seg-opt" data-tab-icon="letter">First letter</button></div>' +
+      '<div class="design-tab-preview" data-tab-preview aria-hidden="true"></div></div>';
+  }
+
+  /** Same icon the live site puts in the browser tab (logo, or the first letter on the accent color). */
+  function tabIconSrc(t, tab, name) {
+    if (tab === 'logo' && t.logoUrl) return String(t.logoUrl);
+    var letter = (String(name || '').match(/[A-Za-z0-9]/) || ['B'])[0].toUpperCase();
+    var accent = normalizeHex(t.primaryColor, '#111111');
+    var n = parseInt(accent.slice(1), 16);
+    var lum = (0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) / 255;
+    var svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="14" fill="' + accent + '"/>' +
+      '<text x="32" y="44" text-anchor="middle" font-family="Georgia,serif" font-size="38" fill="' + (lum > 0.6 ? '#111111' : '#ffffff') + '">' + letter + '</text></svg>';
+    return 'data:image/svg+xml,' + encodeURIComponent(svg);
   }
 
   function fillLogo() {
@@ -1181,7 +1257,13 @@
     document.querySelectorAll('[data-logo-upload]').forEach(function (b) { b.textContent = t.logoUrl ? 'Replace logo' : 'Upload logo'; });
     document.querySelectorAll('[data-logo-remove]').forEach(function (b) { b.classList.toggle('hidden', !t.logoUrl); });
     var brand = t.webHeaderBrand === 'logo' || t.webHeaderBrand === 'both' ? t.webHeaderBrand : 'name';
-    var tab = t.webTabIcon === 'letter' ? 'letter' : 'logo';
+    // Without a logo the site uses the first letter, whatever is saved.
+    var tab = t.webTabIcon === 'letter' || !t.logoUrl ? 'letter' : 'logo';
+    var siteName = String(((t.webCopyOverrides || {})['wc.site.displayName']) || t.displayName || t.slug || 'Your site').trim();
+    document.querySelectorAll('[data-tab-preview]').forEach(function (box) {
+      box.innerHTML = '<span class="design-tab-chip"><img alt="" src="' + escHtml(tabIconSrc(t, tab, siteName)) + '"><span>' + escHtml(siteName) + '</span></span>' +
+        '<span class="design-tab-note">How your site looks in a browser tab</span>';
+    });
     document.querySelectorAll('[data-header-brand]').forEach(function (b) {
       var on = b.getAttribute('data-header-brand') === brand;
       b.classList.toggle('is-on', on);
@@ -2029,6 +2111,192 @@
     });
   }
 
+  /**
+   * Default colors per template — same as the iPhone app (WebColorPalettes.defaultPalette).
+   * [background, card, text, accent, accent hover, featured bg, featured text, booking card, about bg, about text]
+   */
+  var DEFAULT_PALETTES = {
+    classic:  { id: 'original',    c: ['#FFFFFF', '#F5F5F5', '#1A1A1A', '#111111', '#333333', '#FFFFFF', '#1A1A1A', '#FFFFFF', '#1A1A1A', '#F7F5F0'] },
+    luxe:     { id: 'original',    c: ['#FFFDF9', '#F5F0E8', '#1A1A1A', '#C9A96E', '#8B6914', '#FFFDF9', '#1A1A1A', '#FFFDF9', '#1A1A1A', '#FFFDF9'] },
+    blade:    { id: 'pearl-light', c: ['#FFFFFF', '#EEF1F4', '#1A1F28', '#5A8CC0', '#4678A8', '#F6F7F8', '#1A1F28', '#FFFFFF', '#2A3238', '#F6F7F8'] },
+    stonecut: { id: 'original',    c: ['#060604', '#0E0D0A', '#E8E0D0', '#C0221A', '#D42A20', '#060604', '#E8E0D0', '#0E0D0A', '#0E0D0A', '#E8E0D0'] },
+    studio12: { id: 'original',    c: ['#FAF7F2', '#E8D5C4', '#2A1F18', '#B08060', '#8A6040', '#FAF7F2', '#2A1F18', '#FFFDF9', '#2A1F18', '#FAF7F2'] }
+  };
+
+  /** Fields that put a template back on its own colors (custom colors and text sizes cleared). */
+  function defaultColorUpdates(family) {
+    var p = DEFAULT_PALETTES[family] || DEFAULT_PALETTES.classic;
+    var c = p.c;
+    return {
+      webColorPaletteId: p.id,
+      backgroundColor: c[0],
+      cardSurfaceColor: c[1],
+      textColor: c[2],
+      primaryColor: c[3],
+      primaryColorHover: c[4],
+      accentTextColor: c[3],
+      featuredWorkBackgroundColor: c[5],
+      featuredWorkTextColor: c[6],
+      bookingFormCardBackgroundColor: c[7],
+      galleryPageBackgroundColor: c[5],
+      galleryPageTextColor: c[6],
+      aboutSectionBackgroundColor: c[8],
+      aboutSectionTextColor: c[9],
+      webTextColors: {},
+      webButtonColors: {},
+      webSurfaceColors: {},
+      webTextFontSizes: {},
+      sidebarBackgroundColor: c[3],
+      sidebarTextColor: '',
+      sidebarCloseIconColor: '',
+      sidebarIconColorHome: '',
+      sidebarIconColorBooking: ''
+    };
+  }
+
+  /* ── Palettes (same list and behavior as the iPhone app's Design → Colors) ── */
+
+  var paletteUi = { tone: '', wired: false };
+
+  function paletteData() {
+    var all = window.BK_PALETTES;
+    return all && all.families ? all.families[currentThemeFamily()] || all.families.classic : null;
+  }
+
+  function paletteTokens(p) {
+    var keys = window.BK_PALETTES.keys;
+    var out = {};
+    keys.forEach(function (k, i) { out[k] = p[4][i]; });
+    return out;
+  }
+
+  function sameHex(a, b) {
+    return String(a || '').trim().toUpperCase() === String(b || '').trim().toUpperCase();
+  }
+
+  function paletteIsActive(p) {
+    var t = state.tenant || {};
+    var tok = paletteTokens(p);
+    return sameHex(t.backgroundColor, tok.backgroundColor) && sameHex(t.primaryColor, tok.primaryColor) &&
+      sameHex(t.textColor, tok.textColor);
+  }
+
+  /** Same fields the app saves for a palette; custom colors and text sizes are cleared. */
+  function applyPaletteTokens(paletteId, tok) {
+    var updates = Object.assign({ webColorPaletteId: paletteId }, tok, {
+      webTextColors: {},
+      webButtonColors: {},
+      webSurfaceColors: {},
+      webTextFontSizes: {},
+      sidebarBackgroundColor: tok.primaryColor,
+      sidebarTextColor: '',
+      sidebarCloseIconColor: '',
+      sidebarIconColorHome: '',
+      sidebarIconColorBooking: ''
+    });
+    queueUpdate(updates);
+    fillBrandKit();
+    pushLivePreview();
+    renderPalettes();
+    setStatus('Colors updated · Publish to go live', 'is-ok');
+  }
+
+  function renderPaletteDots() {
+    var t = state.tenant || {};
+    var dots = $('paletteBtnDots');
+    if (!dots) return;
+    dots.innerHTML = [t.backgroundColor, t.primaryColor, t.textColor].map(function (c) {
+      return '<i style="background:' + escHtml(normalizeHex(c, '#FFFFFF')) + '"></i>';
+    }).join('');
+  }
+
+  function renderPalettes() {
+    renderPaletteDots();
+    var pop = $('palettePop');
+    var data = paletteData();
+    if (!pop || pop.hidden || !data) return;
+    if (!paletteUi.tone) paletteUi.tone = data.defaultTone || 'all';
+    pop.querySelectorAll('[data-tone]').forEach(function (b) {
+      b.classList.toggle('is-on', b.getAttribute('data-tone') === paletteUi.tone);
+    });
+    var list = data.palettes.filter(function (p) {
+      if (paletteUi.tone === 'all') return true;
+      return p[0] === 'original' || p[2].toLowerCase() === paletteUi.tone;
+    });
+    $('paletteGrid').innerHTML = list.map(function (p) {
+      var idx = data.palettes.indexOf(p);
+      var strip = (p[5] || []).map(function (c) { return '<i style="background:' + escHtml(c) + '"></i>'; }).join('');
+      var sub = paletteUi.tone === 'all' && p[2] ? '<em>' + escHtml(p[2]) + '</em>' : '';
+      return '<button type="button" class="design-palette-card' + (paletteIsActive(p) ? ' is-active' : '') + '" data-palette="' + idx + '">' +
+        '<span class="design-palette-strip">' + strip + '</span>' +
+        '<span class="design-palette-name">' + escHtml(p[1]) + sub + '</span></button>';
+    }).join('');
+    var accents = data.accents || [];
+    $('paletteAccents').hidden = !accents.length;
+    $('paletteChips').innerHTML = accents.map(function (a, i) {
+      var on = sameHex((state.tenant || {}).primaryColor, a[2]);
+      return '<button type="button" class="design-palette-chip' + (on ? ' is-active' : '') + '" data-accent="' + i + '" title="' + escHtml(a[1]) + '">' +
+        '<i style="background:' + escHtml(a[2]) + '"></i><span>' + escHtml(a[1]) + '</span></button>';
+    }).join('');
+  }
+
+  function setPaletteOpen(open) {
+    var pop = $('palettePop');
+    if (!pop) return;
+    pop.hidden = !open;
+    $('paletteBtn').setAttribute('aria-expanded', open ? 'true' : 'false');
+    if (open) {
+      // The top bar clips overflow, so the drop-down is placed against the window under the button.
+      var r = $('paletteBtn').getBoundingClientRect();
+      pop.style.top = Math.round(r.bottom + 8) + 'px';
+      pop.style.left = Math.round(Math.max(8, Math.min(r.left, window.innerWidth - 388))) + 'px';
+      renderPalettes();
+    }
+  }
+
+  function bindPalettes() {
+    if (paletteUi.wired || !$('paletteBtn')) return;
+    paletteUi.wired = true;
+    $('paletteBtn').addEventListener('click', function (ev) {
+      ev.stopPropagation();
+      setPaletteOpen($('palettePop').hidden);
+    });
+    $('palettePop').addEventListener('click', function (ev) {
+      ev.stopPropagation();
+      var tone = ev.target.closest('[data-tone]');
+      if (tone) {
+        paletteUi.tone = tone.getAttribute('data-tone');
+        renderPalettes();
+        return;
+      }
+      var data = paletteData();
+      if (!data) return;
+      var card = ev.target.closest('[data-palette]');
+      if (card) {
+        var p = data.palettes[Number(card.getAttribute('data-palette'))];
+        if (p) applyPaletteTokens(p[0], paletteTokens(p));
+        return;
+      }
+      var chip = ev.target.closest('[data-accent]');
+      if (chip) {
+        // Blade and Stonecut: swap the accent only, same as the app.
+        var a = data.accents[Number(chip.getAttribute('data-accent'))];
+        if (!a) return;
+        var t = state.tenant || {};
+        var tok = {};
+        window.BK_PALETTES.keys.forEach(function (k) { tok[k] = t[k] || ''; });
+        tok.primaryColor = a[2];
+        tok.primaryColorHover = a[3];
+        tok.accentTextColor = a[2];
+        applyPaletteTokens(t.webColorPaletteId || 'original', tok);
+      }
+    });
+    document.addEventListener('click', function () { setPaletteOpen(false); });
+    document.addEventListener('keydown', function (ev) {
+      if (ev.key === 'Escape' && $('palettePop') && !$('palettePop').hidden) setPaletteOpen(false);
+    });
+  }
+
   async function applyTemplate(family) {
     var meta = TEMPLATES.find(function (t) { return t.family === family; });
     if (!meta || !state.tenant) return;
@@ -2038,8 +2306,14 @@
     state.historyBurstArmed = false;
     setStatus('Applying…');
     try {
-      await db.collection('tenants').doc(state.tenantId).update({ webThemeId: themeId });
-      state.tenant.webThemeId = themeId;
+      // Same as the iPhone app: a new template starts on its own default colors.
+      var colorFamily = family === 'charter' ? 'classic' : family;
+      var updates = Object.assign({ webThemeId: themeId, resolvedWebThemeId: themeId }, defaultColorUpdates(colorFamily));
+      await db.collection('tenants').doc(state.tenantId).update(updates);
+      Object.assign(state.tenant, updates);
+      fillBrandKit();
+      paletteUi.tone = '';
+      renderPalettes();
       renderTemplates();
       if (state.panel === 'booking') renderBookingPanel();
       setStatus('Template updated', 'is-ok');
@@ -2143,6 +2417,7 @@
   function fillBrandKit() {
     var t = state.tenant;
     fillLogo();
+    renderPaletteDots();
     function setPair(colorId, textId, value) {
       var hex = normalizeHex(value, '#FFFFFF');
       if ($(colorId)) $(colorId).value = hex;
@@ -2160,10 +2435,40 @@
     $('toggleTeamPage').checked = t.showTeamPage !== false;
     $('toggleShop').checked = !!t.shopEnabled;
     applyPageListForPlan();
-    $('announcementEnabled').checked = !!t.siteAnnouncementEnabled;
-    $('announcementText').value = t.siteAnnouncementText || '';
-    $('seoTitle').value = t.seoTitle || '';
-    $('seoDescription').value = t.seoDescription || '';
+  }
+
+  /** Settings → Your web address: free link, custom domain, and a way to the domain settings. */
+  function renderAddress() {
+    if (!$('addressBox')) return;
+    var t = state.tenant || {};
+    var slug = String(t.slug || '').trim().toLowerCase();
+    var free = slug ? 'https://' + slug + '.getbookking.com' : '';
+    $('addressFree').textContent = free ? free.replace(/^https:\/\//, '') : '—';
+    $('addressOpen').href = free || '#';
+    $('addressOpen').classList.toggle('hidden', !free);
+    $('addressCopy').classList.toggle('hidden', !free);
+    var domain = String(t.customDomain || t.customDomainHost || '').trim().toLowerCase()
+      .replace(/^https?:\/\//, '').replace(/\/.*$/, '').replace(/^www\./, '');
+    var status = String(t.customDomainStatus || '').toLowerCase();
+    var has = !!domain && status && status !== 'none';
+    var labels = { active: 'Connected', connecting: 'Setting up', transferring: 'Transferring', expired: 'Expired', failed: 'Needs attention' };
+    $('addressDomain').textContent = has ? domain : 'None yet';
+    $('addressStatus').textContent = has ? (labels[status] || status.charAt(0).toUpperCase() + status.slice(1)) : '';
+    $('addressStatus').className = 'design-address-status' + (has ? ' is-' + (status === 'active' ? 'ok' : status === 'failed' || status === 'expired' ? 'bad' : 'wait') : ' hidden');
+    $('addressManage').textContent = has ? 'Manage domain' : 'Get a domain';
+  }
+
+  function bindAddress() {
+    if (!$('addressCopy')) return;
+    $('addressCopy').addEventListener('click', function () {
+      var url = $('addressOpen').href;
+      var btn = this;
+      var done = function () {
+        btn.textContent = 'Copied';
+        setTimeout(function () { btn.textContent = 'Copy'; }, 1500);
+      };
+      if (navigator.clipboard) navigator.clipboard.writeText(url).then(done, function () {});
+    });
   }
 
   function renderHealth() {
@@ -2176,6 +2481,7 @@
       { ok: Array.isArray(t.galleryImages) && t.galleryImages.length > 0, label: (Array.isArray(t.galleryImages) && t.galleryImages.length) ? 'Gallery has photos' : 'Gallery is empty' },
       { ok: !!(t.businessHoursWeekly || t.businessHours), label: (t.businessHoursWeekly || t.businessHours) ? 'Hours configured' : 'Set hours in the iPhone app' }
     ];
+    if (!$('healthList')) return;
     $('healthList').innerHTML = items.map(function (it) {
       return '<li><span class="dot ' + (it.ok ? 'ok' : 'warn') + '"></span><span>' + it.label + '</span></li>';
     }).join('');
@@ -2813,6 +3119,13 @@
       postEditMode();
       // After a preview reload, show the footer as edited (it may not be published yet).
       if (state.tenant && state.tenant.webFooter && typeof state.tenant.webFooter.enabled === 'boolean') postFooterPreview(false);
+      // The preview reads the published copy of the site, which can lag a few seconds behind a change
+      // (like a new template's colors). Send what the editor has now, and again shortly after.
+      if (state.tenant) {
+        pushLivePreview();
+        clearTimeout(state.previewRepush);
+        state.previewRepush = setTimeout(function () { if (state.bridgeReady) pushLivePreview(); }, 1500);
+      }
       return;
     }
     if (data.type === 'role-keys') {
@@ -2925,6 +3238,7 @@
   function bindColorPair(colorId, textId, field) {
     var colorEl = $(colorId);
     var textEl = $(textId);
+    if (!colorEl || !textEl) return;
     function apply(hex) {
       hex = normalizeHex(hex, state.tenant[field] || '#000000');
       colorEl.value = hex;
@@ -2940,6 +3254,11 @@
     }
     colorEl.addEventListener('input', function () { apply(colorEl.value); });
     textEl.addEventListener('change', function () { apply(textEl.value); });
+    // Apply as soon as a full color code is typed (no need to click away or press Enter).
+    textEl.addEventListener('input', function () {
+      var v = String(textEl.value || '').trim();
+      if (/^#?[0-9a-f]{6}$/i.test(v)) apply(v.charAt(0) === '#' ? v : '#' + v);
+    });
   }
 
   var BOOK_SUBMIT_KEY = 'wc.book.submit';
@@ -4041,6 +4360,8 @@
     fillBrandKit();
     fillContentForm();
     renderHealth();
+    renderAddress();
+    renderPaletteDots();
     renderPhotos();
     renderTemplates();
     updateHistoryButtons();
@@ -4052,6 +4373,8 @@
   }
 
   function wireUi() {
+    bindAddress();
+    bindPalettes();
     bindBookingPanel();
     bindConfirmModal();
     if ($('sectionDoneBtn')) {
@@ -4333,23 +4656,6 @@
       loadPreview();
     });
 
-    $('announcementEnabled').addEventListener('change', function () {
-      queueUpdate({ siteAnnouncementEnabled: $('announcementEnabled').checked });
-      pushLivePreview();
-    });
-    $('announcementText').addEventListener('change', function () {
-      queueUpdate({ siteAnnouncementText: $('announcementText').value });
-      pushLivePreview();
-    });
-    $('seoTitle').addEventListener('change', function () {
-      queueUpdate({ seoTitle: $('seoTitle').value });
-      pushLivePreview();
-    });
-    $('seoDescription').addEventListener('change', function () {
-      queueUpdate({ seoDescription: $('seoDescription').value });
-      pushLivePreview();
-    });
-
     function bindContent(id, field) {
       $(id).addEventListener('change', function () {
         var value = $(id).value;
@@ -4364,10 +4670,19 @@
         }
         var patch = {};
         patch[field] = value;
+        // Business info is the main source: clear on-page edits of the spots it fills so the new value shows.
+        var spots = BUSINESS_INFO_SPOTS[field] || [];
+        if (spots.length) {
+          var copy = Object.assign({}, state.tenant.webCopyOverrides || {});
+          var cleared = false;
+          spots.forEach(function (k) { if (Object.prototype.hasOwnProperty.call(copy, k)) { delete copy[k]; cleared = true; } });
+          if (cleared) patch.webCopyOverrides = copy;
+        }
         queueUpdate(patch);
         if (SITE_TEXT_FIELDS[field]) {
           postToFrame('text-patch', { key: field, value: value });
         }
+        postBusinessInfo(field);
       });
     }
     bindContent('contentDisplayName', 'displayName');

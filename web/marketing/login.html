@@ -3,15 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <!-- Google Tag Manager -->
-  <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
-  new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
-  j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
-  'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
-  })(window,document,'script','dataLayer','GTM-PHZKXCNL');</script>
-  <!-- End Google Tag Manager -->
   <script src="assets/gtm-events.js?v=2"></script>
-  <script src="assets/oaiq-pixel.js?v=1"></script>
+  <script src="assets/cookie-consent.js?v=5"></script>
   <title>Log in — Get Bookking</title>
   <link rel="icon" type="image/png" sizes="32x32" href="assets/brand/favicon-32.png?v=13" />
   <link rel="icon" type="image/png" sizes="128x128" href="assets/brand/favicon-128.png?v=13" />
@@ -133,10 +126,6 @@
   <link rel="stylesheet" href="assets/portal-auth-fields.css?v=1" />
 </head>
 <body>
-  <!-- Google Tag Manager (noscript) -->
-  <noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-PHZKXCNL"
-  height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
-  <!-- End Google Tag Manager (noscript) -->
 
   <nav>
     <a href="index.html" class="nav-logo" aria-label="Get Bookking — home">
@@ -159,7 +148,7 @@
           <span class="nav-account-chevron" aria-hidden="true"></span>
         </button>
         <div class="nav-account-menu" id="nav-account-menu" hidden>
-          <a href="account.html">Your account</a>
+          <a href="/app">Open your shop</a>
           <button type="button" class="nav-account-menu-signout nav-auth-signout">Sign out</button>
         </div>
       </div>
@@ -181,7 +170,7 @@
         <li><a href="pricing.html">Pricing</a></li>
         <li><a href="index.html#faq">FAQ</a></li>
         <li class="nav-auth-login-item"><a href="login.html" aria-current="page">Log in</a></li>
-        <li class="nav-auth-account-item nav-auth-hidden"><a href="account.html" class="nav-drawer-profile-link"><span class="nav-account-avatar nav-auth-avatar" aria-hidden="true">?</span><span class="nav-auth-name">Account</span></a></li>
+        <li class="nav-auth-account-item nav-auth-hidden"><a href="/app" class="nav-drawer-profile-link"><span class="nav-account-avatar nav-auth-avatar" aria-hidden="true">?</span><span class="nav-auth-name">Account</span></a></li>
         <li class="nav-auth-signout-item nav-auth-hidden"><button type="button" class="nav-drawer-signout nav-auth-signout">Sign out</button></li>
         <li class="nav-auth-signup-item"><a href="signup.html" class="nav-drawer-cta">Sign up</a></li>
       </ul>
@@ -247,8 +236,8 @@
     function postLoginDestination() {
       var params = new URLSearchParams(window.location.search);
       var next = (params.get('next') || '').trim();
-      if (!next || next.indexOf('://') !== -1) return 'account.html';
-      if (next.charAt(0) === '/' || next.indexOf('..') !== -1) return 'account.html';
+      if (!next || next.indexOf('://') !== -1) return 'app.html';
+      if (next.charAt(0) === '/' || next.indexOf('..') !== -1) return 'app.html';
       return next;
     }
 
@@ -276,15 +265,15 @@
       onVerify: null,
       formatVerifyError: PortalLogin.authErrorMessage,
       getContinueLabel: function(dest) {
-        if (dest.indexOf('billing.html') !== -1) return 'Continue to billing';
+        if (dest.indexOf('billing') !== -1) return 'Continue to billing';
         if (dest.indexOf('design.html') !== -1 || dest.indexOf('/design') !== -1) return 'Continue to Design';
-        if (dest.indexOf('app.html') !== -1 || dest.indexOf('/app') !== -1) return 'Continue to shop';
+        if (dest.indexOf('app') === 0 || dest.indexOf('/app') !== -1) return 'Continue to shop';
         return 'Go to my account';
       },
       autoRedirectWhenSignedIn: true
     });
   </script>
   <script src="assets/nav.js?v=3"></script>
-  <script src="assets/nav-auth.js?v=4"></script>
+  <script src="assets/nav-auth.js?v=5"></script>
 </body>
 </html>

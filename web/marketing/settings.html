@@ -7,6 +7,8 @@
       var embed = new URLSearchParams(location.search).get("embed") === "1";
       try { embed = embed || window.self !== window.top; } catch (e) { embed = true; }
       if (embed) document.documentElement.classList.add("bk-embed");
+      // Opened on its own: show it inside the shop app (same page, with the sidebar), keeping any return info.
+      else if (location.protocol !== "file:") location.replace("/app/settings" + location.search + location.hash);
     })();
   </script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -17,8 +19,8 @@
   <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="assets/legal.css" />
   <link rel="stylesheet" href="assets/nav.css?v=25" />
-  <link rel="stylesheet" href="assets/account.css?v=8" />
-  <link rel="stylesheet" href="assets/settings.css?v=2" />
+  <link rel="stylesheet" href="assets/account.css?v=9" />
+  <link rel="stylesheet" href="assets/settings.css?v=5" />
 </head>
 <body class="acct-layout">
   <nav>
@@ -42,10 +44,7 @@
           <span class="nav-account-chevron" aria-hidden="true"></span>
         </button>
         <div class="nav-account-menu" id="nav-account-menu" hidden>
-          <a href="account.html">Your account</a>
-          <a href="settings.html">Settings</a>
-          <a href="app.html">Open shop</a>
-          <a href="design.html">Design your site</a>
+          <a href="/app">Open your shop</a>
           <button type="button" class="nav-account-menu-signout nav-auth-signout">Sign out</button>
         </div>
       </div>
@@ -67,7 +66,7 @@
         <li><a href="pricing.html">Pricing</a></li>
         <li><a href="index.html#faq">FAQ</a></li>
         <li class="nav-auth-login-item"><a href="login.html">Log in</a></li>
-        <li class="nav-auth-account-item nav-auth-hidden"><a href="account.html" class="nav-drawer-profile-link"><span class="nav-account-avatar nav-auth-avatar" aria-hidden="true">?</span><span class="nav-auth-name">Account</span></a></li>
+        <li class="nav-auth-account-item nav-auth-hidden"><a href="/app" class="nav-drawer-profile-link"><span class="nav-account-avatar nav-auth-avatar" aria-hidden="true">?</span><span class="nav-auth-name">Account</span></a></li>
         <li class="nav-auth-signout-item nav-auth-hidden"><button type="button" class="nav-drawer-signout nav-auth-signout">Sign out</button></li>
         <li class="nav-auth-signup-item"><a href="signup.html" class="nav-drawer-cta">Sign up</a></li>
       </ul>
@@ -99,8 +98,8 @@
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-functions-compat.js"></script>
   <script src="js/firebase-config.js"></script>
-  <script src="assets/settings.js?v=3"></script>
+  <script src="assets/settings.js?v=8"></script>
   <script src="assets/nav.js?v=6"></script>
-  <script src="assets/nav-auth.js?v=4"></script>
+  <script src="assets/nav-auth.js?v=5"></script>
 </body>
 </html>

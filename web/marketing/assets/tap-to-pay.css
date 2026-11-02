@@ -441,3 +441,19 @@
     padding: 48px 24px;
   }
 }
+
+/* Scroll-in animations (only when JS runs and the visitor allows motion) */
+.ttp-anim .ttp-reveal {
+  opacity: 0;
+  transform: translateY(26px);
+  transition: opacity 0.7s cubic-bezier(0.22, 1, 0.36, 1), transform 0.7s cubic-bezier(0.22, 1, 0.36, 1);
+  transition-delay: var(--ttp-delay, 0ms);
+  will-change: opacity, transform;
+}
+.ttp-anim .ttp-reveal--left { transform: translateX(-28px); }
+.ttp-anim .ttp-reveal--right { transform: translateX(28px); }
+.ttp-anim .ttp-reveal--zoom { transform: scale(0.94); }
+.ttp-anim .ttp-reveal.is-in { opacity: 1; transform: none; }
+@media (prefers-reduced-motion: reduce) {
+  .ttp-anim .ttp-reveal { opacity: 1; transform: none; transition: none; }
+}

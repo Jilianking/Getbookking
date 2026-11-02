@@ -3,15 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <!-- Google Tag Manager -->
-  <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
-  new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
-  j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
-  'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
-  })(window,document,'script','dataLayer','GTM-PHZKXCNL');</script>
-  <!-- End Google Tag Manager -->
   <script src="assets/gtm-events.js?v=2"></script>
-  <script src="assets/oaiq-pixel.js?v=1"></script>
+  <script src="assets/cookie-consent.js?v=5"></script>
   <title>Tap to Pay on iPhone — Get Bookking</title>
   <meta name="description" content="Accept contactless payments right on your iPhone with Tap to Pay on iPhone in Get Bookking. Powered by Stripe — no extra card reader required." />
   <link rel="canonical" href="https://getbookking.com/tap-to-pay" />
@@ -37,16 +30,12 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="assets/legal.css" />
-  <link rel="stylesheet" href="assets/footer.css?v=2" />
+  <link rel="stylesheet" href="assets/footer.css?v=4" />
 
-  <link rel="stylesheet" href="assets/tap-to-pay.css?v=23" />
+  <link rel="stylesheet" href="assets/tap-to-pay.css?v=24" />
   <link rel="stylesheet" href="assets/nav.css?v=25" />
 </head>
 <body>
-  <!-- Google Tag Manager (noscript) -->
-  <noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-PHZKXCNL"
-  height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
-  <!-- End Google Tag Manager (noscript) -->
 
 
   <nav>
@@ -70,7 +59,7 @@
           <span class="nav-account-chevron" aria-hidden="true"></span>
         </button>
         <div class="nav-account-menu" id="nav-account-menu" hidden>
-          <a href="account.html">Your account</a>
+          <a href="/app">Open your shop</a>
           <button type="button" class="nav-account-menu-signout nav-auth-signout">Sign out</button>
         </div>
       </div>
@@ -92,7 +81,7 @@
         <li><a href="pricing.html">Pricing</a></li>
         <li><a href="index.html#faq">FAQ</a></li>
         <li class="nav-auth-login-item"><a href="login.html">Log in</a></li>
-        <li class="nav-auth-account-item nav-auth-hidden"><a href="account.html" class="nav-drawer-profile-link"><span class="nav-account-avatar nav-auth-avatar" aria-hidden="true">?</span><span class="nav-auth-name">Account</span></a></li>
+        <li class="nav-auth-account-item nav-auth-hidden"><a href="/app" class="nav-drawer-profile-link"><span class="nav-account-avatar nav-auth-avatar" aria-hidden="true">?</span><span class="nav-auth-name">Account</span></a></li>
         <li class="nav-auth-signout-item nav-auth-hidden"><button type="button" class="nav-drawer-signout nav-auth-signout">Sign out</button></li>
         <li class="nav-auth-signup-item"><a href="signup.html" class="nav-drawer-cta">Sign up</a></li>
       </ul>
@@ -270,10 +259,11 @@
           <a class="footer-badge footer-badge--stripe" href="https://stripe.com" target="_blank" rel="noopener noreferrer" aria-label="Powered by Stripe">
             <img src="assets/brand/powered-by-stripe-white.svg" alt="Powered by Stripe" width="150" height="34" loading="lazy" decoding="async" />
           </a>
-          <a class="footer-badge footer-badge--appstore" id="footer-app-store" href="signup.html" aria-label="Download on the App Store">
+          <a class="footer-badge footer-badge--appstore" id="footer-app-store" href="https://testflight.apple.com/join/GD8AUjpS" target="_blank" rel="noopener" aria-label="Download on the App Store">
             <img src="assets/brand/app-store-badge-black.png" alt="Download on the App Store" width="120" height="40" loading="lazy" decoding="async" />
           </a>
         </div>
+        <a href="/app" class="footer-shop-login" data-shop-login>Log in to your shop <span aria-hidden="true">&rarr;</span></a>
       </div>
       <nav class="footer-cols" aria-label="Footer">
         <div class="footer-col">
@@ -329,7 +319,51 @@
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
   <script src="js/firebase-config.js"></script>
   <script src="assets/nav.js"></script>
-  <script src="assets/nav-auth.js?v=4"></script>
+  <script src="assets/nav-auth.js?v=5"></script>
+  <script>
+    /* Every block fades and slides in as it scrolls into view (and on load / reload for what's on screen). */
+    (function () {
+      var groups = [
+        ['.ttp-hero-copy > *', ''],
+        ['.ttp-hero-media', 'ttp-reveal--zoom'],
+        ['.ttp-how-copy > .sec-label, .ttp-how-copy > h2, .ttp-how-copy > .ttp-lead', ''],
+        ['.ttp-points > li', 'ttp-reveal--left'],
+        ['.ttp-how-aside > .sec-label, .ttp-how-aside > .ttp-how-aside-title', ''],
+        ['.ttp-steps > li', 'ttp-reveal--right'],
+        ['.ttp-split-copy > *', ''],
+        ['.ttp-still', 'ttp-reveal--zoom'],
+        ['.ttp-section:not(.ttp-section--alt) > .ttp-sec-inner:not(.ttp-how) > *', ''],
+        ['.ttp-cta-band > *', ''],
+        ['.ttp-legal', '']
+      ];
+      var els = [];
+      groups.forEach(function (g) {
+        var list = document.querySelectorAll(g[0]);
+        [].forEach.call(list, function (el, i) {
+          if (el.classList.contains('ttp-reveal')) return;
+          el.classList.add('ttp-reveal');
+          if (g[1]) el.classList.add(g[1]);
+          // Small stagger so lists and stacked text arrive one after another.
+          el.style.setProperty('--ttp-delay', Math.min(i, 5) * 90 + 'ms');
+          els.push(el);
+        });
+      });
+      function showAll() { els.forEach(function (el) { el.classList.add('is-in'); }); }
+      if (window.matchMedia('(prefers-reduced-motion: reduce)').matches || !('IntersectionObserver' in window)) {
+        showAll();
+        return;
+      }
+      document.documentElement.classList.add('ttp-anim');
+      var io = new IntersectionObserver(function (entries) {
+        entries.forEach(function (e) {
+          if (!e.isIntersecting) return;
+          e.target.classList.add('is-in');
+          io.unobserve(e.target);
+        });
+      }, { threshold: 0.15, rootMargin: '0px 0px -6% 0px' });
+      els.forEach(function (el) { io.observe(el); });
+    })();
+  </script>
   <script src="assets/lazy-video.js?v=1" defer></script>
 </body>
 </html>

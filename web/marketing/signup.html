@@ -3,15 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <!-- Google Tag Manager -->
-  <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
-  new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
-  j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
-  'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
-  })(window,document,'script','dataLayer','GTM-PHZKXCNL');</script>
-  <!-- End Google Tag Manager -->
   <script src="assets/gtm-events.js?v=2"></script>
-  <script src="assets/oaiq-pixel.js?v=1"></script>
+  <script src="assets/cookie-consent.js?v=5"></script>
   <title>Sign Up — Get Bookking</title>
   <meta name="description" content="Start your 14-day free trial on Get Bookking. All-in-one booking platform with custom websites, Tap to Pay on iPhone, and client texting." />
   <link rel="canonical" href="https://getbookking.com/signup" />
@@ -348,17 +341,12 @@
       font-weight: 500;
     }
 
-    .signup-card[data-path="charters"] .choice-grid,
-    .signup-card[data-path="charters"] .plan-pick-grid {
+    .signup-card[data-path="charters"] .choice-grid {
       display: none;
     }
 
     .signup-card[data-path="charters"] .industry-lock {
       display: block;
-    }
-
-    .signup-card[data-path="studios"] .plan-pick[data-value="charter"] {
-      display: none;
     }
 
     .charter-plan-lock {
@@ -1047,6 +1035,41 @@
       .subscription-start-actions button { width: 100%; }
     }
 
+    .start-options.hidden, .signup-card-box.hidden { display: none; }
+    .start-options { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 18px 0 14px; }
+    @media (max-width: 560px) { .start-options { grid-template-columns: 1fr; } }
+    .start-opt {
+      display: flex; flex-direction: column; gap: 6px; text-align: left; cursor: pointer; font: inherit;
+      padding: 14px; border-radius: 12px; border: 1.5px solid var(--border, #e5ddd2); background: #fff; color: inherit;
+    }
+    .start-opt.is-on { border-color: var(--brand-dark, #2c2018); box-shadow: 0 0 0 1px var(--brand-dark, #2c2018); }
+    .start-opt-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+    .start-opt-head strong { font-size: 15px; }
+    .start-opt-price { font-size: 13px; font-weight: 600; color: var(--brand-warm, #8B6F47); white-space: nowrap; }
+    .start-opt-sub { font-size: 12.5px; color: #6f6153; line-height: 1.4; }
+    .start-opt-list { display: flex; flex-direction: column; gap: 4px; margin-top: 4px; }
+    .start-opt-list span { font-size: 12.5px; line-height: 1.35; padding-left: 18px; position: relative; }
+    .start-opt-list .is-yes::before { content: "✓"; position: absolute; left: 0; color: #1f7a55; font-weight: 700; }
+    .start-opt-list .is-no { color: #8a7a6a; }
+    .start-opt-list .is-no::before { content: "–"; position: absolute; left: 2px; color: #a39383; }
+    .signup-card-box { margin: 4px 0 14px; }
+    .checkout-checkbox-label--optional { margin-top: -4px; }
+    .pay-summary { position: relative; border: 1px solid var(--border, #e5ddd2); border-radius: 12px; padding: 14px 70px 14px 14px; margin: 16px 0 14px; background: #fff; }
+    .pay-summary-main { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+    .pay-summary-main strong { font-size: 15px; }
+    .pay-summary-main span { font-size: 12px; font-weight: 600; color: var(--brand-warm, #8B6F47); text-transform: uppercase; letter-spacing: 0.04em; }
+    .pay-summary-line { font-size: 13px; color: #6f6153; margin-top: 4px; line-height: 1.4; }
+    .pay-summary-change { position: absolute; top: 12px; right: 12px; border: none; background: none; font: inherit; font-size: 13px; color: var(--brand-warm, #8B6F47); text-decoration: underline; cursor: pointer; }
+    .signup-card-label { display: block; font-size: 13px; font-weight: 500; margin-bottom: 6px; }
+    .signup-card-el { border: 1px solid var(--border, #e5ddd2); border-radius: 10px; padding: 13px 12px; background: #fff; min-height: 20px; }
+    .signup-card-el.is-focus { border-color: var(--brand-warm, #8B6F47); box-shadow: 0 0 0 2px rgba(139,111,71,0.15); }
+    .signup-card-note { font-size: 12px; color: #8a7a6a; margin: 6px 0 0; }
+    .signup-card-error { font-size: 13px; color: #b3261e; margin: 6px 0 0; min-height: 0; }
+    .success-app { margin-top: 20px; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+    .success-app-badge { display: inline-block; line-height: 0; border-radius: 8px; }
+    .success-app-badge img { display: block; width: 135px; height: auto; }
+    .success-app-badge:focus-visible { outline: 2px solid #8B6F47; outline-offset: 3px; }
+    .success-app-note { margin: 0; font-size: 12px; color: #8a7a6a; }
     .success-site-link {
       display: block;
       margin-top: 16px;
@@ -1071,10 +1094,6 @@
   <link rel="stylesheet" href="assets/nav.css?v=25" />
 </head>
 <body class="auth-portal">
-  <!-- Google Tag Manager (noscript) -->
-  <noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-PHZKXCNL"
-  height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
-  <!-- End Google Tag Manager (noscript) -->
 
 
   <nav>
@@ -1098,7 +1117,7 @@
           <span class="nav-account-chevron" aria-hidden="true"></span>
         </button>
         <div class="nav-account-menu" id="nav-account-menu" hidden>
-          <a href="account.html">Your account</a>
+          <a href="/app">Open your shop</a>
           <button type="button" class="nav-account-menu-signout nav-auth-signout">Sign out</button>
         </div>
       </div>
@@ -1120,7 +1139,7 @@
         <li><a href="pricing.html">Pricing</a></li>
         <li><a href="index.html#faq">FAQ</a></li>
         <li class="nav-auth-login-item"><a href="login.html">Log in</a></li>
-        <li class="nav-auth-account-item nav-auth-hidden"><a href="account.html" class="nav-drawer-profile-link"><span class="nav-account-avatar nav-auth-avatar" aria-hidden="true">?</span><span class="nav-auth-name">Account</span></a></li>
+        <li class="nav-auth-account-item nav-auth-hidden"><a href="/app" class="nav-drawer-profile-link"><span class="nav-account-avatar nav-auth-avatar" aria-hidden="true">?</span><span class="nav-auth-name">Account</span></a></li>
         <li class="nav-auth-signout-item nav-auth-hidden"><button type="button" class="nav-drawer-signout nav-auth-signout">Sign out</button></li>
         <li class="nav-auth-signup-item"><a href="signup.html" class="nav-drawer-cta nav-active">Sign up</a></li>
       </ul>
@@ -1159,21 +1178,65 @@
 
       <!-- STEP 0 — Path -->
       <div class="step-panel active" id="step0">
-        <h2>What kind of business?</h2>
-        <p class="subtitle">Choose a path first. We’ll tailor signup, your site, and billing from this.</p>
-        <div class="path-pick-grid">
-          <button type="button" class="path-pick" data-value="studios" onclick="pickSignupPath('studios')">
-            <div class="path-pick-name">Studios and Shops</div>
-            <div class="path-pick-desc">Barbers, salons, tattoo, nails, and more · Solo, Studio, or Shop</div>
+        <h2>Choose your plan</h2>
+        <p class="subtitle">Try it free for 14 days, or skip the trial and get every feature today.</p>
+        <div class="plan-pick-grid">
+          <div class="plan-pick" data-value="solo" onclick="pickPlan(this)">
+            <div class="plan-pick-left">
+              <div class="plan-pick-name">Solo</div>
+              <div class="plan-pick-desc">Just you</div>
+            </div>
+            <div class="plan-pick-price">$39<span style="font-family:'DM Sans';font-size:13px;color:var(--text-tertiary)">/mo</span></div>
+          </div>
+          <div class="plan-pick" data-value="studio" onclick="pickPlan(this)">
+            <div class="plan-pick-left">
+              <div class="plan-pick-name">Studio</div>
+              <div class="plan-pick-desc">2–5 people</div>
+            </div>
+            <div class="plan-pick-price">$79<span style="font-family:'DM Sans';font-size:13px;color:var(--text-tertiary)">/mo</span></div>
+          </div>
+          <div class="plan-pick" data-value="shop" onclick="pickPlan(this)">
+            <div class="plan-pick-left">
+              <div class="plan-pick-name">Shop</div>
+              <div class="plan-pick-desc">6–10 people</div>
+            </div>
+            <div class="plan-pick-price">$149<span style="font-family:'DM Sans';font-size:13px;color:var(--text-tertiary)">/mo</span></div>
+          </div>
+          <div class="plan-pick" data-value="charter" onclick="pickPlan(this)">
+            <div class="plan-pick-left">
+              <div class="plan-pick-name">Charter</div>
+              <div class="plan-pick-desc">Fishing charters and guides</div>
+            </div>
+            <div class="plan-pick-price">$24<span style="font-family:'DM Sans';font-size:13px;color:var(--text-tertiary)">/mo</span></div>
+          </div>
+        </div>
+        <div class="start-options hidden" id="startOptions" role="radiogroup" aria-label="How to start">
+          <button type="button" class="start-opt is-on" data-start="trial" role="radio" aria-checked="true">
+            <span class="start-opt-head"><strong>Start free trial</strong><span class="start-opt-price">$0 today</span></span>
+            <span class="start-opt-sub">Then <span data-plan-price>$39</span>/month starting <span data-trial-end></span>. Cancel anytime before then.</span>
+            <span class="start-opt-list">
+              <span class="is-yes">Website builder and your booking site</span>
+              <span class="is-yes">Calendar, booking requests, and clients</span>
+              <span class="is-yes">Shop, services, and team setup</span>
+              <span class="is-no">Client texting and taking payments start when your plan begins</span>
+            </span>
           </button>
-          <button type="button" class="path-pick" data-value="charters" onclick="pickSignupPath('charters')">
-            <div class="path-pick-name">Fishing Charters</div>
-            <div class="path-pick-desc">Fishing charters, guides, and boat rentals · Trip booking, guest texting, and your site</div>
+          <button type="button" class="start-opt" data-start="today" role="radio" aria-checked="false">
+            <span class="start-opt-head"><strong>Start today</strong><span class="start-opt-price"><span data-plan-price>$39</span> today</span></span>
+            <span class="start-opt-sub">Then <span data-plan-price>$39</span> every month. Everything unlocked now.</span>
+            <span class="start-opt-list">
+              <span class="is-yes">Everything in the free trial</span>
+              <span class="is-yes">Client texting with your own business number</span>
+              <span class="is-yes">Card payments, deposits, and Tap to Pay on iPhone</span>
+            </span>
           </button>
+        </div>
+        <div class="btn-row">
+          <button class="btn-next" type="button" id="btn0" disabled onclick="goTo(1)">Continue</button>
         </div>
       </div>
 
-      <!-- STEP 1 — Business (industry + name + location) -->
+            <!-- STEP 1 — Business (industry + name + location) -->
       <div class="step-panel" id="step1">
         <h2>Tell us about your business</h2>
         <p class="subtitle">We'll tailor your booking form, services, and site from this. All editable after signup.</p>
@@ -1277,51 +1340,27 @@
 
       <!-- STEP 3 — Plan & pay -->
       <div class="step-panel" id="step3">
-        <h2 id="step3Title">Choose your plan</h2>
-        <p class="subtitle" id="step3Subtitle">14-day free trial — no card required.</p>
-        <div class="charter-plan-lock" id="charterPlanLock">
-          <div>
-            <div class="charter-plan-lock-name">Charter</div>
-            <div class="charter-plan-lock-desc">Fishing charters</div>
-          </div>
-          <div class="charter-plan-lock-price">$24<span style="font-family:'DM Sans';font-size:13px;color:var(--text-tertiary)">/mo</span></div>
+        <h2 id="step3Title">Payment</h2>
+        <p class="subtitle" id="step3Subtitle">Add your card to finish creating your account.</p>
+        <div class="pay-summary" id="paySummary">
+          <div class="pay-summary-main"><strong id="paySummaryPlan">Solo plan</strong><span id="paySummaryMode">Free trial</span></div>
+          <div class="pay-summary-line" id="paySummaryLine"></div>
+          <button type="button" class="pay-summary-change" onclick="goTo(0)">Change</button>
         </div>
-        <div class="plan-pick-grid">
-          <div class="plan-pick" data-value="solo" onclick="pickPlan(this)">
-            <div class="plan-pick-left">
-              <div class="plan-pick-name">Solo</div>
-              <div class="plan-pick-desc">Just you</div>
-            </div>
-            <div class="plan-pick-price">$39<span style="font-family:'DM Sans';font-size:13px;color:var(--text-tertiary)">/mo</span></div>
-          </div>
-          <div class="plan-pick" data-value="studio" onclick="pickPlan(this)">
-            <div class="plan-pick-left">
-              <div class="plan-pick-name">Studio</div>
-              <div class="plan-pick-desc">2–5 people</div>
-            </div>
-            <div class="plan-pick-price">$79<span style="font-family:'DM Sans';font-size:13px;color:var(--text-tertiary)">/mo</span></div>
-          </div>
-          <div class="plan-pick" data-value="shop" onclick="pickPlan(this)">
-            <div class="plan-pick-left">
-              <div class="plan-pick-name">Shop</div>
-              <div class="plan-pick-desc">6–10 people</div>
-            </div>
-            <div class="plan-pick-price">$149<span style="font-family:'DM Sans';font-size:13px;color:var(--text-tertiary)">/mo</span></div>
-          </div>
-        </div>
-        <div class="checkout-summary" id="checkoutSummary">
-          <div class="checkout-plan-line"><span id="checkoutPlanName">Solo plan</span> — <strong id="checkoutPlanPrice">$39</strong>/month when you start billing.</div>
-          <ul class="checkout-bullets">
-            <li><strong>No card required</strong> to create your account. Your 14-day trial starts today.</li>
-            <li>Your trial includes the website builder. Add a payment method on <a href="billing.html">Billing</a> to start your paid plan today or when the trial ends.</li>
-            <li>Client texting and payments unlock when your paid plan begins (or when you choose “Start plan today” on Billing).</li>
-            <li>Billing is monthly in USD. Payments are processed securely by Stripe when you add a card.</li>
-          </ul>
+        <div class="signup-card-box" id="signupCardBox">
+          <label class="signup-card-label" for="signupCardEl">Card</label>
+          <div class="signup-card-el" id="signupCardEl"></div>
+          <p class="signup-card-note" id="signupCardNote">Processed securely by Stripe. Billing is monthly in USD.</p>
+          <p class="signup-card-error" id="signupCardError" role="alert"></p>
         </div>
         <p class="account-signin-email" id="accountSignInEmail" style="display:none">Account email: <strong id="accountSignInEmailValue"></strong></p>
         <label class="checkout-checkbox-label">
           <input type="checkbox" id="agreeTerms" onchange="validateAccountStep()" />
-          <span>I agree to the <a href="terms.html" target="_blank" rel="noopener noreferrer">Terms of Service</a> and <a href="privacy.html" target="_blank" rel="noopener noreferrer">Privacy Policy</a>.</span>
+          <span>I agree to the <a href="terms.html" target="_blank" rel="noopener noreferrer">Terms of Use</a> and <a href="privacy.html" target="_blank" rel="noopener noreferrer">Privacy Policy</a>.</span>
+        </label>
+        <label class="checkout-checkbox-label checkout-checkbox-label--optional">
+          <input type="checkbox" id="marketingOptIn" checked />
+          <span>Email me product updates, tips, and offers from Get Bookking. Unsubscribe anytime.</span>
         </label>
         <p class="checkout-support">Questions? <a href="mailto:support@getbookking.com">support@getbookking.com</a></p>
         <div class="error-msg" id="errorMsg"></div>
@@ -1343,6 +1382,13 @@
             <p>Stripe Connect is for client deposits and Tap to Pay.</p>
             <button type="button" class="btn-stripe-setup" id="stripeSetupBtn">Set up Stripe payments →</button>
             <p class="success-stripe-status" id="stripeSetupStatus" role="status"></p>
+          </div>
+          <div class="success-app">
+            <!-- TestFlight while the app is in review; swap for the App Store link once approved. -->
+            <a href="https://testflight.apple.com/join/GD8AUjpS" target="_blank" rel="noopener" class="success-app-badge" data-bk-cta="signup_app_download">
+              <img src="assets/brand/app-store-badge-black.png" alt="Download on the App Store" width="135" height="45" decoding="async" />
+            </a>
+            <p class="success-app-note">Install TestFlight first, then tap Open.</p>
           </div>
           <a href="billing.html" class="success-site-link" style="margin-top:12px;display:inline-block;">Manage billing →</a>
           <a href="#" class="success-site-link" id="siteLink" target="_blank">Visit your booking site &rarr;</a>
@@ -1412,14 +1458,13 @@
       if (industries.includes(ind)) {
         state.industry = ind;
       }
+      // The plan step always shows (like the iPhone); a plan from the link is just preselected.
       if (state.plan === 'charter' || state.industry === 'charters') {
         state.signupPath = 'charters';
         state.plan = 'charter';
         state.industry = 'charters';
-        state.skipPathStep = true;
       } else if (state.plan === 'solo' || state.plan === 'studio' || state.plan === 'shop') {
         state.signupPath = 'studios';
-        state.skipPathStep = true;
         if (state.industry === 'charters') state.industry = null;
       }
     })();
@@ -1473,12 +1518,6 @@
         if (nameEl) nameEl.placeholder = 'e.g. Brandon Smith Barbershop';
         if (cityEl) cityEl.placeholder = 'e.g. St. Petersburg';
       }
-      var title = document.getElementById('step3Title');
-      if (isCharterPath()) {
-        if (title) title.textContent = 'Charter · $24/mo';
-      } else {
-        if (title) title.textContent = 'Choose your plan';
-      }
       var wrap = document.getElementById('industryCustomWrap');
       if (wrap) wrap.style.display = (!isCharterPath() && state.industry === 'custom') ? 'block' : 'none';
       document.querySelectorAll('.choice-grid .choice-btn').forEach(function(b) {
@@ -1493,6 +1532,7 @@
       var priceEl = document.getElementById('checkoutPlanPrice');
       if (nameEl) nameEl.textContent = info.name + ' plan';
       if (priceEl) priceEl.textContent = info.price;
+      if (state.plan || isCharterPath()) showStartAndCard();
     }
 
     /** Readable message from Firebase httpsCallable / HttpsError (avoids showing only "internal"). */
@@ -1525,7 +1565,12 @@
       if (next) next.classList.add('active');
       updateStepChrome(step);
 
-      if (step === 0) applySignupPathUI();
+      if (step === 0) {
+        applySignupPathUI();
+        var b0 = document.getElementById('btn0');
+        if (b0) b0.disabled = !state.plan;
+        if (state.plan) showStartAndCard();
+      }
       if (step === 1) {
         applySignupPathUI();
         validateBusinessStep();
@@ -1547,6 +1592,8 @@
       if (step === 3) {
         applySignupPathUI();
         refreshCheckoutSummary();
+        renderPaySummary();
+        mountCardField();
         if (state.plan) {
           document.querySelectorAll('.plan-pick').forEach(function(p) {
             p.classList.toggle('selected', p.dataset.value === state.plan);
@@ -1606,12 +1653,20 @@
     }
 
     function pickPlan(el) {
-      if (isCharterPath()) return;
       var val = el.dataset.value;
-      if (val === 'charter') return;
-      document.querySelectorAll('.plan-pick').forEach(p => p.classList.remove('selected'));
-      el.classList.add('selected');
+      document.querySelectorAll('.plan-pick').forEach(function (p) { p.classList.toggle('selected', p === el); });
       state.plan = val;
+      // Charter is its own kind of business; the other plans are studios and shops.
+      if (val === 'charter') {
+        state.signupPath = 'charters';
+        state.industry = 'charters';
+        var custom = document.getElementById('industryCustom');
+        if (custom) custom.value = '';
+      } else {
+        state.signupPath = 'studios';
+        if (state.industry === 'charters') state.industry = null;
+      }
+      applySignupPathUI();
       if (typeof window.bkTrack === 'function') {
         window.bkTrack('select_content', { content_type: 'plan', content_id: val });
       }
@@ -1619,7 +1674,8 @@
         window.bkTrackViewItem(val);
       }
       refreshCheckoutSummary();
-      if (currentStep === 3) validateAccountStep();
+      var b0 = document.getElementById('btn0');
+      if (b0) b0.disabled = false;
     }
 
     /** Title-case each whitespace-separated word (matches app `USStateServiceAreaFormatting.titleCaseWords` behavior). */
@@ -1719,7 +1775,7 @@
       var agreeOk = agreeEl && agreeEl.checked;
       var planOk = !!state.plan || isCharterPath();
       var btn = document.getElementById('btnCompleteSignup');
-      if (btn) btn.disabled = signupSubmitting || !(agreeOk && planOk);
+      if (btn) btn.disabled = signupSubmitting || !(agreeOk && planOk && card.complete);
     }
 
     function buildSignupProvisionPayload() {
@@ -1739,6 +1795,8 @@
         lastName: state.lastName,
         plan: state.plan,
       };
+      var optIn = document.getElementById('marketingOptIn');
+      if (optIn) payload.marketingEmailOptIn = !!optIn.checked;
       if (state.industry === 'custom') {
         payload.industryCustomLabel = industryCustomLabel;
       }
@@ -1763,6 +1821,11 @@
       }
       if (!state.plan && !isCharterPath()) {
         errEl.textContent = 'Choose a plan to continue.';
+        errEl.style.display = 'block';
+        return;
+      }
+      if (!card.complete || !card.stripe) {
+        errEl.textContent = 'Enter your card to continue.';
         errEl.style.display = 'block';
         return;
       }
@@ -1793,6 +1856,12 @@
       var displayName = (state.firstName + ' ' + state.lastName).trim();
 
       try {
+        // Card was declined after the account was made: just retry the card, don't create another account.
+        if (card.accountReady) {
+          await saveCardAndStartPlan();
+          showSuccess();
+          return;
+        }
         var signupEmail = (state.email || '').trim().toLowerCase();
         var signedIn = auth.currentUser;
         if (signedIn && signedIn.email && signedIn.email.toLowerCase() !== signupEmail) {
@@ -1830,6 +1899,9 @@
         if (PLAN_CHECKOUT_INFO[completedPlan]) state.plan = completedPlan;
         document.getElementById('siteLink').href = 'https://' + slug + '.getbookking.com';
         document.getElementById('siteLink').textContent = slug + '.getbookking.com →';
+        card.accountReady = true;
+        if (btn) btn.textContent = 'Saving your card…';
+        await saveCardAndStartPlan();
         showSuccess();
       } catch (e) {
         console.error('completeSignupFromStep3', e);
@@ -1848,6 +1920,122 @@
           validateAccountStep();
         }
       }
+    }
+
+    /* ── Card on the plan step (Terms §8: a card is required for the free trial). The card is checked
+       before the account is created; after it's created the card is saved to Stripe and the plan starts. ── */
+    var card = { stripe: null, el: null, complete: false, mounted: false, accountReady: false };
+    state.startMode = 'trial';
+
+    function trialEndLabel() {
+      var d = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000);
+      return d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+    }
+
+    function loadScript(src) {
+      return new Promise(function (resolve, reject) {
+        var tag = document.createElement('script');
+        tag.src = src;
+        tag.onload = resolve;
+        tag.onerror = function () { reject(new Error('Could not load Stripe. Check your connection and try again.')); };
+        document.head.appendChild(tag);
+      });
+    }
+
+    function setCardError(msg) {
+      var el = document.getElementById('signupCardError');
+      if (el) el.textContent = msg || '';
+    }
+
+    function setStartMode(mode) {
+      state.startMode = mode === 'today' ? 'today' : 'trial';
+      document.querySelectorAll('[data-start]').forEach(function (b) {
+        var on = b.getAttribute('data-start') === state.startMode;
+        b.classList.toggle('is-on', on);
+        b.setAttribute('aria-checked', on ? 'true' : 'false');
+      });
+      var btn = document.getElementById('btnCompleteSignup');
+      if (btn && !signupSubmitting) btn.textContent = 'Create my account';
+      renderPaySummary();
+    }
+
+    /** Plan step: show the two ways to start, with this plan's price. */
+    function showStartAndCard() {
+      var plan = state.plan || (isCharterPath() ? 'charter' : '');
+      if (!plan) return;
+      var info = PLAN_CHECKOUT_INFO[plan] || PLAN_CHECKOUT_INFO.solo;
+      document.querySelectorAll('[data-plan-price]').forEach(function (n) { n.textContent = info.price; });
+      document.querySelectorAll('[data-trial-end]').forEach(function (n) { n.textContent = trialEndLabel(); });
+      document.getElementById('startOptions').classList.remove('hidden');
+      renderPaySummary();
+    }
+
+    /** Payment step: what they picked, and what's charged when. */
+    function renderPaySummary() {
+      var plan = state.plan || (isCharterPath() ? 'charter' : 'solo');
+      var info = PLAN_CHECKOUT_INFO[plan] || PLAN_CHECKOUT_INFO.solo;
+      var today = state.startMode === 'today';
+      var planEl = document.getElementById('paySummaryPlan');
+      if (!planEl) return;
+      planEl.textContent = info.name + ' plan';
+      document.getElementById('paySummaryMode').textContent = today ? 'Start today' : 'Free trial';
+      document.getElementById('paySummaryLine').textContent = today
+        ? info.price + ' today, then ' + info.price + ' every month. Everything unlocked now.'
+        : '$0 today. ' + info.price + '/month starting ' + trialEndLabel() + '. Cancel anytime before then.';
+      var sub = document.getElementById('step3Subtitle');
+      if (sub) sub.textContent = today ? 'Add your card to start your plan today.' : "Add your card to start your free trial. You won't be charged today.";
+    }
+
+    async function mountCardField() {
+      if (card.mounted) return;
+      card.mounted = true;
+      var pk = (typeof window.stripePublishableKey === 'string' && window.stripePublishableKey.trim()) || '';
+      try {
+        if (!pk) throw new Error('Card entry is not available right now. Contact support@getbookking.com.');
+        // Stripe's live card field only loads on a secure (https) page.
+        if (pk.indexOf('pk_live') === 0 && window.location.protocol !== 'https:') {
+          throw new Error('Card entry only works on getbookking.com (secure page).');
+        }
+        if (typeof Stripe !== 'function') await loadScript('https://js.stripe.com/v3/');
+        card.stripe = Stripe(pk);
+        card.el = card.stripe.elements().create('card', {
+          hidePostalCode: false,
+          style: { base: { fontSize: '16px', color: '#2c2018', fontFamily: 'DM Sans, -apple-system, sans-serif', '::placeholder': { color: '#a39383' } } }
+        });
+        card.el.mount('#signupCardEl');
+        var box = document.getElementById('signupCardEl');
+        card.el.on('focus', function () { box.classList.add('is-focus'); });
+        card.el.on('blur', function () { box.classList.remove('is-focus'); });
+        card.el.on('change', function (ev) {
+          card.complete = !!ev.complete;
+          setCardError(ev.error ? ev.error.message : '');
+          validateAccountStep();
+        });
+      } catch (e) {
+        card.mounted = false;
+        setCardError((e && e.message) || 'Card entry could not load.');
+      }
+    }
+
+    /** After the account exists: save the card to Stripe, then start the trial (or the plan today). */
+    async function saveCardAndStartPlan() {
+      var setup;
+      try {
+        setup = await fns.httpsCallable('createSignupCardSetup')({});
+      } catch (e) {
+        // Paid checkout switched off for testing: nothing to collect.
+        if (/temporarily disabled for testing/i.test(formatFirebaseHttpsError(e))) return;
+        throw e;
+      }
+      var d = (setup && setup.data) || {};
+      if (!d.clientSecret) throw new Error('Stripe did not start card setup. Try again.');
+      var name = ((state.firstName || '') + ' ' + (state.lastName || '')).trim();
+      var confirmed = await card.stripe.confirmCardSetup(d.clientSecret, {
+        payment_method: { card: card.el, billing_details: { name: name || undefined, email: state.email || undefined } }
+      });
+      if (confirmed.error) throw new Error(confirmed.error.message || 'Your card was declined. Try another card.');
+      var si = confirmed.setupIntent || {};
+      await fns.httpsCallable('startSignupTrialSubscription')({ setupIntentId: si.id, startToday: state.startMode === 'today' });
     }
 
     function showSuccess() {
@@ -2040,6 +2228,9 @@
     document.addEventListener('DOMContentLoaded', function() {
       populateBizStateSelect();
       applySignupPathUI();
+      document.querySelectorAll('[data-start]').forEach(function (b) {
+        b.addEventListener('click', function () { setStartMode(b.getAttribute('data-start')); });
+      });
       if (state.skipPathStep) {
         var pathPanel = document.getElementById('step0');
         var bizPanel = document.getElementById('step1');
@@ -2057,11 +2248,13 @@
           p.classList.toggle('selected', p.dataset.value === state.plan);
         });
         refreshCheckoutSummary();
+        var b0 = document.getElementById('btn0');
+        if (b0) b0.disabled = false;
       }
     });
   </script>
   <script src="assets/nav.js?v=3"></script>
-  <script src="assets/nav-auth.js?v=4"></script>
+  <script src="assets/nav-auth.js?v=5"></script>
 
 </body>
 </html>

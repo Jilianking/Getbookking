@@ -99,12 +99,36 @@
     return "view" + name.charAt(0).toUpperCase() + name.slice(1);
   }
 
+  /**
+   * Links like /billing?checkout=success forward to /app/billing?checkout=success. Hand that return
+   * info (and any #section) to the page inside the frame once, then tidy the address bar.
+   */
+  var handedOff = false;
+  function frameExtras(route) {
+    if (handedOff || routeFromLocation() !== route) return "";
+    handedOff = true;
+    var params = new URLSearchParams(location.search);
+    params.delete("view");
+    params.delete("embed");
+    var q = params.toString();
+    var extra = (q ? "&" + q : "") + (location.hash || "");
+    if (extra && location.protocol !== "file:") {
+      try { history.replaceState(null, "", "/app/" + route); } catch (e) {}
+    }
+    return extra;
+  }
+
   function ensureFrame(route) {
     var id = FRAME_ID[route];
     if (!id) return;
     var frame = $(id);
     if (!frame) return;
+    var extra = frameExtras(route);
     var url = frameUrl(route);
+    if (extra) {
+      frame.src = url + extra;
+      return;
+    }
     if (frame.getAttribute("src") === url) return;
     frame.src = url;
   }
@@ -178,7 +202,7 @@
       calendar: "Calendar",
       clients: "Clients",
       shop: "Shop",
-      payments: session && !session.isOwner ? "Payments" : "Client payments",
+      payments: "Payments",
       payouts: "Team payouts",
       website: "Website builder",
       billing: "Plan & billing",
@@ -250,7 +274,7 @@
     $("paymentsFolder").classList.toggle("hidden", !ownerTeam);
     $("paymentsFlat").classList.toggle("hidden", ownerTeam);
     var flatLink = document.querySelector('#paymentsFlat .app-nav');
-    if (flatLink) flatLink.textContent = session.isOwner ? "Client payments" : "Payments";
+    if (flatLink) flatLink.textContent = "Payments";
     if (!can("payments")) {
       $("paymentsFlat").classList.add("hidden");
       $("paymentsFolder").classList.add("hidden");
@@ -270,6 +294,42 @@
     document.querySelectorAll("a[data-route]").forEach(function (a) {
       a.setAttribute("href", hrefFor(a.getAttribute("data-route")));
     });
+  }
+
+  /* On iPhone, the Website builder button offers the iPhone app (the desktop editor is cramped on a phone). */
+  // Swap for the App Store link once the app is approved.
+  var IPHONE_APP_URL = "https://testflight.apple.com/join/GD8AUjpS";
+  var IPHONE_APP_LABEL = "Open in TestFlight";
+
+  function isIPhone() {
+    return /iPhone|iPod/.test(navigator.userAgent || "");
+  }
+
+  function setOpenAppSheet(open) {
+    var sheet = $("appOpenSheet");
+    var scrim = $("appOpenScrim");
+    if (!sheet || !scrim) return false;
+    sheet.classList.toggle("hidden", !open);
+    scrim.classList.toggle("hidden", !open);
+    return true;
+  }
+
+  function wireOpenApp() {
+    var go = $("appOpenGo");
+    if (!go) return;
+    go.href = IPHONE_APP_URL;
+    go.textContent = IPHONE_APP_LABEL;
+    ["appOpenClose", "appOpenScrim"].forEach(function (id) {
+      $(id).addEventListener("click", function () { setOpenAppSheet(false); });
+    });
+    document.addEventListener("click", function (ev) {
+      if (!isIPhone()) return;
+      var link = ev.target.closest && ev.target.closest('a[data-route="website"], a[href="/design"]:not(#appOpenWeb)');
+      if (!link) return;
+      ev.preventDefault();
+      if (isNarrow()) setRailCollapsed(true);
+      setOpenAppSheet(true);
+    }, true);
   }
 
   function wireNav(session) {
@@ -304,8 +364,14 @@
     });
   }
 
+  wireOpenApp();
+
   auth.onAuthStateChanged(function (user) {
     if (!user) {
+      // After logging in, come back to this exact page (and any return info on it).
+      var back = (location.pathname + location.search + location.hash).replace(/^\/+/, "");
+      var loginLink = document.querySelector("#gateLogin a[href*='login']");
+      if (loginLink && back) loginLink.href = "/login.html?next=" + encodeURIComponent(back);
       showGate("gateLogin");
       return;
     }

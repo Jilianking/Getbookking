@@ -164,7 +164,7 @@
       var business = [
         row("Business settings", "", function () { openScreen("business"); }),
       ];
-      if (smsOn()) business.push(row("Messaging", "", function () { openScreen("messaging"); }));
+      if (smsOn()) business.push(row("Messaging settings", "", openMessagingSettings));
       business.push(row("Domain", "", function () { openScreen("domain"); }));
       if (team) business.push(row("Your booking profile", "", function () { openScreen("profile"); }));
       business.push(row("Scheduling & hours", "", function () { openScreen("schedule"); }));
@@ -244,8 +244,7 @@
     if (isCharter()) card.appendChild(row("Boats", "", function () { openScreen("boats"); }));
     card.appendChild(row(isCharter() ? "Trips" : "Services", "", function () { openScreen("services"); }));
     card.appendChild(row("Shipping & pickup", "", function () { openScreen("shipping"); }));
-    card.appendChild(row("Messaging", "", function () { openScreen("messaging"); }));
-    if (!isCharter()) card.appendChild(row("Notifications", "", function () { openScreen("notifications"); }));
+    card.appendChild(row("Messaging settings", "", openMessagingSettings));
     body.appendChild(card);
     if (isTeam()) {
       // What managers can do now lives with the team.
@@ -416,21 +415,63 @@
   function paintServices(body) {
     $("detailTitle").textContent = isCharter() ? "Trips" : "Services";
     $("detailLead").textContent = "Name, duration, and price shown on your site.";
+    var noun = isCharter() ? "trip" : "service";
+    // Add button on top; the form opens in a pop-up.
+    var card = document.createElement("div");
+    card.className = "acct-card set-list-card";
+    var head = document.createElement("div");
+    head.className = "set-list-head";
+    var count = document.createElement("span");
+    count.className = "set-list-count";
+    var addBtn = document.createElement("button");
+    addBtn.type = "button";
+    addBtn.className = "set-add-btn";
+    addBtn.textContent = "+ Add " + noun;
+    head.appendChild(count);
+    head.appendChild(addBtn);
+    card.appendChild(head);
     var list = document.createElement("div");
-    list.className = "acct-card";
-    list.style.padding = "4px 16px 8px";
-    body.appendChild(list);
+    list.className = "set-list";
+    card.appendChild(list);
+    body.appendChild(card);
+
+    var backdrop = document.createElement("div");
+    backdrop.className = "acct-modal-backdrop hidden";
+    var modal = document.createElement("div");
+    modal.className = "acct-modal hidden";
+    modal.setAttribute("role", "dialog");
+    modal.setAttribute("aria-modal", "true");
+    modal.innerHTML = '<div class="acct-modal-card"><div class="acct-modal-head"><h2>New ' + noun + '</h2>' +
+      '<button type="button" class="acct-modal-close" aria-label="Close">&times;</button></div></div>';
     var form = document.createElement("form");
-    form.className = "set-form acct-card";
-    form.style.padding = "16px";
-    form.style.marginTop = "16px";
+    form.className = "set-form";
     form.innerHTML = '<label>Name</label><input type="text" id="svcName" required />' +
       '<label class="set-toggle"><div><strong>Include duration</strong></div><input type="checkbox" id="svcDurOn" /></label>' +
       '<label>Duration (minutes)</label><input type="number" id="svcDur" min="5" step="5" value="60" />' +
       '<label class="set-toggle"><div><strong>Show starting price</strong></div><input type="checkbox" id="svcPriceOn" /></label>' +
       '<label>Price</label><input type="number" id="svcPrice" min="0" step="0.01" />' +
-      '<div class="set-actions"><button type="submit" class="set-save">Add</button></div>';
-    body.appendChild(form);
+      '<div class="set-actions"><button type="button" class="set-cancel">Cancel</button><button type="submit" class="set-save">Add ' + noun + '</button></div>';
+    modal.querySelector(".acct-modal-card").appendChild(form);
+    body.appendChild(backdrop);
+    body.appendChild(modal);
+
+    function setModal(open) {
+      backdrop.classList.toggle("hidden", !open);
+      modal.classList.toggle("hidden", !open);
+      document.body.classList.toggle("acct-modal-open", open);
+      if (open) {
+        form.reset();
+        var msg = form.querySelector(".set-msg");
+        if (msg) msg.remove();
+        form.querySelector("#svcName").focus();
+      }
+    }
+    addBtn.addEventListener("click", function () { setModal(true); });
+    backdrop.addEventListener("click", function () { setModal(false); });
+    modal.addEventListener("click", function (ev) { if (ev.target === modal) setModal(false); });
+    modal.querySelector(".acct-modal-close").addEventListener("click", function () { setModal(false); });
+    form.querySelector(".set-cancel").addEventListener("click", function () { setModal(false); });
+    modal.addEventListener("keydown", function (ev) { if (ev.key === "Escape") setModal(false); });
 
     function load() {
       list.innerHTML = "";
@@ -444,6 +485,7 @@
         docs.sort(function (a, b) {
           return String(a.data.name || "").localeCompare(String(b.data.name || ""));
         });
+        count.textContent = docs.length + " " + noun + (docs.length === 1 ? "" : "s");
         if (!docs.length) {
           var empty = document.createElement("p");
           empty.className = "set-lead";
@@ -465,12 +507,12 @@
             db.collection("tenants").doc(state.tenantId).collection("services").doc(item.id)
               .update({ isActive: false })
               .then(load)
-              .catch(function (err) { showMsg(form, callableError(err), false); });
+              .catch(function (err) { showMsg(list, callableError(err), false); });
           });
           rowEl.appendChild(rm);
           list.appendChild(rowEl);
         });
-      }).catch(function (err) { showMsg(form, callableError(err), false); });
+      }).catch(function (err) { showMsg(list, callableError(err), false); });
     }
     form.addEventListener("submit", function (ev) {
       ev.preventDefault();
@@ -490,8 +532,7 @@
         if (price > 0) payload.price = price;
       }
       db.collection("tenants").doc(state.tenantId).collection("services").add(payload).then(function () {
-        form.reset();
-        showMsg(form, "Saved", true);
+        setModal(false);
         load();
       }).catch(function (err) { showMsg(form, callableError(err), false); });
     });
@@ -500,6 +541,8 @@
 
   function paintShipping(body) {
     $("detailTitle").textContent = "Shipping & pickup";
+    $("detailLead").textContent = "How clients get shop orders. Saves to the same settings as the iPhone app.";
+    var t = state.tenant;
     var card = document.createElement("div");
     card.className = "acct-card";
     card.style.padding = "4px 16px";
@@ -511,13 +554,101 @@
         showMsg(card, "Saved", true);
       }).catch(function (err) { showMsg(card, callableError(err), false); });
     }
-    card.appendChild(toggleRow("Local pickup", "Clients can pick up shop orders.", state.tenant.shopPickupEnabled !== false, function (on) {
+    var pickupAddr = toggleRow("Show pickup address at checkout", "Clients see your business address when they choose pickup.", t.shopShowPickupAddressOnCheckout !== false, function (on) {
+      saveFlag("shopShowPickupAddressOnCheckout", on);
+    });
+    pickupAddr.classList.add("set-toggle--sub");
+    card.appendChild(toggleRow("Local pickup", "Clients can pick up shop orders.", t.shopPickupEnabled !== false, function (on) {
       saveFlag("shopPickupEnabled", on);
+      pickupAddr.classList.toggle("hidden", !on);
     }));
-    card.appendChild(toggleRow("Shipping", "Offer shipping on shop orders.", state.tenant.shopShippingEnabled === true, function (on) {
+    pickupAddr.classList.toggle("hidden", t.shopPickupEnabled === false);
+    card.appendChild(pickupAddr);
+    card.appendChild(toggleRow("Shipping", "Offer shipping on shop orders.", t.shopShippingEnabled === true, function (on) {
       saveFlag("shopShippingEnabled", on);
+      ship.classList.toggle("hidden", !on);
     }));
     body.appendChild(card);
+
+    // Shipping details: only while shipping is on.
+    var ship = document.createElement("form");
+    ship.className = "set-form acct-card set-ship" + (t.shopShippingEnabled === true ? "" : " hidden");
+    var drop = t.shopDropOffLocation || t.shopShipFrom || {};
+    var parcel = t.shopDefaultParcel || {};
+    var origin = [
+      [String(t.contactAddress || "").trim(), String(t.contactAddressSuite || "").trim()].filter(Boolean).join(", "),
+      String(t.serviceArea || "").trim(),
+    ].filter(Boolean).join(", ");
+    var val = function (v) { return v == null || v === "" || v === 0 ? "" : esc(String(v)); };
+    ship.innerHTML =
+      '<h3 class="set-ship-title">Ships from</h3>' +
+      '<p class="set-ship-origin' + (origin ? "" : " is-missing") + '">' +
+        (origin ? esc(origin) : "Add your business address in the Website builder (Contact) so shipping can be quoted from your ZIP.") + "</p>" +
+      '<h3 class="set-ship-title">Drop-off location</h3>' +
+      '<p class="set-ship-hint">Where you drop off packages (a post office or carrier store). Optional.</p>' +
+      '<label>Place name</label><input type="text" id="shipDropName" placeholder="e.g. USPS Main St" value="' + val(drop.name) + '" />' +
+      '<label>Street</label><input type="text" id="shipDropStreet" value="' + val(drop.street1 || drop.line1) + '" />' +
+      '<div class="set-ship-row">' +
+        '<div><label>City</label><input type="text" id="shipDropCity" value="' + val(drop.city) + '" /></div>' +
+        '<div><label>State</label><input type="text" id="shipDropState" maxlength="2" value="' + val(drop.state) + '" /></div>' +
+        '<div><label>ZIP</label><input type="text" id="shipDropZip" inputmode="numeric" value="' + val(drop.zip || drop.postal_code) + '" /></div>' +
+      "</div>" +
+      '<h3 class="set-ship-title">Default box size</h3>' +
+      '<p class="set-ship-hint">Used for products without their own size. Left blank, an order ships as 1 lb in a small box.</p>' +
+      '<div class="set-ship-row set-ship-row--4">' +
+        '<div><label>Weight (oz)</label><input type="text" inputmode="decimal" id="shipWeight" value="' + val(parcel.weightOz) + '" /></div>' +
+        '<div><label>Length (in)</label><input type="text" inputmode="decimal" id="shipLength" value="' + val(parcel.lengthIn) + '" /></div>' +
+        '<div><label>Width (in)</label><input type="text" inputmode="decimal" id="shipWidth" value="' + val(parcel.widthIn) + '" /></div>' +
+        '<div><label>Height (in)</label><input type="text" inputmode="decimal" id="shipHeight" value="' + val(parcel.heightIn) + '" /></div>' +
+      "</div>" +
+      '<div class="set-actions"><button type="submit" class="set-save">Save shipping details</button></div>';
+    body.appendChild(ship);
+
+    ship.addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var get = function (id) { return ship.querySelector("#" + id).value.trim(); };
+      var num = function (id) {
+        var n = parseFloat(get(id).replace(/[^0-9.]/g, ""));
+        return n > 0 ? n : 0;
+      };
+      var del = firebase.firestore.FieldValue.delete();
+      var dropOff = {};
+      if (get("shipDropName")) dropOff.name = get("shipDropName");
+      if (get("shipDropStreet")) dropOff.street1 = get("shipDropStreet");
+      if (get("shipDropCity")) dropOff.city = get("shipDropCity");
+      if (get("shipDropState")) dropOff.state = get("shipDropState").toUpperCase();
+      if (get("shipDropZip")) dropOff.zip = get("shipDropZip");
+      var box = {};
+      [["shipWeight", "weightOz"], ["shipLength", "lengthIn"], ["shipWidth", "widthIn"], ["shipHeight", "heightIn"]].forEach(function (f) {
+        var n = num(f[0]);
+        if (n > 0) box[f[1]] = n;
+      });
+      // Same fields the iPhone app saves; quotes always use the business address, so the old custom origin is cleared.
+      var patch = {
+        shopShipFrom: del,
+        shopDropOffLocation: Object.keys(dropOff).length ? dropOff : del,
+        shopDefaultParcel: Object.keys(box).length ? box : del,
+      };
+      var btn = ship.querySelector(".set-save");
+      btn.disabled = true;
+      db.collection("tenants").doc(state.tenantId).update(patch).then(function () {
+        state.tenant.shopDropOffLocation = Object.keys(dropOff).length ? dropOff : null;
+        state.tenant.shopDefaultParcel = Object.keys(box).length ? box : null;
+        delete state.tenant.shopShipFrom;
+        showMsg(ship, "Saved", true);
+      }).catch(function (err) {
+        showMsg(ship, callableError(err), false);
+      }).then(function () { btn.disabled = false; });
+    });
+  }
+
+  /** One place for texting settings: the panel on the Messages page (same as the iPhone app's). */
+  function openMessagingSettings() {
+    var url = "/app/messages?settings=1";
+    try {
+      if (window.top !== window.self) { window.top.location.href = url; return; }
+    } catch (e) {}
+    window.location.href = url;
   }
 
   function paintMessaging(body) {

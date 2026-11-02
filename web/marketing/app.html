@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap" rel="stylesheet" />
   <base href="/" />
-  <link rel="stylesheet" href="/assets/app.css?v=66" />
+  <link rel="stylesheet" href="/assets/app.css?v=73" />
 </head>
 <body>
   <div id="gateLoading" class="app-gate">
@@ -24,7 +24,7 @@
     <div class="app-gate-card">
       <img src="/assets/brand/gb-crown.png" alt="" width="96" height="81" />
       <h1>Open your shop</h1>
-      <p>Sign in to see calendar, dashboard, and payments for your business.</p>
+      <p>Sign in to manage bookings, clients, payments, and your website.</p>
       <a class="app-btn app-btn--primary" href="/login.html?next=app.html">Log in</a>
     </div>
   </div>
@@ -68,7 +68,7 @@
             <a class="app-nav" data-route="team" href="/app/team" id="navTeam">Team</a>
             <a class="app-nav" data-route="insights" href="/app/insights">Insights</a>
             <div id="paymentsFlat">
-              <a class="app-nav" data-route="payments" href="/app/payments">Client payments</a>
+              <a class="app-nav" data-route="payments" href="/app/payments">Payments</a>
             </div>
             <div id="paymentsFolder" class="hidden">
               <div class="app-folder-head">
@@ -391,7 +391,7 @@
             <p>Text your clients from your shop's number. Replies show up here and in the app.</p>
           </div>
           <div class="app-pay-head-actions">
-            <button type="button" class="app-btn app-btn--ghost" id="msgSettingsBtn">Texting settings</button>
+            <button type="button" class="app-btn app-btn--ghost" id="msgSettingsBtn">Messaging settings</button>
             <button type="button" class="app-btn app-btn--primary" id="msgNewBtn">+ New message</button>
           </div>
         </div>
@@ -455,7 +455,7 @@
       <div class="app-sheet-scrim hidden" id="msgSettingsScrim"></div>
       <div class="app-sheet app-msg-settings hidden" id="msgSettingsSheet" role="dialog" aria-modal="true" aria-labelledby="msgSettingsTitle">
         <div class="app-sheet-top">
-          <h2 id="msgSettingsTitle">Texting settings</h2>
+          <h2 id="msgSettingsTitle">Messaging settings</h2>
           <button type="button" class="app-icon-btn" id="msgSettingsClose" aria-label="Close">×</button>
         </div>
         <div id="msgSettingsBody"></div>
@@ -608,7 +608,71 @@
         </div>
         <div id="shopCatalogPanel">
           <div class="app-product-grid" id="shopProductGrid"></div>
-          <p class="app-empty" id="shopProductEmpty">No products yet. Add them from Website → Shop, or in the iPhone app.</p>
+          <div class="app-req-empty hidden" id="shopProductEmpty">
+            <strong>No products yet</strong>
+            <span>Add your first product and it shows up in the shop on your website.</span>
+            <button type="button" class="app-btn app-btn--primary" data-shop-add>+ Add product</button>
+          </div>
+        </div>
+        <div class="app-sheet-scrim hidden" id="shopSheetScrim"></div>
+        <div class="app-sheet hidden" id="shopSheet" role="dialog" aria-modal="true" aria-labelledby="shopSheetTitle">
+          <div class="app-sheet-top">
+            <h2 id="shopSheetTitle">New product</h2>
+            <button type="button" class="app-icon-btn" id="shopSheetClose" aria-label="Close">×</button>
+          </div>
+          <form id="shopForm" novalidate>
+            <div class="app-shop-photo">
+              <div class="app-shop-photo-box" id="shopPhotoBox"></div>
+              <label class="app-btn app-btn--ghost">
+                <span id="shopPhotoLabel">Add photo</span>
+                <input type="file" accept="image/*" id="shopPhotoInput" class="hidden" />
+              </label>
+            </div>
+            <div class="app-field">
+              <label for="shopProdName">Name</label>
+              <input id="shopProdName" type="text" autocomplete="off" />
+            </div>
+            <div class="app-field-row">
+              <div class="app-field">
+                <label for="shopPrice">Price</label>
+                <input id="shopPrice" type="text" inputmode="decimal" placeholder="0.00" autocomplete="off" />
+              </div>
+              <div class="app-field">
+                <label for="shopSale">Sale price</label>
+                <input id="shopSale" type="text" inputmode="decimal" placeholder="Optional" autocomplete="off" />
+              </div>
+            </div>
+            <div class="app-field">
+              <label for="shopCategory">Category</label>
+              <input id="shopCategory" type="text" placeholder="Optional" autocomplete="off" />
+            </div>
+            <div class="app-field">
+              <label for="shopDesc">Description</label>
+              <textarea id="shopDesc" rows="3" placeholder="Optional"></textarea>
+            </div>
+            <details class="app-shop-ship">
+              <summary>Shipping details (optional)</summary>
+              <p class="app-hint">Used to quote shipping. Left blank, a product ships as 1 lb in a small box.</p>
+              <div class="app-field-row">
+                <div class="app-field"><label for="shopWeight">Weight (oz)</label><input id="shopWeight" type="text" inputmode="decimal" /></div>
+                <div class="app-field"><label for="shopLength">Length (in)</label><input id="shopLength" type="text" inputmode="decimal" /></div>
+              </div>
+              <div class="app-field-row">
+                <div class="app-field"><label for="shopWidth">Width (in)</label><input id="shopWidth" type="text" inputmode="decimal" /></div>
+                <div class="app-field"><label for="shopHeight">Height (in)</label><input id="shopHeight" type="text" inputmode="decimal" /></div>
+              </div>
+            </details>
+            <label class="app-shop-visible">
+              <input type="checkbox" id="shopVisible" checked />
+              <span><strong>Visible on site</strong><em>Turn off to hide it without deleting.</em></span>
+            </label>
+            <p class="app-sheet-error hidden" id="shopError"></p>
+            <div class="app-sheet-actions">
+              <button type="button" class="app-btn app-btn--danger hidden" id="shopDelete">Delete</button>
+              <button type="button" class="app-btn app-btn--ghost" id="shopCancel">Cancel</button>
+              <button type="submit" class="app-btn app-btn--primary" id="shopSave">Add to shop</button>
+            </div>
+          </form>
         </div>
         <article class="app-card hidden" id="shopOrdersPanel">
           <div id="shopOrderList"></div>
@@ -619,15 +683,17 @@
       <section id="viewPayments" class="app-view hidden" data-view="payments">
         <div class="app-greeting app-pay-head">
           <div>
-            <h1>Client payments</h1>
+            <h1>Payments</h1>
             <p>Charges, payouts, and refunds for your shop. Tap to Pay stays on iPhone.</p>
           </div>
           <div class="app-pay-head-actions">
+            <button type="button" class="app-btn app-btn--primary hidden" id="payTakeBtn">Take a payment</button>
             <button type="button" class="app-icon-btn" id="payRefresh" aria-label="Refresh">↻</button>
             <div class="app-pay-more">
               <button type="button" class="app-icon-btn" id="payMoreBtn" aria-label="Payment settings" aria-haspopup="true" aria-expanded="false">⋯</button>
               <div class="app-pay-menu hidden" id="payMoreMenu" role="menu">
                 <button type="button" role="menuitem" id="payDescriptorBtn">Payment descriptor</button>
+                <button type="button" role="menuitem" class="hidden" id="payTaxBtn">Tax settings</button>
               </div>
             </div>
           </div>
@@ -697,6 +763,7 @@
             </div>
           </div>
         </article>
+
       </section>
 
       <button type="button" class="app-sheet-scrim hidden" id="payWithdrawScrim" aria-label="Close withdraw"></button>
@@ -728,6 +795,108 @@
         <div class="app-sheet-actions">
           <button type="button" class="app-btn app-btn--ghost" id="payWithdrawCancel">Cancel</button>
           <button type="button" class="app-btn app-btn--primary" id="payWithdrawSave">Withdraw</button>
+        </div>
+      </div>
+
+      <div class="app-sheet-scrim hidden" id="appOpenScrim"></div>
+      <div class="app-sheet app-open-app hidden" id="appOpenSheet" role="dialog" aria-modal="true" aria-labelledby="appOpenTitle">
+        <div class="app-sheet-top">
+          <h2 id="appOpenTitle">Edit your website in the app</h2>
+          <button type="button" class="app-icon-btn" id="appOpenClose" aria-label="Close">×</button>
+        </div>
+        <p class="app-hint">The website builder works best in the Get Bookking app on iPhone. Same website, same changes.</p>
+        <div class="app-open-app-actions">
+          <a class="app-btn app-btn--primary" id="appOpenGo" href="#" rel="noopener">Open in TestFlight</a>
+          <a class="app-btn app-btn--ghost" id="appOpenWeb" href="/design">Continue on web anyway</a>
+        </div>
+      </div>
+
+      <button type="button" class="app-sheet-scrim hidden" id="payTakeScrim" aria-label="Close take a payment"></button>
+      <div class="app-sheet app-take hidden" id="payTakeSheet" role="dialog" aria-labelledby="payTakeTitle">
+        <div class="app-sheet-top">
+          <h2 id="payTakeTitle">Take a payment</h2>
+          <button type="button" class="app-icon-btn" id="payTakeClose" aria-label="Close">×</button>
+        </div>
+
+        <div id="payTakeForm">
+          <label class="app-take-amount">
+            <span>Amount</span>
+            <span class="app-take-amount-row"><b aria-hidden="true">$</b><input id="payTakeAmt" type="text" inputmode="decimal" placeholder="0.00" autocomplete="off" aria-label="Amount in dollars" /></span>
+          </label>
+          <div class="app-field-row">
+            <div class="app-field">
+              <label for="payTakeFor">What it's for</label>
+              <input id="payTakeFor" type="text" placeholder="Haircut" autocomplete="off" />
+            </div>
+            <div class="app-field">
+              <label for="payTakeName">Client</label>
+              <input id="payTakeName" type="text" placeholder="Optional" autocomplete="off" />
+            </div>
+          </div>
+
+          <div class="app-seg app-take-tabs" role="tablist" aria-label="How to pay">
+            <button type="button" class="is-on" id="payTakeTabCard" role="tab" aria-selected="true">Card</button>
+            <button type="button" id="payTakeTabLink" role="tab" aria-selected="false">Send link</button>
+          </div>
+
+          <div id="payTakeCardPane">
+            <div class="hidden" id="payTakeSummary"></div>
+            <div class="app-take-card hidden" id="payTakeCardBox">
+              <div id="payTakeCardEl" class="app-take-card-el"></div>
+              <p class="app-take-secure"><span aria-hidden="true">🔒</span> Secured by Stripe. Card details never touch our servers.</p>
+            </div>
+            <p class="app-hint hidden" id="payTakeCardNote"></p>
+            <button type="button" class="app-btn app-btn--primary app-take-go" id="payTakeContinue">Continue to card</button>
+            <button type="button" class="app-btn app-btn--primary app-take-go hidden" id="payTakeCharge">Charge</button>
+          </div>
+
+          <div class="hidden" id="payTakeLinkPane">
+            <div class="app-field">
+              <label for="payTakePhone">Client phone</label>
+              <input id="payTakePhone" type="tel" inputmode="tel" placeholder="(555) 123-4567" autocomplete="off" />
+            </div>
+            <p class="app-hint">They pay on their own phone. It shows up here once paid.</p>
+            <div class="app-pay-take-actions">
+              <button type="button" class="app-btn app-btn--ghost" id="payTakeCopy">Copy pay link</button>
+              <button type="button" class="app-btn app-btn--primary" id="payTakeText">Text pay link</button>
+            </div>
+          </div>
+
+          <p class="app-sheet-error hidden" id="payTakeError"></p>
+        </div>
+
+        <div class="app-take-done hidden" id="payTakeDone">
+          <div class="app-take-check" aria-hidden="true">✓</div>
+          <strong id="payTakeDoneTitle"></strong>
+          <span id="payTakeDoneSub"></span>
+          <div class="app-field hidden" id="payTakeLinkRow">
+            <label for="payTakeLink">Pay link</label>
+            <input id="payTakeLink" type="text" readonly />
+          </div>
+          <a class="app-btn app-btn--ghost hidden" id="payTakeReceipt" href="#" target="_blank" rel="noopener">View receipt</a>
+          <div class="app-sheet-actions">
+            <button type="button" class="app-btn app-btn--ghost" id="payTakeAgain">New payment</button>
+            <button type="button" class="app-btn app-btn--primary" id="payTakeFinish">Done</button>
+          </div>
+        </div>
+      </div>
+
+      <button type="button" class="app-sheet-scrim hidden" id="payTaxScrim" aria-label="Close tax settings"></button>
+      <div class="app-sheet hidden" id="payTaxSheet" role="dialog" aria-labelledby="payTaxTitle">
+        <div class="app-sheet-top">
+          <h2 id="payTaxTitle">Tax settings</h2>
+          <button type="button" class="app-icon-btn" id="payTaxClose" aria-label="Close">×</button>
+        </div>
+        <div class="app-tax-list">
+          <label class="app-tax-row">
+            <span><strong>Online sales tax</strong><em>Shop and website checkout. Calculated by Stripe Tax.</em></span>
+            <input type="checkbox" id="payTaxOnline" />
+          </label>
+          <label class="app-tax-row">
+            <span><strong>In-person sales tax</strong><em>Manual payment and Tap to Pay. Shown on checkout and receipts.</em></span>
+            <input type="checkbox" id="payTaxInPerson" />
+          </label>
+          <p class="app-hint hidden" id="payTaxMsg"></p>
         </div>
       </div>
 
@@ -816,7 +985,7 @@
         </div>
         <p class="app-sheet-error hidden" id="tpError"></p>
         <article class="app-card hidden" id="tpBlocked">
-          <p class="app-empty">Only the shop owner can see team payouts. Your own payments are under Client payments.</p>
+          <p class="app-empty">Only the shop owner can see team payouts. Your own payments are under Payments.</p>
         </article>
 
         <article class="app-pay-hero hidden" id="tpHero">
@@ -874,14 +1043,14 @@
   <script src="/assets/app-dashboard.js?v=22"></script>
   <script src="/assets/app-requests.js?v=5"></script>
   <script src="/assets/app-dash-charts.js?v=6"></script>
-  <script src="/assets/app-team.js?v=4"></script>
+  <script src="/assets/app-team.js?v=5"></script>
   <script src="/assets/app-profile.js?v=1"></script>
-  <script src="/assets/app-messages.js?v=8"></script>
+  <script src="/assets/app-messages.js?v=9"></script>
   <script src="/assets/app-insights.js?v=3"></script>
-  <script src="/assets/app-payments.js?v=6"></script>
+  <script src="/assets/app-payments.js?v=13"></script>
   <script src="/assets/app-payouts.js?v=2"></script>
   <script src="/assets/app-clients.js?v=4"></script>
-  <script src="/assets/app-shop.js?v=3"></script>
-  <script src="/assets/app.js?v=26"></script>
+  <script src="/assets/app-shop.js?v=5"></script>
+  <script src="/assets/app.js?v=30"></script>
 </body>
 </html>

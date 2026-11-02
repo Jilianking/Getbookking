@@ -28,9 +28,9 @@
       ["perm", "editServicesPricing", "Edit services and prices", "Change the service list and pricing."],
       ["perm", "manageBookingFormStyle", "Edit the booking form", "Change the booking form's style and questions."],
     ]],
-    ["Clients and money", [
-      ["perm", "accessClientList", "See the client list", "Open Clients and client profiles."],
-      ["perm", "viewEarningsReports", "See earnings and reports", "Open Insights and Payments."],
+    ["Client info and revenue", [
+      ["perm", "accessClientList", "See all clients", "Every client in the shop, with profiles and notes — not just their own."],
+      ["perm", "viewEarningsReports", "See shop revenue", "Total sales, payments, and refunds for the whole shop. Off hides all dollar amounts."],
     ]],
     ["Manager alerts", [
       ["note", "onNewBooking", "New booking", "Managers get a notification for each new booking."],

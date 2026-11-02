@@ -324,6 +324,7 @@
     setHidden("paySetup", !canTake || charges);
     setHidden("payHero", !canTake || !charges);
     setHidden("payMoreBtn", !canTake);
+    setHidden("payTakeBtn", !canTake || !charges);
 
     if (!canTake) {
       closeMore();
@@ -540,13 +541,49 @@
     if (ok) ok.classList.add("hidden");
   }
 
+  /** Last loaded numbers for this shop, kept for this browser tab so the page paints instantly. */
+  function cacheKey() {
+    var t = state.session && state.session.tenantId;
+    return t ? "bkPayments:" + t : "";
+  }
+
+  function saveCache() {
+    var key = cacheKey();
+    if (!key) return;
+    try {
+      sessionStorage.setItem(key, JSON.stringify({ status: state.status, balance: state.balance, transactions: state.transactions }));
+    } catch (e) {}
+  }
+
+  function restoreCache() {
+    var key = cacheKey();
+    if (!key || state.status) return;
+    try {
+      var c = JSON.parse(sessionStorage.getItem(key) || "null");
+      if (c && c.status) {
+        state.status = c.status;
+        state.balance = c.balance || null;
+        state.transactions = c.transactions || [];
+        paint();
+      }
+    } catch (e) {}
+  }
+
   function loadAll() {
     if (state.loading) return Promise.resolve();
     state.loading = true;
     showError("");
     setRefreshBusy(true);
     state.txLimit = TX_PAGE;
-    return call("getConnectAccountStatus", { skipEmailReconcile: true })
+    // All three at once; balance and activity are only used when the shop can take payments.
+    var status = call("getConnectAccountStatus", { skipEmailReconcile: true });
+    var balance = call("getConnectBalance").then(function (r) { return (r && r.data) || {}; });
+    var tx = call("getConnectBalanceTransactions", { limit: TX_PAGE }).then(function (r) {
+      return ((r && r.data) || {}).transactions || [];
+    });
+    balance.catch(function () {});
+    tx.catch(function () {});
+    return status
       .then(function (res) {
         state.status = (res && res.data) || {};
         paintStatus();
@@ -555,14 +592,16 @@
           state.balance = null;
           state.transactions = [];
           paint();
+          saveCache();
           return;
         }
-        return Promise.all([
-          call("getConnectBalance").then(function (r) {
-            state.balance = (r && r.data) || {};
-          }),
-          loadTransactions(TX_PAGE),
-        ]).then(paint);
+        return Promise.all([balance, tx]).then(function (out) {
+          state.balance = out[0];
+          state.transactions = out[1];
+          state.txLimit = TX_PAGE;
+          paint();
+          saveCache();
+        });
       })
       .catch(function (err) {
         showError(errMessage(err));
@@ -807,22 +846,45 @@
 
   function openDashboard() {
     var btn = $("payDashboardBtn");
-    if (btn) btn.disabled = true;
+    var label = btn ? btn.textContent : "";
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = "Opening…";
+    }
     showError("");
+    // Open the tab right away (browsers block tabs opened after a wait) and show a loading screen
+    // until Stripe's sign-in link is ready.
+    var win = window.open("", "_blank");
+    if (win) {
+      try {
+        win.document.title = "Opening Stripe…";
+        win.document.body.innerHTML =
+          '<div style="font-family:-apple-system,BlinkMacSystemFont,sans-serif;display:flex;flex-direction:column;align-items:center;justify-content:center;height:90vh;color:#3b2a1f;gap:16px">' +
+          '<div style="width:28px;height:28px;border:3px solid #e8dfd3;border-top-color:#A3752F;border-radius:50%;animation:s 0.8s linear infinite"></div>' +
+          "<p style=\"margin:0;font-size:16px\">Loading your Stripe dashboard…</p>" +
+          "<style>@keyframes s{to{transform:rotate(360deg)}}</style></div>";
+      } catch (e) {}
+    }
     return call("createExpressDashboardLink")
       .then(function (res) {
         var data = (res && res.data) || {};
-        if (data.url) {
+        if (!data.url) throw new Error("Could not open Stripe dashboard.");
+        if (win && !win.closed) {
+          try { win.opener = null; } catch (e) {}
+          win.location.href = data.url;
+        } else {
           window.open(data.url, "_blank", "noopener,noreferrer");
-          return;
         }
-        throw new Error("Could not open Stripe dashboard.");
       })
       .catch(function (err) {
+        if (win && !win.closed) win.close();
         showError(errMessage(err));
       })
       .finally(function () {
-        if (btn) btn.disabled = false;
+        if (btn) {
+          btn.disabled = false;
+          btn.textContent = label;
+        }
       });
   }
 
@@ -1156,6 +1218,365 @@
     });
   }
 
+  /* ── Take a payment: card right here (same server function as the iPhone app's manual card
+     entry), or a pay link to copy or text. ── */
+
+  var take = { wired: false, busy: false, tab: "card", url: "", urlKey: "", intent: null, intentKey: "", stripe: null, stripeKey: "", card: null };
+
+  function canTextLinks() {
+    var s = state.session || {};
+    return !!(s.access && s.access.canSendClientSms);
+  }
+
+  function takeE164(raw) {
+    var d = String(raw || "").replace(/\D/g, "");
+    if (d.length === 11 && d.charAt(0) === "1") d = d.slice(1);
+    return d.length === 10 ? "+1" + d : "";
+  }
+
+  function money2(cents) {
+    return "$" + (Math.round(cents) / 100).toFixed(2);
+  }
+
+  function takeErr(text) {
+    var el = $("payTakeError");
+    el.textContent = text || "";
+    el.classList.toggle("hidden", !text);
+  }
+
+  function setTakeOpen(open) {
+    setHidden("payTakeScrim", !open);
+    setHidden("payTakeSheet", !open);
+    if (!open) return;
+    closeMore();
+    resetTake();
+    $("payTakeAmt").focus();
+  }
+
+  function takeValues() {
+    var amt = parseFloat(String($("payTakeAmt").value || "").replace(/[$,\s]/g, ""));
+    return {
+      cents: isFinite(amt) ? Math.round(amt * 100) : 0,
+      what: $("payTakeFor").value.trim(),
+      name: $("payTakeName").value.trim(),
+      phone: $("payTakePhone").value.trim(),
+    };
+  }
+
+  function clearIntent() {
+    take.intent = null;
+    take.intentKey = "";
+    setHidden("payTakeSummary", true);
+    setHidden("payTakeCardBox", true);
+    setHidden("payTakeCharge", true);
+    setHidden("payTakeContinue", false);
+    if (take.card) {
+      try { take.card.unmount(); } catch (e) {}
+    }
+  }
+
+  function resetTake() {
+    ["payTakeAmt", "payTakeFor", "payTakeName", "payTakePhone"].forEach(function (id) { $(id).value = ""; });
+    take.url = "";
+    take.urlKey = "";
+    clearIntent();
+    takeErr("");
+    setHidden("payTakeCardNote", true);
+    setHidden("payTakeForm", false);
+    setHidden("payTakeDone", true);
+    setHidden("payTakeText", !canTextLinks());
+    setTakeTab("card");
+  }
+
+  function setTakeTab(tab) {
+    take.tab = tab;
+    $("payTakeTabCard").classList.toggle("is-on", tab === "card");
+    $("payTakeTabLink").classList.toggle("is-on", tab === "link");
+    $("payTakeTabCard").setAttribute("aria-selected", tab === "card" ? "true" : "false");
+    $("payTakeTabLink").setAttribute("aria-selected", tab === "link" ? "true" : "false");
+    setHidden("payTakeCardPane", tab !== "card");
+    setHidden("payTakeLinkPane", tab !== "link");
+    takeErr("");
+  }
+
+  function takeBusy(on, label) {
+    take.busy = on;
+    ["payTakeContinue", "payTakeCharge", "payTakeCopy", "payTakeText"].forEach(function (id) { $(id).disabled = on; });
+    if (label) $(label[0]).textContent = label[1];
+  }
+
+  function loadStripeJs() {
+    if (typeof global.Stripe === "function") return Promise.resolve();
+    return new Promise(function (resolve, reject) {
+      var tag = document.createElement("script");
+      tag.src = "https://js.stripe.com/v3/";
+      tag.onload = resolve;
+      tag.onerror = function () { reject(new Error("Couldn't load Stripe. Check your connection and try again.")); };
+      document.head.appendChild(tag);
+    });
+  }
+
+  function summaryHtml(d) {
+    var row = function (label, cents) { return "<div><span>" + label + "</span><span>" + money2(cents) + "</span></div>"; };
+    return '<div class="app-take-sum">' +
+      row("Amount", d.serviceCents) +
+      (d.taxCents ? row("Sales tax", d.taxCents) : "") +
+      (d.surchargeCents ? row("Card fee", d.surchargeCents) : "") +
+      '<div class="is-total"><span>Total</span><span>' + money2(d.totalCents) + "</span></div></div>";
+  }
+
+  /** Step 1: get exact totals from the server and show Stripe's card field. */
+  function continueToCard() {
+    if (take.busy) return;
+    var v = takeValues();
+    if (v.cents < 50) return takeErr("Enter an amount of at least $0.50.");
+    takeErr("");
+    takeBusy(true, ["payTakeContinue", "Loading…"]);
+    call("createPaymentIntentForManualCheckout", { serviceAmountCents: v.cents, paymentKind: "payment" })
+      .then(function (res) {
+        var d = (res && res.data) || {};
+        if (!d.clientSecret || !d.publishableKey) throw new Error("Couldn't start the card payment.");
+        // Stripe's live card field only loads on a secure (https) page.
+        if (d.publishableKey.indexOf("pk_live") === 0 && location.protocol !== "https:") {
+          var note = $("payTakeCardNote");
+          note.textContent = "Card entry only works on the live site (getbookking.com). Use Send link here, or try it after deploy.";
+          note.classList.remove("hidden");
+          return;
+        }
+        return loadStripeJs().then(function () {
+          var key = d.publishableKey + "|" + d.stripeAccountId;
+          if (!take.stripe || take.stripeKey !== key) {
+            take.stripe = global.Stripe(d.publishableKey, { stripeAccount: d.stripeAccountId });
+            take.stripeKey = key;
+            take.card = take.stripe.elements().create("card", {
+              hidePostalCode: false,
+              style: { base: { fontSize: "16px", color: "#2c2018", "::placeholder": { color: "#a39383" } } },
+            });
+          }
+          take.intent = d;
+          take.intentKey = String(v.cents);
+          $("payTakeSummary").innerHTML = summaryHtml(d);
+          setHidden("payTakeSummary", false);
+          setHidden("payTakeCardBox", false);
+          take.card.mount("#payTakeCardEl");
+          setHidden("payTakeContinue", true);
+          setHidden("payTakeCharge", false);
+          $("payTakeCharge").textContent = "Charge " + money2(d.totalCents);
+          setTimeout(function () { try { take.card.focus(); } catch (e) {} }, 50);
+        });
+      })
+      .catch(function (err) { takeErr(errMessage(err)); })
+      .then(function () { takeBusy(false, ["payTakeContinue", "Continue to card"]); });
+  }
+
+  /** Step 2: charge the card. */
+  function chargeCard() {
+    if (take.busy || !take.intent || !take.card) return;
+    var v = takeValues();
+    if (String(v.cents) !== take.intentKey) {
+      clearIntent();
+      return takeErr("The amount changed. Tap Continue to card again.");
+    }
+    takeErr("");
+    var label = $("payTakeCharge").textContent;
+    takeBusy(true, ["payTakeCharge", "Charging…"]);
+    var billing = v.name ? { name: v.name } : undefined;
+    var startedAt = Math.floor(Date.now() / 1000) - 120;
+    take.stripe.confirmCardPayment(take.intent.clientSecret, {
+      payment_method: { card: take.card, billing_details: billing },
+    }).then(function (result) {
+      if (result.error) throw new Error(result.error.message || "The card was declined.");
+      var pi = result.paymentIntent || {};
+      if (pi.status !== "succeeded" && pi.status !== "processing") throw new Error("The payment didn't go through.");
+      var total = take.intent.totalCents;
+      var pm = pi.payment_method && typeof pi.payment_method === "object" ? pi.payment_method.card : null;
+      takeDone("Paid " + money2(total), [pm ? (cap(pm.brand) + " ending " + pm.last4) : "Card", v.what, v.name].filter(Boolean).join(" · "));
+      take.intent = null;
+      showReceiptFor(total, startedAt);
+    }).catch(function (err) {
+      takeErr(errMessage(err));
+    }).then(function () {
+      takeBusy(false, ["payTakeCharge", label]);
+    });
+  }
+
+  /**
+   * Right after a card charge: find the new payment in activity and open its receipt (the same
+   * payment details sheet as tapping a payment, with Refund). Stripe can take a moment to list it.
+   */
+  function showReceiptFor(totalCents, sinceSec) {
+    var tries = 0;
+    $("payTakeDoneSub").textContent += " · Loading receipt…";
+    function look() {
+      tries += 1;
+      return loadTransactions(TX_PAGE).then(function () {
+        paint();
+        saveCache();
+        var hit = (state.transactions || []).filter(function (tx) {
+          return tx.chargeId && txKind(tx) === "payment" && (Number(tx.created) || 0) >= sinceSec &&
+            Math.abs(Number(tx.amount) || 0) === totalCents;
+        }).sort(function (a, b) { return (Number(b.created) || 0) - (Number(a.created) || 0); })[0];
+        if (hit) {
+          setTakeOpen(false);
+          openDetail(hit);
+          return;
+        }
+        if (tries < 6) return new Promise(function (r) { setTimeout(r, 2000); }).then(look);
+        var sub = $("payTakeDoneSub");
+        sub.textContent = sub.textContent.replace(" · Loading receipt…", "") + " · The receipt will be in your activity in a moment.";
+      }).catch(function () {});
+    }
+    look();
+  }
+
+  function cap(s) {
+    s = String(s || "");
+    return s ? s.charAt(0).toUpperCase() + s.slice(1) : "";
+  }
+
+  /** Makes the pay link (once per amount, description and client). */
+  function takeLink(v) {
+    var key = v.cents + "|" + v.what + "|" + v.name;
+    if (take.url && take.urlKey === key) return Promise.resolve(take.url);
+    return call("createDepositLink", {
+      serviceAmountCents: v.cents,
+      paymentKind: "payment",
+      productName: v.what || "Payment",
+      productDescription: v.name || undefined,
+    }).then(function (res) {
+      var url = res && res.data && res.data.url;
+      if (!url) throw new Error("Couldn't create the pay link.");
+      take.url = url;
+      take.urlKey = key;
+      return url;
+    });
+  }
+
+  function takeDone(title, sub, link) {
+    $("payTakeDoneTitle").textContent = title;
+    $("payTakeDoneSub").textContent = sub || "";
+    $("payTakeLink").value = link || "";
+    setHidden("payTakeLinkRow", !link);
+    setHidden("payTakeReceipt", true);
+    setHidden("payTakeForm", true);
+    setHidden("payTakeDone", false);
+  }
+
+  function sendLink(mode) {
+    if (take.busy) return;
+    var v = takeValues();
+    if (v.cents < 50) return takeErr("Enter an amount of at least $0.50.");
+    var to = "";
+    if (mode === "text") {
+      to = takeE164(v.phone);
+      if (!to) return takeErr("Enter the client's 10-digit phone number to text the link.");
+    }
+    takeErr("");
+    takeBusy(true);
+    var dollars = (v.cents / 100).toFixed(2);
+    takeLink(v).then(function (url) {
+      if (mode === "copy") {
+        var done = function () { takeDone("Pay link copied", "Paste it anywhere to send it. It shows up here once paid.", url); };
+        return (navigator.clipboard ? navigator.clipboard.writeText(url) : Promise.reject()).then(done, done);
+      }
+      return call("sendClientSms", {
+        to: to,
+        body: (v.what ? v.what + ": " : "Payment: ") + "$" + dollars + "\nPay here: " + url,
+        clientName: v.name || undefined,
+        threadId: to,
+        paymentKind: "payment",
+        amountCents: v.cents,
+        paymentUrl: url,
+        threadPreview: "Payment · $" + dollars,
+      }).then(function () {
+        takeDone("Pay link texted", (v.name ? "Sent to " + v.name + ". " : "") + "It shows up here once paid.", url);
+      });
+    }).catch(function (err) {
+      takeErr(errMessage(err));
+    }).then(function () { takeBusy(false); });
+  }
+
+  function wireTake() {
+    if (take.wired || !$("payTakeBtn")) return;
+    take.wired = true;
+    $("payTakeBtn").addEventListener("click", function () { setTakeOpen(true); });
+    ["payTakeClose", "payTakeScrim", "payTakeFinish"].forEach(function (id) {
+      $(id).addEventListener("click", function () {
+        if (take.busy) return;
+        setTakeOpen(false);
+        if (id === "payTakeFinish") loadAll();
+      });
+    });
+    $("payTakeAgain").addEventListener("click", resetTake);
+    $("payTakeTabCard").addEventListener("click", function () { setTakeTab("card"); });
+    $("payTakeTabLink").addEventListener("click", function () { setTakeTab("link"); });
+    $("payTakeContinue").addEventListener("click", continueToCard);
+    $("payTakeCharge").addEventListener("click", chargeCard);
+    $("payTakeCopy").addEventListener("click", function () { sendLink("copy"); });
+    $("payTakeText").addEventListener("click", function () { sendLink("text"); });
+    // A new amount needs fresh totals.
+    $("payTakeAmt").addEventListener("input", function () { if (take.intent) clearIntent(); });
+    $("payTakeAmt").addEventListener("keydown", function (ev) {
+      if (ev.key === "Enter" && take.tab === "card") (take.intent ? chargeCard : continueToCard)();
+    });
+    $("payTakeLink").addEventListener("focus", function () { this.select(); });
+    document.addEventListener("keydown", function (ev) {
+      if (ev.key === "Escape" && !$("payTakeSheet").classList.contains("hidden") && !take.busy) setTakeOpen(false);
+    });
+  }
+
+  /* ── Tax settings (owner only; same tenant fields as the iPhone app) ── */
+
+  var taxWired = false;
+  function setTaxOpen(open) {
+    setHidden("payTaxScrim", !open);
+    setHidden("payTaxSheet", !open);
+    if (open) closeMore();
+  }
+
+  function loadTax() {
+    var item = $("payTaxBtn");
+    if (!item) return;
+    var s = state.session;
+    var owner = !!(s && s.isOwner && s.tenantId);
+    item.classList.toggle("hidden", !owner);
+    if (!owner) return;
+    var ref = firebase.firestore().collection("tenants").doc(s.tenantId);
+    if (!taxWired) {
+      taxWired = true;
+      item.addEventListener("click", function () { setTaxOpen(true); });
+      ["payTaxClose", "payTaxScrim"].forEach(function (id) {
+        $(id).addEventListener("click", function () { setTaxOpen(false); });
+      });
+      document.addEventListener("keydown", function (ev) {
+        if (ev.key === "Escape" && !$("payTaxSheet").classList.contains("hidden")) setTaxOpen(false);
+      });
+      [["payTaxOnline", "shopTaxEnabled"], ["payTaxInPerson", "inPersonTaxEnabled"]].forEach(function (pair) {
+        var box = $(pair[0]);
+        box.addEventListener("change", function () {
+          var patch = {};
+          patch[pair[1]] = box.checked;
+          box.disabled = true;
+          var msg = $("payTaxMsg");
+          ref.update(patch).then(function () {
+            msg.textContent = "Saved";
+            msg.classList.remove("hidden");
+            setTimeout(function () { msg.classList.add("hidden"); }, 1500);
+          }).catch(function (err) {
+            box.checked = !box.checked;
+            msg.textContent = errMessage(err);
+            msg.classList.remove("hidden");
+          }).then(function () { box.disabled = false; });
+        });
+      });
+    }
+    ref.get().then(function (snap) {
+      var t = snap.data() || {};
+      $("payTaxOnline").checked = t.shopTaxEnabled === true;
+      $("payTaxInPerson").checked = t.inPersonTaxEnabled === true;
+    }).catch(function () {});
+  }
+
   function attach(session) {
     state.session = session;
     wire();
@@ -1170,6 +1591,9 @@
         history.replaceState({}, "", "/app/payments");
       } catch (e) {}
     }
+    restoreCache();
+    wireTake();
+    loadTax();
     return loadAll();
   }
 

@@ -160,3 +160,26 @@ footer {
     gap: 28px 24px;
   }
 }
+
+/* "Log in to your shop" above the footer logo (says "Open your shop" when signed in) */
+.footer-shop-login {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  align-self: flex-start;
+  margin-top: 2px;
+  padding: 10px 18px;
+  border: 1px solid #c9a96e;
+  border-radius: 999px;
+  color: #e9d6b0;
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  text-decoration: none;
+  transition: background 0.2s ease, color 0.2s ease;
+}
+.footer-shop-login:hover { background: #c9a96e; color: #1a140f; }
+.footer-shop-login:focus-visible { outline: 2px solid #c9a96e; outline-offset: 3px; }
+@media (max-width: 640px) {
+  .footer-shop-login { align-self: stretch; justify-content: center; }
+}

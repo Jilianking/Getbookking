@@ -711,7 +711,7 @@
       btn.textContent = "Saved";
       setTimeout(function () { btn.textContent = "Save"; btn.disabled = false; }, 1400);
     }).catch(function (e) {
-      err.textContent = (e && e.message) || "Couldn't save your texting settings.";
+      err.textContent = (e && e.message) || "Couldn't save your messaging settings.";
       err.classList.remove("hidden");
       btn.disabled = false;
     });
@@ -1158,6 +1158,12 @@
     state.session = session;
     wire();
     attach(session);
+    // Settings → Messaging settings lands here with ?settings=1.
+    var qs = new URLSearchParams(location.search);
+    if (qs.get("settings") === "1") {
+      try { history.replaceState(null, "", "/app/messages"); } catch (e) {}
+      settingsOpen(true);
+    }
     var nb = $("msgNewBtn");
     if (nb) nb.classList.toggle("hidden", !canSend());
     paintThreads();

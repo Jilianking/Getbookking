@@ -700,7 +700,6 @@ html.bk-embed .nav-drawer,
 html.bk-embed .acct-header,
 html.bk-embed .bill-back,
 html.bk-embed #shopBox,
-html.bk-embed #websiteBox,
-html.bk-embed #billingBox {
+html.bk-embed #websiteBox {
   display: none !important;
 }

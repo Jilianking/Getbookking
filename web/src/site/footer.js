@@ -75,7 +75,7 @@ function customSiteFooterHtml(tenant, opts) {
   opts = opts || {};
 
   var brand = '';
-  if (f.showName !== false) brand += '<div class="bk-footer-name">' + siteNameSpan(tenant, 'Studio') + '</div>';
+  if (f.showName !== false) brand += '<div class="bk-footer-name">' + siteNameSpan(tenant, 'Studio', 'displayName.footer') + '</div>';
   if (f.showSocial !== false) {
     var networks = [
       ['instagram', 'Instagram', footerSocialUrl('instagram', tenant.instagramHandle)],

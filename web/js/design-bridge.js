@@ -1173,7 +1173,9 @@
     var text = value == null ? '' : String(value);
     [].forEach.call(nodes, function (el) {
       if (el === editingEl) return;
-      el.textContent = text;
+      // Multi-line values (street + suite) keep their line breaks.
+      if (text.indexOf('\n') !== -1) el.innerText = text;
+      else el.textContent = text;
     });
     // Placement aliases for site display name
     if (key === 'wc.site.displayName' || key === 'displayName') {

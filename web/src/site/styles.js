@@ -746,14 +746,18 @@ function applyWebTextStyles(tenant) {
   [].forEach.call(document.querySelectorAll('[data-edit-key]'), function(el) {
     var k = el.getAttribute('data-edit-key') || '';
     if (isSheetOnlyEditKey(k)) return;
-    var col = colors[k];
+    // Each place the shop name shows (header, hero, footer) has its own size and color.
+    // Older sites saved one style under "displayName"; it still applies until that spot is changed.
+    var legacyName = k === 'displayName.classic.nav' || k === 'displayName.classic.hero' ||
+      k === 'displayName.classic.footer' || k === 'displayName.footer';
+    var col = colors[k] || (legacyName ? colors.displayName : '');
     if (col && col.charAt(0) === '#') {
       try { el.style.setProperty('color', col, 'important'); }
       catch (e) { el.style.color = col; }
     } else if (hasColorMap) {
       el.style.removeProperty('color');
     }
-    var sz = parseInt(sizes[k], 10);
+    var sz = parseInt(sizes[k] != null ? sizes[k] : (legacyName ? sizes.displayName : ''), 10);
     if (sz >= 10 && sz <= 96) {
       try { el.style.setProperty('font-size', sz + 'px', 'important'); }
       catch (e2) { el.style.fontSize = sz + 'px'; }

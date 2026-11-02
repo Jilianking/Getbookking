@@ -175,7 +175,8 @@ function stonecutNavHtml(tenant) {
   return '<nav class="stonecut-nav" id="stonecut-nav" data-bk-color-surface="page"' +
     stonecutBkSurfaceKeyAttr(tenant, 'stonecut.nav') + '>' +
     '<a href="' + base + '/home" class="stonecut-logo">' +
-    '<span class="stonecut-logo-wordmark">' + siteNameSpan(tenant, 'Studio', 'displayName.stonecut.nav') + '</span>' +
+    // Desktop (and scrolled mobile) wordmark: logo / name / both, same as the other templates.
+    '<span class="stonecut-logo-wordmark">' + navBrandHtml(tenant, siteNameSpan(tenant, 'Studio', 'displayName.stonecut.nav')) + '</span>' +
     '<span class="stonecut-logo-stack">' +
     stonecutIndustryEmHtml(tenant, 'stonecut-nav-industry') +
     navBrandHtml(tenant, '<span class="stonecut-nav-name">' + siteNameSpan(tenant, 'Studio', 'displayName.stonecut.nav') + '</span>') +

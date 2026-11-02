@@ -632,12 +632,29 @@ function previewWebThemeOverrideId() {
   }
 }
 
+/** Web Design editor: current (maybe unpublished) colors on the iframe src as bk_colors, so the
+ *  preview paints them from the first frame instead of flashing the published colors. */
+function previewColorsFromUrl() {
+  if (!isTemplatePreview()) return null;
+  try {
+    var raw = new URLSearchParams(location.search || '').get('bk_colors');
+    if (!raw) return null;
+    var parsed = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' ? parsed : null;
+  } catch (e) {
+    return null;
+  }
+}
+
 function applyPreviewThemeOverride(tenant) {
   if (!tenant) return tenant;
   applyDesignVisibilityOverride(tenant);
   var id = previewWebThemeOverrideId();
-  if (!id) return tenant;
-  if (isCharterPlan(tenant) || String(tenant.industry || '') === 'charters') {
+  var urlColors = previewColorsFromUrl();
+  if (!id && !urlColors) return tenant;
+  if (!id) {
+    // No theme override; only the editor's colors apply.
+  } else if (isCharterPlan(tenant) || String(tenant.industry || '') === 'charters') {
     tenant.webThemeId = 'charter-v1';
     tenant.resolvedWebThemeId = 'charter-v1';
   } else if (id !== 'charter-v1') {
@@ -647,7 +664,7 @@ function applyPreviewThemeOverride(tenant) {
   // Apply full color + style-map override from Swift-side state (iOS only — web editor
   // sends these via color-patch postMessage after bridge handshake).
   try {
-    var ov = window.__bkPreviewTenantOverride;
+    var ov = window.__bkPreviewTenantOverride || urlColors;
     if (ov) {
       var colorFields = ['backgroundColor','textColor','cardSurfaceColor','primaryColor',
         'primaryColorHover','accentTextColor','featuredWorkBackgroundColor','featuredWorkTextColor',

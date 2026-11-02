@@ -36,7 +36,7 @@ function tattooNavHtml(tenant) {
     ? (' data-bk-color-surface="page"' + classicBkSurfaceKeyAttr(tenant, 'classic.nav'))
     : '';
   return '<nav class="tattoo-nav"' + classicNavAttr + '>' +
-    '<a href="' + base + '/home" class="tattoo-brand">' + navBrandHtml(tenant, siteNameSpan(tenant, 'Welcome')) + '</a>' +
+    '<a href="' + base + '/home" class="tattoo-brand">' + navBrandHtml(tenant, siteNameSpan(tenant, 'Welcome', 'displayName.classic.nav')) + '</a>' +
     '<div class="tattoo-nav-trailing">' +
       '<div class="tattoo-nav-links">' + inner + '</div>' +
     '<button class="tattoo-nav-menu" type="button" aria-label="Menu">' + hamburgerMenuSvg() + '</button>' +
@@ -95,7 +95,8 @@ function tattooSidebarBrandHtml(tenant, base) {
   var homeHref = b ? (b + '/home') : '#';
   return '<div class="tattoo-sidebar-brand">' +
     '<a href="' + esc(homeHref) + '" class="tattoo-sidebar-wordmark">' +
-    siteNameSpan(tenant, 'Studio', tattooSidebarDisplayNameStyleKey(tenant)) +
+    // Phones show the brand here (no top bar): logo / name / both, same as the header.
+    navBrandHtml(tenant, siteNameSpan(tenant, 'Studio', tattooSidebarDisplayNameStyleKey(tenant))) +
     '</a>' +
     '<button type="button" class="tattoo-sidebar-close" aria-label="Close menu">' + hamburgerMenuSvg() + '</button>' +
     '</div>';
@@ -130,7 +131,7 @@ function classicSiteFooterHtml(tenant, nameFallback) {
   var y = new Date().getFullYear();
   return '<footer class="classic-footer" data-bk-color-surface="page"' +
     classicBkSurfaceKeyAttr(tenant, 'classic.footer') + '>' +
-    '<div class="classic-footer-brand">' + siteNameSpan(tenant, nameFallback || 'Studio') + '</div>' +
+    '<div class="classic-footer-brand">' + siteNameSpan(tenant, nameFallback || 'Studio', 'displayName.classic.footer') + '</div>' +
     '<div class="classic-footer-links">' + footerLinks + '</div>' +
     '<p class="classic-footer-copy">' + footerLegalLineHtml(tenant) + '</p>' +
     '</footer>';
@@ -157,7 +158,7 @@ function classicHomePage(tenant, services, opts) {
   if (tenantShowBookPage(tenant)) navInner += '<a href="' + bookUrl + '" class="classic-nav-book" data-cta-key="wc.classic.navBook">' + wcSpan(tenant, 'wc.classic.navBook', 'Book') + '</a>';
   var nav = '<nav class="tattoo-nav" data-bk-color-surface="page"' +
     classicBkSurfaceKeyAttr(tenant, 'classic.nav') + '>' +
-    '<a href="' + base + '/home" class="tattoo-brand">' + navBrandHtml(tenant, siteNameSpan(tenant, opts.defaultName)) + '</a>' +
+    '<a href="' + base + '/home" class="tattoo-brand">' + navBrandHtml(tenant, siteNameSpan(tenant, opts.defaultName, 'displayName.classic.nav')) + '</a>' +
     '<div class="tattoo-nav-trailing">' +
       '<div class="tattoo-nav-links">' + navInner + '</div>' +
     '<button class="tattoo-nav-menu" type="button" aria-label="Menu">' + hamburgerMenuSvg() + '</button>' +
@@ -186,7 +187,7 @@ function classicHomePage(tenant, services, opts) {
   if (tenantShowGalleryPage(tenant)) heroActions += '<a href="' + galleryUrl + '" class="classic-btn-ghost" data-cta-key="wc.classic.heroGallery">' + wcSpan(tenant, 'wc.classic.heroGallery', 'View work') + '</a>';
   var heroTitleRow =
     '<div class="classic-hero-title-row">' +
-    '<h1 class="classic-hero-name">' + siteNameSpan(tenant, opts.defaultName) + '</h1>' +
+    '<h1 class="classic-hero-name">' + siteNameSpan(tenant, opts.defaultName, 'displayName.classic.hero') + '</h1>' +
     '<div class="classic-hero-nav-actions">' +
     '<button type="button" class="tattoo-nav-menu classic-hero-nav-menu" aria-label="Menu">' + hamburgerMenuSvg() + '</button>' +
     '</div></div>';

@@ -766,12 +766,29 @@ function previewWebThemeOverrideId() {
   }
 }
 
+/** Web Design editor: current (maybe unpublished) colors on the iframe src as bk_colors, so the
+ *  preview paints them from the first frame instead of flashing the published colors. */
+function previewColorsFromUrl() {
+  if (!isTemplatePreview()) return null;
+  try {
+    var raw = new URLSearchParams(location.search || '').get('bk_colors');
+    if (!raw) return null;
+    var parsed = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' ? parsed : null;
+  } catch (e) {
+    return null;
+  }
+}
+
 function applyPreviewThemeOverride(tenant) {
   if (!tenant) return tenant;
   applyDesignVisibilityOverride(tenant);
   var id = previewWebThemeOverrideId();
-  if (!id) return tenant;
-  if (isCharterPlan(tenant) || String(tenant.industry || '') === 'charters') {
+  var urlColors = previewColorsFromUrl();
+  if (!id && !urlColors) return tenant;
+  if (!id) {
+    // No theme override; only the editor's colors apply.
+  } else if (isCharterPlan(tenant) || String(tenant.industry || '') === 'charters') {
     tenant.webThemeId = 'charter-v1';
     tenant.resolvedWebThemeId = 'charter-v1';
   } else if (id !== 'charter-v1') {
@@ -781,7 +798,7 @@ function applyPreviewThemeOverride(tenant) {
   // Apply full color + style-map override from Swift-side state (iOS only — web editor
   // sends these via color-patch postMessage after bridge handshake).
   try {
-    var ov = window.__bkPreviewTenantOverride;
+    var ov = window.__bkPreviewTenantOverride || urlColors;
     if (ov) {
       var colorFields = ['backgroundColor','textColor','cardSurfaceColor','primaryColor',
         'primaryColorHover','accentTextColor','featuredWorkBackgroundColor','featuredWorkTextColor',
@@ -3350,14 +3367,18 @@ function applyWebTextStyles(tenant) {
   [].forEach.call(document.querySelectorAll('[data-edit-key]'), function(el) {
     var k = el.getAttribute('data-edit-key') || '';
     if (isSheetOnlyEditKey(k)) return;
-    var col = colors[k];
+    // Each place the shop name shows (header, hero, footer) has its own size and color.
+    // Older sites saved one style under "displayName"; it still applies until that spot is changed.
+    var legacyName = k === 'displayName.classic.nav' || k === 'displayName.classic.hero' ||
+      k === 'displayName.classic.footer' || k === 'displayName.footer';
+    var col = colors[k] || (legacyName ? colors.displayName : '');
     if (col && col.charAt(0) === '#') {
       try { el.style.setProperty('color', col, 'important'); }
       catch (e) { el.style.color = col; }
     } else if (hasColorMap) {
       el.style.removeProperty('color');
     }
-    var sz = parseInt(sizes[k], 10);
+    var sz = parseInt(sizes[k] != null ? sizes[k] : (legacyName ? sizes.displayName : ''), 10);
     if (sz >= 10 && sz <= 96) {
       try { el.style.setProperty('font-size', sz + 'px', 'important'); }
       catch (e2) { el.style.fontSize = sz + 'px'; }
@@ -3830,7 +3851,7 @@ function customSiteFooterHtml(tenant, opts) {
   opts = opts || {};
 
   var brand = '';
-  if (f.showName !== false) brand += '<div class="bk-footer-name">' + siteNameSpan(tenant, 'Studio') + '</div>';
+  if (f.showName !== false) brand += '<div class="bk-footer-name">' + siteNameSpan(tenant, 'Studio', 'displayName.footer') + '</div>';
   if (f.showSocial !== false) {
     var networks = [
       ['instagram', 'Instagram', footerSocialUrl('instagram', tenant.instagramHandle)],
@@ -8938,7 +8959,7 @@ function tattooNavHtml(tenant) {
     ? (' data-bk-color-surface="page"' + classicBkSurfaceKeyAttr(tenant, 'classic.nav'))
     : '';
   return '<nav class="tattoo-nav"' + classicNavAttr + '>' +
-    '<a href="' + base + '/home" class="tattoo-brand">' + navBrandHtml(tenant, siteNameSpan(tenant, 'Welcome')) + '</a>' +
+    '<a href="' + base + '/home" class="tattoo-brand">' + navBrandHtml(tenant, siteNameSpan(tenant, 'Welcome', 'displayName.classic.nav')) + '</a>' +
     '<div class="tattoo-nav-trailing">' +
       '<div class="tattoo-nav-links">' + inner + '</div>' +
     '<button class="tattoo-nav-menu" type="button" aria-label="Menu">' + hamburgerMenuSvg() + '</button>' +
@@ -8997,7 +9018,8 @@ function tattooSidebarBrandHtml(tenant, base) {
   var homeHref = b ? (b + '/home') : '#';
   return '<div class="tattoo-sidebar-brand">' +
     '<a href="' + esc(homeHref) + '" class="tattoo-sidebar-wordmark">' +
-    siteNameSpan(tenant, 'Studio', tattooSidebarDisplayNameStyleKey(tenant)) +
+    // Phones show the brand here (no top bar): logo / name / both, same as the header.
+    navBrandHtml(tenant, siteNameSpan(tenant, 'Studio', tattooSidebarDisplayNameStyleKey(tenant))) +
     '</a>' +
     '<button type="button" class="tattoo-sidebar-close" aria-label="Close menu">' + hamburgerMenuSvg() + '</button>' +
     '</div>';
@@ -9032,7 +9054,7 @@ function classicSiteFooterHtml(tenant, nameFallback) {
   var y = new Date().getFullYear();
   return '<footer class="classic-footer" data-bk-color-surface="page"' +
     classicBkSurfaceKeyAttr(tenant, 'classic.footer') + '>' +
-    '<div class="classic-footer-brand">' + siteNameSpan(tenant, nameFallback || 'Studio') + '</div>' +
+    '<div class="classic-footer-brand">' + siteNameSpan(tenant, nameFallback || 'Studio', 'displayName.classic.footer') + '</div>' +
     '<div class="classic-footer-links">' + footerLinks + '</div>' +
     '<p class="classic-footer-copy">' + footerLegalLineHtml(tenant) + '</p>' +
     '</footer>';
@@ -9059,7 +9081,7 @@ function classicHomePage(tenant, services, opts) {
   if (tenantShowBookPage(tenant)) navInner += '<a href="' + bookUrl + '" class="classic-nav-book" data-cta-key="wc.classic.navBook">' + wcSpan(tenant, 'wc.classic.navBook', 'Book') + '</a>';
   var nav = '<nav class="tattoo-nav" data-bk-color-surface="page"' +
     classicBkSurfaceKeyAttr(tenant, 'classic.nav') + '>' +
-    '<a href="' + base + '/home" class="tattoo-brand">' + navBrandHtml(tenant, siteNameSpan(tenant, opts.defaultName)) + '</a>' +
+    '<a href="' + base + '/home" class="tattoo-brand">' + navBrandHtml(tenant, siteNameSpan(tenant, opts.defaultName, 'displayName.classic.nav')) + '</a>' +
     '<div class="tattoo-nav-trailing">' +
       '<div class="tattoo-nav-links">' + navInner + '</div>' +
     '<button class="tattoo-nav-menu" type="button" aria-label="Menu">' + hamburgerMenuSvg() + '</button>' +
@@ -9088,7 +9110,7 @@ function classicHomePage(tenant, services, opts) {
   if (tenantShowGalleryPage(tenant)) heroActions += '<a href="' + galleryUrl + '" class="classic-btn-ghost" data-cta-key="wc.classic.heroGallery">' + wcSpan(tenant, 'wc.classic.heroGallery', 'View work') + '</a>';
   var heroTitleRow =
     '<div class="classic-hero-title-row">' +
-    '<h1 class="classic-hero-name">' + siteNameSpan(tenant, opts.defaultName) + '</h1>' +
+    '<h1 class="classic-hero-name">' + siteNameSpan(tenant, opts.defaultName, 'displayName.classic.hero') + '</h1>' +
     '<div class="classic-hero-nav-actions">' +
     '<button type="button" class="tattoo-nav-menu classic-hero-nav-menu" aria-label="Menu">' + hamburgerMenuSvg() + '</button>' +
     '</div></div>';
@@ -10543,7 +10565,8 @@ function stonecutNavHtml(tenant) {
   return '<nav class="stonecut-nav" id="stonecut-nav" data-bk-color-surface="page"' +
     stonecutBkSurfaceKeyAttr(tenant, 'stonecut.nav') + '>' +
     '<a href="' + base + '/home" class="stonecut-logo">' +
-    '<span class="stonecut-logo-wordmark">' + siteNameSpan(tenant, 'Studio', 'displayName.stonecut.nav') + '</span>' +
+    // Desktop (and scrolled mobile) wordmark: logo / name / both, same as the other templates.
+    '<span class="stonecut-logo-wordmark">' + navBrandHtml(tenant, siteNameSpan(tenant, 'Studio', 'displayName.stonecut.nav')) + '</span>' +
     '<span class="stonecut-logo-stack">' +
     stonecutIndustryEmHtml(tenant, 'stonecut-nav-industry') +
     navBrandHtml(tenant, '<span class="stonecut-nav-name">' + siteNameSpan(tenant, 'Studio', 'displayName.stonecut.nav') + '</span>') +

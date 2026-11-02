@@ -231,8 +231,8 @@ function providerTrialEndUnixFromTenant(tenant) {
 
 function planListPriceCents(planNorm) {
   const plan = normalizeSubscriptionPlan(planNorm);
-  const map = { solo: 3900, studio: 7900, shop: 14900, charter: 2400 };
-  return map[plan] || 3900;
+  const map = { solo: 3999, studio: 7999, shop: 14999, charter: 2499 };
+  return map[plan] || 3999;
 }
 
 function stripePriceIdForPlan(planNorm) {

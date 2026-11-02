@@ -416,6 +416,13 @@ body {
     color: var(--text-primary);
   }
 
+  /* Narrow columns: "/mo" sits on its own small line under the price. */
+  .pr-cmp-row .pr-per {
+    display: block;
+    font-size: 10px;
+    color: var(--text-secondary);
+  }
+
   .pr-cmp-head {
     display: grid;
     font-size: 10px;

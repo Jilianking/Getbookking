@@ -1,0 +1,627 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <script src="assets/gtm-events.js?v=2"></script>
+  <script src="assets/cookie-consent.js?v=5"></script>
+  <title>Teams — Get Bookking</title>
+  <meta name="description" content="Run your whole team on Get Bookking: shared calendar, split pay, team roles and permissions, a booking page for each person, and team texting numbers." />
+  <link rel="canonical" href="https://getbookking.com/teams" />
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="Get Bookking" />
+  <meta property="og:title" content="Teams — Get Bookking" />
+  <meta property="og:description" content="Run your whole team on Get Bookking: shared calendar, split pay, team roles and permissions, a booking page for each person, and team texting numbers." />
+  <meta property="og:url" content="https://getbookking.com/teams" />
+  <meta property="og:image" content="https://getbookking.com/assets/brand/logo-dark-512.png" />
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary" />
+  <meta name="twitter:title" content="Teams — Get Bookking" />
+  <meta name="twitter:description" content="Run your whole team on Get Bookking: shared calendar, split pay, team roles and permissions, a booking page for each person, and team texting numbers." />
+  <meta name="twitter:image" content="https://getbookking.com/assets/brand/logo-dark-512.png" />
+
+  <link rel="icon" type="image/png" sizes="32x32" href="assets/brand/favicon-32.png?v=13" />
+  <link rel="icon" type="image/png" sizes="128x128" href="assets/brand/favicon-128.png?v=13" />
+  <link rel="apple-touch-icon" sizes="256x256" href="assets/brand/favicon-256.png?v=13" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="assets/legal.css" />
+  <link rel="stylesheet" href="assets/footer.css?v=4" />
+  <link rel="stylesheet" href="assets/messaging.css?v=1" />
+  <link rel="stylesheet" href="assets/team.css?v=11" />
+  <link rel="stylesheet" href="assets/nav.css?v=25" />
+</head>
+<body>
+
+  <nav>
+    <a href="index.html" class="nav-logo" aria-label="Get Bookking — home">
+      <img src="assets/brand/logo-dark-128.png?v=12" alt="" class="nav-logo-mark" width="56" height="56" />
+      <span>Get Bookking</span>
+    </a>
+    <ul class="nav-links">
+      <li><a href="index.html#features">Features</a></li>
+      <li><a href="templates.html">Templates</a></li>
+      <li><a href="teams.html" aria-current="page">Teams</a></li>
+      <li><a href="pricing.html">Pricing</a></li>
+      <li><a href="index.html#faq">FAQ</a></li>
+    </ul>
+    <div class="nav-actions">
+      <a href="login.html" class="nav-cta nav-cta--desktop nav-auth-login">Log in</a>
+      <a href="signup.html" class="nav-cta nav-cta--desktop nav-cta--filled nav-auth-signup">Sign up</a>
+      <div class="nav-account-wrap nav-auth-account nav-auth-hidden">
+        <button type="button" class="nav-account-btn" id="nav-account-toggle" aria-expanded="false" aria-haspopup="true" aria-controls="nav-account-menu">
+          <span class="nav-account-avatar nav-auth-avatar" aria-hidden="true">?</span>
+          <span class="nav-account-label nav-auth-name">Account</span>
+          <span class="nav-account-chevron" aria-hidden="true"></span>
+        </button>
+        <div class="nav-account-menu" id="nav-account-menu" hidden>
+          <a href="/app">Open your shop</a>
+          <button type="button" class="nav-account-menu-signout nav-auth-signout">Sign out</button>
+        </div>
+      </div>
+      <button type="button" class="nav-menu-btn" aria-expanded="false" aria-controls="nav-drawer" aria-label="Open menu">
+        <span class="nav-menu-icon" aria-hidden="true"></span>
+      </button>
+    </div>
+  </nav>
+
+  <aside id="nav-drawer" class="nav-drawer" aria-hidden="true">
+    <div class="nav-drawer-head">
+      <span class="nav-drawer-title">Menu</span>
+      <button type="button" class="nav-drawer-close" aria-label="Close menu">&times;</button>
+    </div>
+    <nav class="nav-drawer-nav" aria-label="Mobile navigation">
+      <ul class="nav-drawer-links">
+        <li><a href="index.html#features">Features</a></li>
+        <li><a href="templates.html">Templates</a></li>
+        <li><a href="teams.html" aria-current="page">Teams</a></li>
+        <li><a href="pricing.html">Pricing</a></li>
+        <li><a href="index.html#faq">FAQ</a></li>
+        <li class="nav-auth-login-item"><a href="login.html">Log in</a></li>
+        <li class="nav-auth-account-item nav-auth-hidden"><a href="/app" class="nav-drawer-profile-link"><span class="nav-account-avatar nav-auth-avatar" aria-hidden="true">?</span><span class="nav-auth-name">Account</span></a></li>
+        <li class="nav-auth-signout-item nav-auth-hidden"><button type="button" class="nav-drawer-signout nav-auth-signout">Sign out</button></li>
+        <li class="nav-auth-signup-item"><a href="signup.html" class="nav-drawer-cta">Sign up</a></li>
+      </ul>
+    </nav>
+  </aside>
+  <div class="nav-backdrop" hidden aria-hidden="true"></div>
+
+  <main>
+    <section class="msg-hero tm-hero">
+      <div class="msg-hero-inner">
+        <div class="msg-hero-copy">
+          <div class="msg-label">Teams · Studio and Shop</div>
+          <h1>Your whole team.<br /><em>One account.</em></h1>
+          <p class="msg-hero-lead">
+            Bring everyone on board, share one calendar, split every payment, and give each person their own booking page and texting number.
+          </p>
+          <div class="msg-actions">
+            <a href="signup.html?plan=studio" class="msg-btn msg-btn--primary">Start Studio trial</a>
+            <a href="pricing.html" class="msg-btn">See pricing</a>
+          </div>
+        </div>
+
+        <div class="tm-hero-visual" aria-label="Example team roster">
+          <div class="tm-roster">
+            <div class="tm-roster-head">
+              <span class="tm-roster-title">Stone Cut · Team</span>
+              <span class="tm-pill">3 of 5 seats</span>
+            </div>
+            <div class="tm-member">
+              <img class="tm-avatar" src="assets/barber/marcus-stone.jpg" alt="" width="38" height="38" />
+              <div class="tm-member-info">
+                <div class="tm-member-name">Marcus Stone</div>
+                <div class="tm-member-role">Owner · Barber</div>
+              </div>
+              <span class="tm-pill">Studio line</span>
+            </div>
+            <div class="tm-member">
+              <img class="tm-avatar" src="assets/barber/james-ortiz.jpg" alt="" width="38" height="38" />
+              <div class="tm-member-info">
+                <div class="tm-member-name">James Ortiz</div>
+                <div class="tm-member-role">Barber</div>
+              </div>
+              <span class="tm-pill">Keeps 60%</span>
+            </div>
+            <div class="tm-member">
+              <img class="tm-avatar" src="assets/barber/diego-cole.jpg" alt="" width="38" height="38" />
+              <div class="tm-member-info">
+                <div class="tm-member-name">Diego Cole</div>
+                <div class="tm-member-role">Barber</div>
+              </div>
+              <span class="tm-pill">Own number</span>
+            </div>
+            <div class="tm-invite">+ Invite by link</div>
+          </div>
+          <div class="tm-float">
+            <div class="tm-float-time">Today · 10:30 AM</div>
+            <div class="tm-float-title">Signature fade with Diego</div>
+            <div class="tm-float-note">Paid · studio share sent</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="msg-section" id="features">
+      <div class="msg-inner">
+        <div class="tm-bento-head">
+          <div class="msg-heading">
+            <div class="msg-label">What your team gets</div>
+            <h2>Built for the whole floor.</h2>
+          </div>
+        </div>
+
+        <div class="tm-bento">
+          <article class="tm-tile tm-tile--hero">
+            <div>
+              <div class="msg-label">Money</div>
+              <h3>Split pay, done for you</h3>
+              <p>Each person gets paid into their own Stripe account. The studio’s share is sent automatically, and it’s reversed if the payment is refunded.</p>
+            </div>
+            <div class="tm-split-demo" aria-label="Example split of a $48 Signature haircut">
+              <div class="tm-split-row"><span>$48 Signature haircut</span><span>Barber 60% · Studio 40%</span></div>
+              <div class="tm-split-bar" aria-hidden="true"><span></span><span></span></div>
+              <div class="tm-split-row tm-split-row--muted"><span>$28.80 to the barber</span><span>$19.20 to the studio</span></div>
+            </div>
+          </article>
+
+          <article class="tm-tile tm-tile--wide">
+            <div class="msg-label">Clients</div>
+            <h3>Shared calendar</h3>
+            <p>Everyone’s bookings in one place. Assign appointments to a person and filter the calendar by who’s working.</p>
+            <div class="tm-cal-strip" aria-hidden="true">
+              <span style="flex:2;background:var(--brand-dark)"></span>
+              <span style="flex:1;background:var(--brand-warm)"></span>
+              <span style="flex:1.5;background:#d9c9a8"></span>
+              <span style="flex:1;background:var(--brand-cream)"></span>
+            </div>
+          </article>
+
+          <article class="tm-tile">
+            <div class="msg-label">Clients</div>
+            <h3>A page for each person</h3>
+            <p>Bio, portfolio, and their own booking link on your site.</p>
+          </article>
+
+          <article class="tm-tile">
+            <div class="msg-label">Texts</div>
+            <h3>Team texting</h3>
+            <p>2 numbers included. Teammates can ask for their own.</p>
+          </article>
+
+          <article class="tm-tile">
+            <div class="msg-label">Split pay</div>
+            <h3>Custom shop splits</h3>
+            <p>Give each person their own split. Set what they keep and what the shop gets, on services, deposits, or both.</p>
+          </article>
+
+          <article class="tm-tile">
+            <div class="msg-label">People</div>
+            <h3>Invite by link</h3>
+            <p>Send a join link. Each person gets their own login.</p>
+          </article>
+
+          <article class="tm-tile">
+            <div class="msg-label">Flexible</div>
+            <h3>Made for a changing floor</h3>
+            <p>Great for shops where chairs and staff change often.</p>
+          </article>
+
+          <article class="tm-tile">
+            <div class="msg-label">Control</div>
+            <h3>Booking rules and alerts</h3>
+            <p>One booking rule for the whole team, or let each person choose. Managers get booking alerts.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="msg-section msg-section--alt" id="split-pay">
+      <div class="msg-inner msg-split">
+        <div class="msg-split-copy">
+          <div class="msg-label">Split pay</div>
+          <h2>Everyone gets paid. The studio gets its share.</h2>
+          <p>Each team member connects their own Stripe account, so client payments land with the person who did the work.</p>
+          <div class="msg-deposit-list">
+            <div class="msg-check">Set a split for each person: the percentage they keep and what goes to the studio.</div>
+            <div class="msg-check">Apply it to services, deposits, or both.</div>
+            <div class="msg-check">The studio share is sent after each payment, and reversed automatically on refunds.</div>
+            <div class="msg-check">Turn off payments for anyone who shouldn’t take them.</div>
+          </div>
+        </div>
+        <figure class="tm-shot">
+          <img src="assets/team/payment-split.jpg" width="898" height="690" loading="lazy" alt="Payment split settings in the app: barber keeps 80%, studio receives 20%, applied to service payments">
+        </figure>
+      </div>
+    </section>
+
+    <section class="msg-section" id="website">
+      <div class="msg-inner msg-split">
+        <div class="tm-devices">
+          <figure class="tm-browser">
+            <div class="tm-browser-bar" aria-hidden="true"><span></span><span></span><span></span><em>stone-cut-barbers.getbookking.com/team</em></div>
+            <img src="assets/barber/stonecut-team-desktop.jpg" alt="Stone Cut Barbers team page showing Marcus Stone, Diego Cole, and James Ortiz" width="1440" height="834" loading="lazy" decoding="async" />
+          </figure>
+          <img class="tm-iphone" src="assets/barber/stonecut-member-iphone.png" alt="James Ortiz’s booking page on iPhone, with a Book with James button" width="480" height="975" loading="lazy" decoding="async" />
+        </div>
+        <div class="msg-split-copy">
+          <div class="msg-label">Website</div>
+          <h2>A booking page for every person on your team.</h2>
+          <p>Your studio site gets a team page, and each person you choose gets their own page clients can book from.</p>
+          <div class="msg-deposit-list">
+            <div class="msg-check">Each member gets a page and booking link at /team/their-name.</div>
+            <div class="msg-check">Choose who appears on the team page and on your home page.</div>
+            <div class="msg-check">Show a bio, job title, and portfolio photos for each person.</div>
+            <div class="msg-check">Let teammates edit their own bio and portfolio, or keep that to yourself.</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="msg-section msg-section--alt" id="texting">
+      <div class="msg-inner msg-split">
+        <div class="msg-split-copy">
+          <div class="msg-label">Texting</div>
+          <h2>Numbers for the studio and the people in it.</h2>
+          <p>Text clients from a dedicated local number. Teammates who want their own line can request one from the app.</p>
+          <div class="msg-deposit-list">
+            <div class="msg-check">2 texting numbers included on Studio and Shop.</div>
+            <div class="msg-check">1,000 texts a month on each number.</div>
+            <div class="msg-check">Teammates request a personal number and you approve it. Up to one number per seat.</div>
+            <div class="msg-check">The 3rd and later numbers are $12.99 the day you add them, then $12.99/mo.</div>
+          </div>
+        </div>
+        <div class="tm-mock" aria-label="Example texting numbers">
+          <div class="tm-mock-title">Texting lines · 3 of 5</div>
+          <div class="tm-mock-row"><span>Studio line</span><strong>Included</strong></div>
+          <div class="tm-mock-row"><span>Diego Cole</span><strong>Included</strong></div>
+          <div class="tm-mock-row"><span>James Ortiz</span><strong>$12.99/mo</strong></div>
+          <div class="tm-mock-row"><span>Used this month</span><strong>412 of 1,000</strong></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="msg-section" id="calendar">
+      <div class="msg-inner msg-split">
+        <div class="tm-mock tm-cal-mock" aria-label="Example shared team calendar">
+          <div class="tm-cal-filter" role="group" aria-label="Show bookings for">
+            <button type="button" class="tm-pill is-on" data-cal-who="all" aria-pressed="true">Everyone</button>
+            <button type="button" class="tm-pill" data-cal-who="marcus" aria-pressed="false">Marcus</button>
+            <button type="button" class="tm-pill" data-cal-who="james" aria-pressed="false">James</button>
+            <button type="button" class="tm-pill" data-cal-who="diego" aria-pressed="false">Diego</button>
+          </div>
+          <div class="tm-cal" aria-live="polite">
+            <span></span>
+            <button type="button" class="tm-cal-who" data-cal-who="marcus">Marcus</button>
+            <button type="button" class="tm-cal-who" data-cal-who="james">James</button>
+            <button type="button" class="tm-cal-who" data-cal-who="diego">Diego</button>
+            <span class="tm-cal-time">9:00</span>
+            <span class="tm-cal-slot tm-cal-slot--a">Signature fade</span>
+            <span class="tm-cal-slot tm-cal-slot--empty"></span>
+            <span class="tm-cal-slot tm-cal-slot--c">Beard sculpt</span>
+            <span class="tm-cal-time">10:30</span>
+            <span class="tm-cal-slot tm-cal-slot--empty"></span>
+            <span class="tm-cal-slot tm-cal-slot--b">Hot towel shave</span>
+            <span class="tm-cal-slot tm-cal-slot--c">Signature fade</span>
+            <span class="tm-cal-time">12:00</span>
+            <span class="tm-cal-slot tm-cal-slot--a">The Full Stone Cut</span>
+            <span class="tm-cal-slot tm-cal-slot--b">Kids cut</span>
+            <span class="tm-cal-slot tm-cal-slot--empty"></span>
+          </div>
+        </div>
+        <div class="msg-split-copy">
+          <div class="msg-label">Shared calendar</div>
+          <h2>The whole team’s day, in one calendar.</h2>
+          <p>See every booking across the team, or narrow it down to one person.</p>
+          <div class="msg-deposit-list">
+            <div class="msg-check">Assign each appointment to the right team member.</div>
+            <div class="msg-check">Filter the calendar by person.</div>
+            <div class="msg-check">Each teammate has their own login and calendar.</div>
+            <div class="msg-check">Managers can see every booking if you allow it.</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="msg-section msg-section--alt" id="roles">
+      <div class="msg-inner">
+        <div class="msg-heading">
+          <div class="msg-label">Roles and permissions</div>
+          <h2>Everyone sees what they need. Nothing more.</h2>
+          <p>Give each person a role and a job title that fits your business, like Barber, Stylist, Artist, or Captain.</p>
+        </div>
+        <div class="tm-ladder">
+          <div class="tm-rung">
+            <h3>Owner</h3>
+            <p>Full control of the business, billing, booking rules, payouts, and the team.</p>
+            <span class="tm-rung-tag">Full access</span>
+          </div>
+          <div class="tm-rung">
+            <h3>Manager</h3>
+            <p>Helps run the floor with only the permissions you switch on. Gets alerts for new bookings and cancellations, plus an optional daily summary email.</p>
+            <span class="tm-rung-tag">Access you choose</span>
+          </div>
+          <div class="tm-rung">
+            <h3>Team member</h3>
+            <p>Their own login, calendar, booking page, and payouts.</p>
+            <span class="tm-rung-tag">Their own work</span>
+          </div>
+        </div>
+        <div class="tm-roles-detail">
+          <img class="tm-roles-phone" src="assets/team/team-list-iphone.png?v=3" width="480" height="975" loading="lazy" alt="The Team screen in the app, listing each team member with their job title, booking approval setting, and payment split">
+        <div class="tm-perms">
+          <div class="tm-perms-title">Run your team your way, with a different split for each person.</div>
+          <div class="tm-perms-group">
+            <div class="tm-perms-sub">Managers can, if you allow it</div>
+            <div class="msg-check">See every booking</div>
+            <div class="msg-check">Approve or decline booking requests</div>
+            <div class="msg-check">Edit services and prices</div>
+            <div class="msg-check">Manage team schedules</div>
+            <div class="msg-check">Open the client list</div>
+            <div class="msg-check">See earnings reports</div>
+            <div class="msg-check">Text clients</div>
+          </div>
+          <div class="tm-perms-group">
+            <div class="tm-perms-sub">Each team member can, if you allow it</div>
+            <div class="msg-check">Manage their own page on your site</div>
+            <div class="msg-check">Update their portfolio photos</div>
+            <div class="msg-check">Edit their bio</div>
+            <div class="msg-check">Take payments into their own Stripe</div>
+            <div class="msg-check">Text clients from their own number</div>
+          </div>
+        </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="msg-section" id="how-it-works">
+      <div class="msg-inner">
+        <div class="msg-heading">
+          <div class="msg-label">How it works</div>
+          <h2>Set up your team in three steps.</h2>
+        </div>
+        <div class="tm-steps">
+          <article class="msg-card tm-step">
+            <div class="msg-card-icon" aria-hidden="true">1</div>
+            <h3>Pick Studio or Shop</h3>
+            <p>Studio for up to 5 people, Shop for up to 10. Start with a free trial.</p>
+          </article>
+          <article class="msg-card tm-step">
+            <div class="msg-card-icon" aria-hidden="true">2</div>
+            <h3>Invite your team</h3>
+            <p>Send each person a join link. They sign up with their own login.</p>
+          </article>
+          <article class="msg-card tm-step">
+            <div class="msg-card-icon" aria-hidden="true">3</div>
+            <h3>Set roles, booking, and payouts</h3>
+            <p>Choose each person’s role, how clients book them, and their payment split.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="msg-section msg-section--alt" id="plans">
+      <div class="msg-inner">
+        <div class="msg-heading">
+          <div class="msg-label">Team plans</div>
+          <h2>Two plans for teams.</h2>
+          <p>Both include everything in Solo, plus every team feature on this page.</p>
+        </div>
+        <div class="tm-plans">
+          <div class="tm-plan is-featured">
+            <span class="tm-plan-name">Studio</span>
+            <span class="tm-plan-price">$79.99 <span>/ mo</span></span>
+            <span class="tm-plan-who">2–5 people · 2 texting numbers included</span>
+            <a href="signup.html?plan=studio" class="msg-btn msg-btn--primary">Start Studio trial</a>
+          </div>
+          <div class="tm-plan">
+            <span class="tm-plan-name">Shop</span>
+            <span class="tm-plan-price">$149.99 <span>/ mo</span></span>
+            <span class="tm-plan-who">6–10 people · 2 texting numbers included</span>
+            <a href="signup.html?plan=shop" class="msg-btn">Start Shop trial</a>
+          </div>
+        </div>
+        <p class="tm-plans-note">Month to month. Cancel anytime. <a href="pricing.html#details">See full pricing and fees</a></p>
+      </div>
+    </section>
+
+    <section class="msg-cta">
+      <h2>Bring your whole team.</h2>
+      <p>One account for your calendar, website, payments, and client texts.</p>
+      <a href="signup.html?plan=studio" class="msg-btn">Start free trial</a>
+    </section>
+  </main>
+
+
+  <footer>
+    <div class="footer-inner">
+      <div class="footer-brand">
+        <a href="index.html" class="footer-logo" aria-label="Get Bookking — home">
+          <img src="assets/brand/logo-light-128.png?v=11" alt="" class="footer-logo-mark" width="44" height="44" />
+          <span>Get Bookking</span>
+        </a>
+        <p class="footer-tagline">Bookings, messages, your site, and Tap to Pay on iPhone — one place for your business.</p>
+        <div class="footer-badges">
+          <a class="footer-badge footer-badge--stripe" href="https://stripe.com" target="_blank" rel="noopener noreferrer" aria-label="Powered by Stripe">
+            <img src="assets/brand/powered-by-stripe-white.svg" alt="Powered by Stripe" width="150" height="34" loading="lazy" decoding="async" />
+          </a>
+          <a class="footer-badge footer-badge--appstore" id="footer-app-store" href="https://testflight.apple.com/join/GD8AUjpS" target="_blank" rel="noopener" aria-label="Download on the App Store">
+            <img src="assets/brand/app-store-badge-black.png" alt="Download on the App Store" width="120" height="40" loading="lazy" decoding="async" />
+          </a>
+        </div>
+        <a href="/app" class="footer-shop-login" data-shop-login>Log in to your shop <span aria-hidden="true">&rarr;</span></a>
+      </div>
+      <nav class="footer-cols" aria-label="Footer">
+        <div class="footer-col">
+          <h3>Product</h3>
+          <ul>
+            <li><a href="index.html#features">Features</a></li>
+            <li><a href="templates.html">Templates</a></li>
+            <li><a href="teams.html">Teams</a></li>
+            <li><a href="pricing.html">Pricing</a></li>
+            <li><a href="tap-to-pay.html">Tap to Pay on iPhone</a></li>
+            <li><a href="messaging.html">Client messaging</a></li>
+          </ul>
+        </div>
+        <div class="footer-col">
+          <h3>Industries</h3>
+          <ul>
+            <li><a href="fishing-charter-software.html">Boat & Fishing Charters</a></li>
+            <li><a href="barbershop-software.html">Barbershops</a></li>
+            <li><a href="hair-salon-software.html">Hair Salons</a></li>
+            <li><a href="nail-salon-software.html">Nail Salons</a></li>
+            <li><a href="tattoo-studio-software.html">Tattoo Studios</a></li>
+            <li><a href="personal-trainer-software.html">Personal Trainers</a></li>
+          </ul>
+        </div>
+        <div class="footer-col">
+          <h3>Company</h3>
+          <ul>
+            <li><a href="contact.html">Contact</a></li>
+            <li><a href="https://www.instagram.com/getbookking" target="_blank" rel="noopener noreferrer">Instagram</a></li>
+          </ul>
+        </div>
+        <div class="footer-col">
+          <h3>Legal</h3>
+          <ul>
+            <li><a href="privacy.html">Privacy</a></li>
+            <li><a href="terms.html">Terms</a></li>
+          </ul>
+        </div>
+        <div class="footer-col">
+          <h3>Support</h3>
+          <ul>
+            <li><a href="contact.html">Get help</a></li>
+            <li><a href="index.html#faq">FAQ</a></li>
+          </ul>
+        </div>
+      </nav>
+    </div>
+    <div class="footer-bottom">
+      <div class="footer-copy">&copy; 2026 Get Bookking. All rights reserved.</div>
+    </div>
+  </footer>
+
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+  <script src="js/firebase-config.js"></script>
+  <script src="assets/nav.js"></script>
+  <script src="assets/nav-auth.js?v=5"></script>
+  <script>
+    // Sections fade up or slide in as they scroll into view (same effect as the home page).
+    (function () {
+      var reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      if (reduce || !("IntersectionObserver" in window)) return;
+
+      var items = [];
+      function add(el, dir, delay) {
+        if (!el || el.classList.contains("tm-reveal")) return;
+        el.classList.add("tm-reveal");
+        if (dir) el.classList.add("tm-reveal--" + dir);
+        if (delay) el.style.transitionDelay = delay + "s";
+        items.push(el);
+      }
+      function all(sel, fn) { document.querySelectorAll(sel).forEach(fn); }
+
+      all("main .msg-heading", function (el) { add(el); });
+
+      // Two-column sections: each side slides in from its own edge
+      all(".msg-split", function (row) {
+        Array.prototype.forEach.call(row.children, function (el, i) {
+          add(el, i === 0 ? "left" : "right", i * 0.06);
+        });
+      });
+
+      // Card grids: one after another
+      all(".tm-bento, .tm-ladder, .tm-steps, .tm-plans", function (grid) {
+        Array.prototype.forEach.call(grid.children, function (el, i) {
+          add(el, null, (i % 4) * 0.08);
+        });
+      });
+
+      add(document.querySelector(".tm-roles-phone"), "left");
+      add(document.querySelector(".tm-perms"), "right", 0.06);
+      add(document.querySelector(".tm-plans-note"));
+      all(".msg-cta > *", function (el, i) { add(el, null, i * 0.08); });
+
+      document.documentElement.classList.add("js-reveal");
+      var observer = new IntersectionObserver(function (entries) {
+        entries.forEach(function (entry) {
+          if (!entry.isIntersecting) return;
+          entry.target.classList.add("is-in");
+          observer.unobserve(entry.target);
+        });
+      }, { threshold: 0.15, rootMargin: "0px 0px -6% 0px" });
+      items.forEach(function (el) { observer.observe(el); });
+    })();
+  </script>
+  <script>
+    // Shared calendar demo: tap a name to see just that person's day.
+    (function () {
+      var mock = document.querySelector(".tm-cal-mock");
+      if (!mock) return;
+      var cal = mock.querySelector(".tm-cal");
+      var times = ["9:00", "10:30", "12:00", "1:30", "3:00"];
+      var team = {
+        marcus: { name: "Marcus", tone: "a", day: ["Signature fade", "", "The Full Stone Cut", "Beard sculpt", ""] },
+        james: { name: "James", tone: "b", day: ["", "Hot towel shave", "Kids cut", "", "Signature fade"] },
+        diego: { name: "Diego", tone: "c", day: ["Beard sculpt", "Signature fade", "", "Signature fade", "Hot towel shave"] }
+      };
+      var order = ["marcus", "james", "diego"];
+
+      function el(tag, cls, text) {
+        var e = document.createElement(tag);
+        if (cls) e.className = cls;
+        if (text) e.textContent = text;
+        return e;
+      }
+
+      function slot(service, tone) {
+        return el("span", "tm-cal-slot tm-cal-slot--" + (service ? tone : "empty"), service);
+      }
+
+      function render(who) {
+        cal.innerHTML = "";
+        var people = who === "all" ? order : [who];
+        cal.classList.toggle("is-single", who !== "all");
+        cal.appendChild(el("span"));
+        people.forEach(function (key) {
+          var b = el("button", "tm-cal-who", team[key].name);
+          b.type = "button";
+          b.setAttribute("data-cal-who", who === "all" ? key : "all");
+          b.title = who === "all" ? "Show " + team[key].name + "’s day" : "Show everyone";
+          cal.appendChild(b);
+        });
+        times.forEach(function (t, i) {
+          cal.appendChild(el("span", "tm-cal-time", t));
+          people.forEach(function (key) {
+            var service = team[key].day[i];
+            var s = slot(service, team[key].tone);
+            if (!service && who !== "all") s.textContent = "Open";
+            cal.appendChild(s);
+          });
+        });
+        mock.querySelectorAll(".tm-cal-filter .tm-pill").forEach(function (p) {
+          var on = p.getAttribute("data-cal-who") === who;
+          p.classList.toggle("is-on", on);
+          p.setAttribute("aria-pressed", on ? "true" : "false");
+        });
+        cal.classList.remove("is-swapping");
+        void cal.offsetWidth;
+        cal.classList.add("is-swapping");
+      }
+
+      mock.addEventListener("click", function (e) {
+        var b = e.target.closest("[data-cal-who]");
+        if (b) render(b.getAttribute("data-cal-who"));
+      });
+      render("all");
+    })();
+  </script>
+  <script src="assets/lazy-video.js?v=1" defer></script>
+</body>
+</html>

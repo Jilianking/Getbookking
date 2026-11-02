@@ -9292,6 +9292,17 @@ exports.completeProviderSignupWithoutCheckout = functions.https.onCall(async (da
     subscriptionStatus: "trialing",
   });
   await pendingRef.delete().catch(() => {});
+  // Marketing email choice from the sign-up checkbox (separate from the Terms). Kept as proof of consent.
+  if (data && typeof data.marketingEmailOptIn === "boolean") {
+    await db.collection("users").doc(uid).set(
+      {
+        marketingEmailOptIn: data.marketingEmailOptIn,
+        marketingEmailOptInAt: admin.firestore.FieldValue.serverTimestamp(),
+        marketingEmailOptInSource: "web_signup",
+      },
+      { merge: true }
+    ).catch((e) => console.warn("marketingEmailOptIn save failed", e.message || e));
+  }
   return result;
 });
 
@@ -14015,6 +14026,136 @@ exports.completeInitialSubscriptionCheckout = functions
     return result;
   });
 
+/**
+ * Web sign-up, card before the account is finished (Terms §8: a card is required for the free trial).
+ * Step 1: a Stripe SetupIntent for the new owner, so the card form on the plan step can save the card.
+ * Returns { clientSecret, publishableKey }.
+ */
+async function assertSignupTrialOwner(uid) {
+  const ctx = await getMemberAccessContext(uid);
+  if (!ctx.isOwner) {
+    throw new functions.https.HttpsError("permission-denied", "Only the business owner can add billing.");
+  }
+  if ((ctx.tenant.stripeSubscriptionId || "").toString().trim()) {
+    throw new functions.https.HttpsError("failed-precondition", "Billing is already set up for this business.");
+  }
+  if (sms.resolveSubscriptionStatus(ctx.tenant, ctx.ownerUserData) !== "trialing") {
+    throw new functions.https.HttpsError("failed-precondition", "Your trial has ended or billing is not available in this state. Contact support.");
+  }
+  return ctx;
+}
+
+exports.createSignupCardSetup = functions
+  .runWith({ secrets: [stripeSecretKey] })
+  .https.onCall(async (data, context) => {
+    if (!context.auth) throw new functions.https.HttpsError("unauthenticated", "Must be signed in.");
+    if (sms.isSubscriptionPaymentGateBypassed()) {
+      throw new functions.https.HttpsError("failed-precondition", "Paid checkout is temporarily disabled for testing. Features are unlocked without paying.");
+    }
+    const uid = context.auth.uid;
+    const ctx = await assertSignupTrialOwner(uid);
+    const secretKey = stripeSecretKey.value();
+    if (!secretKey) throw new functions.https.HttpsError("failed-precondition", "Stripe is not configured.");
+    const stripe = new Stripe(secretKey, { apiVersion: "2024-11-20.acacia" });
+
+    // Reuse the customer from an earlier try (e.g. a declined card) instead of making another.
+    let customerId = (ctx.tenant.signupStripeCustomerId || "").toString().trim();
+    if (!customerId) {
+      const email =
+        (ctx.ownerUserData && ctx.ownerUserData.email) || context.auth.token.email || undefined;
+      const customer = await stripe.customers.create({
+        email,
+        name: (ctx.tenant.businessName || ctx.tenant.displayName || "").toString() || undefined,
+        metadata: { firebaseUid: uid, tenantId: ctx.tenantId },
+      });
+      customerId = customer.id;
+      await db.collection("tenants").doc(ctx.tenantId).set({ signupStripeCustomerId: customerId }, { merge: true });
+    }
+    const setupIntent = await stripe.setupIntents.create({
+      customer: customerId,
+      usage: "off_session",
+      payment_method_types: ["card"],
+      metadata: { firebaseUid: uid, tenantId: ctx.tenantId, purpose: "signup_trial" },
+    });
+    return {
+      clientSecret: setupIntent.client_secret,
+      publishableKey: stripePublishableKeyParam.value().trim() || null,
+    };
+  });
+
+/**
+ * Step 2: after the card is saved, start the plan. Default: a 14-day trial that charges that card when
+ * the trial ends (same as "Start billing when the trial ends" in Plan & billing). With startToday, the
+ * plan starts and is charged now (same as "Start today"), unlocking texting and payments right away.
+ * Params: { setupIntentId, startToday? }.
+ */
+exports.startSignupTrialSubscription = functions
+  .runWith({ secrets: [stripeSecretKey, stripeSubscriptionPriceIds] })
+  .https.onCall(async (data, context) => {
+    if (!context.auth) throw new functions.https.HttpsError("unauthenticated", "Must be signed in.");
+    const uid = context.auth.uid;
+    const setupIntentId = ((data && data.setupIntentId) || "").toString().trim();
+    if (!setupIntentId.startsWith("seti_")) {
+      throw new functions.https.HttpsError("invalid-argument", "setupIntentId is required.");
+    }
+    const ctx = await assertSignupTrialOwner(uid);
+    const secretKey = stripeSecretKey.value();
+    if (!secretKey) throw new functions.https.HttpsError("failed-precondition", "Stripe is not configured.");
+    const stripe = new Stripe(secretKey, { apiVersion: "2024-11-20.acacia" });
+
+    const customerId = (ctx.tenant.signupStripeCustomerId || "").toString().trim();
+    const si = await stripe.setupIntents.retrieve(setupIntentId);
+    const siCustomer = typeof si.customer === "string" ? si.customer : si.customer && si.customer.id;
+    if (!customerId || siCustomer !== customerId || (si.metadata && si.metadata.tenantId) !== ctx.tenantId) {
+      throw new functions.https.HttpsError("permission-denied", "This card setup doesn't belong to your business.");
+    }
+    if (si.status !== "succeeded") {
+      throw new functions.https.HttpsError("failed-precondition", "The card wasn't saved. Check the card and try again.");
+    }
+    const paymentMethodId = typeof si.payment_method === "string" ? si.payment_method : si.payment_method && si.payment_method.id;
+    await stripe.customers.update(customerId, { invoice_settings: { default_payment_method: paymentMethodId } });
+
+    const startToday = !!(data && data.startToday);
+    const plan = normalizeSubscriptionPlan(ctx.tenant.subscriptionPlan);
+    const meta = {
+      firebaseUid: uid,
+      tenantId: ctx.tenantId,
+      checkoutKind: startToday ? "initial_today" : "initial_trial_end",
+      plan,
+    };
+    const subParams = {
+      customer: customerId,
+      items: [{ price: stripePriceIdForPlan(plan) }],
+      default_payment_method: paymentMethodId,
+      metadata: meta,
+      expand: ["items.data.price"],
+    };
+    if (startToday) {
+      // Charge now; if the bank declines, nothing is created and the owner can fix the card or pick the trial.
+      subParams.payment_behavior = "error_if_incomplete";
+    } else {
+      subParams.trial_end = providerTrialEndUnixFromTenant(ctx.tenant);
+    }
+    let sub;
+    try {
+      sub = await stripe.subscriptions.create(subParams, {
+        idempotencyKey: `signup_${startToday ? "today" : "trial"}_${ctx.tenantId}_${setupIntentId}`,
+      });
+    } catch (stripeErr) {
+      console.error("startSignupTrialSubscription Stripe", stripeErr);
+      throw new functions.https.HttpsError("failed-precondition", `Stripe could not start your trial: ${stripeErrorMessage(stripeErr)}`);
+    }
+
+    const syncPatch = { stripeSubscriptionId: sub.id, stripeCustomerId: customerId };
+    const planNorm = subscriptionPlanFromStripe(ctx.tenant && ctx.tenant.subscriptionPlan, planNormFromStripeSubscription(sub), sub);
+    if (planNorm) {
+      syncPatch.subscriptionPlan = planNorm;
+      Object.assign(syncPatch, subscriptionPlanEntitlementPatch(ctx.tenant, planNorm));
+    }
+    await sms.syncSubscriptionStatusForTenant(ctx.tenantId, sub.status, syncPatch);
+    return { ok: true, tenantId: ctx.tenantId, subscriptionStatus: sub.status };
+  });
+
 /** After resubscribe Checkout, verify payment and sync Firestore billing. */
 exports.completeResubscribeCheckout = functions
   .runWith({ secrets: [stripeSecretKey] })
@@ -16786,6 +16927,8 @@ registerPublicSiteFunctions(exports, { assertPlatformAdmin });
 
 const { registerTapToPayLaunchEmailFunctions } = require("./tapToPayLaunchEmail");
 registerTapToPayLaunchEmailFunctions(exports);
+const { registerTrialReminderFunctions } = require("./trialReminderEmail");
+registerTrialReminderFunctions(exports, { stripeSecretKey, Stripe });
 
 const { registerCustomDomainFunctions } = require("./customDomain");
 registerCustomDomainFunctions(exports, {

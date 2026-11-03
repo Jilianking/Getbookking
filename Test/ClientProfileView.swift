@@ -20,22 +20,35 @@ private enum ClientScheduleSheetMode: Identifiable {
 }
 
 struct ClientProfileView: View {
+    @Environment(\.dismiss) private var dismiss
     @EnvironmentObject var authViewModel: AuthViewModel
     @EnvironmentObject var sessionStore: TenantSessionStore
     @StateObject private var viewModel: ClientProfileViewModel
     @StateObject private var requestsViewModel = RequestsViewModel()
     @ObservedObject var clientsViewModel: ClientsViewModel
     var drawerState: DrawerState
+    /// Instagram username without @. When set, the brown header links to that chat instead of showing a phone.
+    var instagramUsername: String?
+    /// `ig:` thread id so Send message returns to the Instagram conversation.
+    var instagramThreadId: String?
 
     @State private var showingEditSheet = false
     @State private var scheduleSheetMode: ClientScheduleSheetMode?
     @State private var selectedBookingDetail: BookingRequest?
     @State private var copiedHeaderContact: String?
 
-    init(client: Client, clientsViewModel: ClientsViewModel, drawerState: DrawerState) {
+    init(
+        client: Client,
+        clientsViewModel: ClientsViewModel,
+        drawerState: DrawerState,
+        instagramUsername: String? = nil,
+        instagramThreadId: String? = nil
+    ) {
         _viewModel = StateObject(wrappedValue: ClientProfileViewModel(client: client))
         self.clientsViewModel = clientsViewModel
         self.drawerState = drawerState
+        self.instagramUsername = instagramUsername
+        self.instagramThreadId = instagramThreadId
     }
 
     var body: some View {
@@ -238,8 +251,30 @@ struct ClientProfileView: View {
         .padding(.top, 12)
     }
 
+    /// Instagram username without @. Empty when this card is a normal customer.
+    private var instagramHandle: String? {
+        let raw = (instagramUsername ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let handle = raw.hasPrefix("@") ? String(raw.dropFirst()) : raw
+        let trimmed = handle.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
+    private var hasInstagramThread: Bool {
+        guard let threadId = instagramThreadId else { return false }
+        return PhoneFormatting.isInstagramThreadId(threadId)
+    }
+
+    /// A stored US number. Instagram thread ids are not phone numbers.
+    private var headerPhone: String? {
+        guard let phone = viewModel.client.phone?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !phone.isEmpty else { return nil }
+        let digits = PhoneFormatting.digits(from: phone)
+        let isUS = digits.count == 10 || (digits.count == 11 && digits.hasPrefix("1"))
+        return isUS ? phone : nil
+    }
+
     private var hasHeaderContact: Bool {
-        !viewModel.client.email.isEmpty || !(viewModel.client.phone ?? "").isEmpty
+        instagramHandle != nil || !viewModel.client.email.isEmpty || headerPhone != nil
     }
 
     private var headerContactRow: some View {
@@ -247,10 +282,38 @@ struct ClientProfileView: View {
             if !viewModel.client.email.isEmpty {
                 headerContactItem(systemImage: "envelope", text: viewModel.client.email)
             }
-            if let phone = viewModel.client.phone, !phone.isEmpty {
+            if let phone = headerPhone {
                 headerContactItem(systemImage: "phone", text: PhoneFormatting.displayUS(phone))
             }
+            if let handle = instagramHandle {
+                instagramConversationLink(handle)
+            }
         }
+    }
+
+    private func instagramConversationLink(_ handle: String) -> some View {
+        Button {
+            openInstagramConversation(handle)
+        } label: {
+            HStack(spacing: 6) {
+                InstagramMark()
+                Text("@\(handle)")
+                    .font(.subheadline)
+                    .lineLimit(1)
+                Image(systemName: "arrow.up.right")
+                    .font(.caption2.weight(.semibold))
+            }
+            .foregroundStyle(Color.white.opacity(0.7))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Open Instagram conversation with @\(handle)")
+    }
+
+    private func openInstagramConversation(_ handle: String) {
+        let encoded = handle.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? handle
+        guard let url = URL(string: "https://ig.me/m/\(encoded)") else { return }
+        UIApplication.shared.open(url)
     }
 
     private func headerContactItem(systemImage: String, text: String) -> some View {
@@ -379,8 +442,10 @@ struct ClientProfileView: View {
                 }
             }
 
-            ProfileDetailCard(sectionTitle: "Messaging consent") {
-                messagingConsentContent
+            if showsSmsConsent {
+                ProfileDetailCard(sectionTitle: "Messaging consent") {
+                    messagingConsentContent
+                }
             }
 
             if hasPreferences {
@@ -756,7 +821,7 @@ struct ClientProfileView: View {
             }
             .buttonStyle(.borderedProminent)
             .tint(AppDesign.brandDark)
-            .disabled(viewModel.messageThreadId == nil)
+            .disabled(viewModel.messageThreadId == nil && !hasInstagramThread)
         }
         .padding(.horizontal)
         .padding(.vertical, 12)
@@ -792,7 +857,21 @@ struct ClientProfileView: View {
         }
     }
 
+    /// SMS opt-in applies to a phone number. An Instagram conversation has none.
+    private var showsSmsConsent: Bool {
+        if instagramHandle != nil, headerPhone == nil { return false }
+        return true
+    }
+
     private func openMessagesCompose() {
+        if hasInstagramThread, let threadId = instagramThreadId {
+            dismiss()
+            drawerState.openExistingMessagesThread(
+                phone: threadId,
+                clientName: viewModel.client.name
+            )
+            return
+        }
         guard let phone = viewModel.client.phone else { return }
         drawerState.openExistingMessagesThread(
             phone: phone,
@@ -810,6 +889,25 @@ struct ClientProfileView: View {
             return "$\(Int(value))"
         }
         return String(format: "$%.2f", value)
+    }
+}
+
+/// Small camera mark for the Instagram conversation link. Matches the phone row in the brown header.
+private struct InstagramMark: View {
+    var body: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 3, style: .continuous)
+                .stroke(lineWidth: 1.15)
+                .frame(width: 13, height: 13)
+            Circle()
+                .stroke(lineWidth: 1.15)
+                .frame(width: 5.5, height: 5.5)
+            Circle()
+                .fill()
+                .frame(width: 1.6, height: 1.6)
+                .offset(x: 3.1, y: -3.1)
+        }
+        .frame(width: 14, height: 14)
     }
 }
 

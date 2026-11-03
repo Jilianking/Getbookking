@@ -127,7 +127,9 @@ extension PushNotificationManager: UNUserNotificationCenterDelegate {
     ) {
         let userInfo = response.notification.request.content.userInfo
         let type = Self.stringValue(userInfo["type"])?.lowercased() ?? ""
-        let threadId = type == "sms_message" ? Self.stringValue(userInfo["threadId"]) : nil
+        let threadId = (type == "sms_message" || type == "instagram_message")
+            ? Self.stringValue(userInfo["threadId"])
+            : nil
         let finish = UncheckedSendableBox(completionHandler)
         DispatchQueue.main.async {
             if let threadId, !threadId.isEmpty {

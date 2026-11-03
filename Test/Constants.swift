@@ -34,6 +34,10 @@ struct Constants {
         static let paidFeatureUpgradeTitle = "Unlock texting and payments"
         static let paidFeatureUpgradeMessage =
             "Your free trial includes the website builder. Start your paid Get Bookking plan to unlock client texting and payments."
+        static let instagramPaidUpgradeMessage =
+            "Your free trial includes the website builder. Start your paid Get Bookking plan to connect Instagram."
+        static let instagramAskOwnerMessage =
+            "Instagram messages unlock on a paid plan. Ask the business owner to subscribe."
     }
 
     /// Public origin for team invite links: `{bookingWebOrigin}/join?t=…`

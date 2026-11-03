@@ -50,6 +50,11 @@ enum SubscriptionPlan: String, CaseIterable {
         self == .studio || self == .shop
     }
 
+    /// Studio and Shop teammates can connect a personal Instagram. Solo and Charter stay on the business account.
+    var allowsPersonalInstagram: Bool {
+        self == .studio || self == .shop
+    }
+
     /// Solo and Charter owners use Business settings (not Team settings) in the app.
     var usesBusinessSettingsHub: Bool {
         self == .solo || self == .charter

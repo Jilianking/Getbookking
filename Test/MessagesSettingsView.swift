@@ -9,6 +9,8 @@ import SwiftUI
 struct MessagesSettingsView: View {
     @EnvironmentObject var authViewModel: AuthViewModel
     @ObservedObject var viewModel: ManagerSettingsViewModel
+    @Environment(\.scenePhase) private var scenePhase
+    @State private var showDisconnectInstagramConfirm = false
 
     var body: some View {
         Group {
@@ -35,6 +37,22 @@ struct MessagesSettingsView: View {
         .refreshable {
             await viewModel.load(isDemoMode: authViewModel.isDemoMode)
             await authViewModel.refreshTeamAccess()
+        }
+        .onChange(of: scenePhase) { _, phase in
+            guard phase == .active else { return }
+            Task { await viewModel.reloadInstagramAfterWebIfNeeded() }
+        }
+        .confirmationDialog(
+            "Disconnect Instagram?",
+            isPresented: $showDisconnectInstagramConfirm,
+            titleVisibility: .visible
+        ) {
+            Button("Disconnect", role: .destructive) {
+                Task { await viewModel.disconnectInstagram(scope: "member") }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("New DMs stop here. Conversations already in Messages stay.")
         }
     }
 
@@ -72,8 +90,27 @@ struct MessagesSettingsView: View {
         return limit > 0 ? limit : 1000
     }
 
+    @ViewBuilder
+    private var personalInstagramSection: some View {
+        if viewModel.tenantSubscriptionPlan.allowsPersonalInstagram {
+            InstagramConnectionSection(
+                status: currentMemberRow?.igStatus ?? "off",
+                username: currentMemberRow?.igUsername ?? "",
+                provisionError: currentMemberRow?.igProvisionError ?? "",
+                isOwner: false,
+                paid: viewModel.subscriptionPaid,
+                isWorking: viewModel.isConnectingInstagram || viewModel.isDisconnectingInstagram,
+                errorMessage: viewModel.errorMessage,
+                onConnect: { Task { await viewModel.connectInstagram(scope: "member") } },
+                onDisconnect: { showDisconnectInstagramConfirm = true },
+                onStartPaidPlan: {}
+            )
+        }
+    }
+
     private var memberMessagingContent: some View {
         List {
+            personalInstagramSection
             if hasPersonalLine {
                 Section {
                     LabeledContent("Status", value: "Active")

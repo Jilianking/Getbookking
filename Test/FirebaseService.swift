@@ -252,6 +252,8 @@ class FirebaseService: ObservableObject {
         let direction = (data["direction"] as? String ?? "").lowercased()
         let from = data["from"] as? String ?? ""
         let to = data["to"] as? String ?? ""
+        let channel = (data["channel"] as? String ?? "").lowercased()
+        let isInstagram = channel == "instagram" || threadId.hasPrefix("ig:")
         let counterpartyPhone = direction == "outbound" ? to : from
         let displayName = (data["clientName"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let paymentKindRaw = (data["paymentKind"] as? String)?
@@ -272,9 +274,17 @@ class FirebaseService: ObservableObject {
         return Message(
             id: doc.documentID,
             clientId: counterpartyPhone,
-            clientName: displayName.isEmpty || ClientsViewModel.isPlaceholderContactName(displayName)
-                ? PhoneFormatting.displayUS(counterpartyPhone)
-                : displayName,
+            clientName: {
+                if isInstagram {
+                    if !displayName.isEmpty, !ClientsViewModel.isPlaceholderContactName(displayName) {
+                        return displayName
+                    }
+                    return "Instagram"
+                }
+                return displayName.isEmpty || ClientsViewModel.isPlaceholderContactName(displayName)
+                    ? PhoneFormatting.displayUS(counterpartyPhone)
+                    : displayName
+            }(),
             content: body,
             sender: direction == "outbound" ? .admin : .client,
             createdAt: createdAt,
@@ -398,6 +408,9 @@ class FirebaseService: ObservableObject {
     }
 
     func sendMessage(_ message: Message) async throws -> String {
+        if PhoneFormatting.isInstagramThreadId(message.threadId) {
+            return try await sendInstagramMessage(message)
+        }
         let toPhone = PhoneFormatting.e164US(message.clientId) ?? message.clientId
         var payload: [String: Any] = [
             "to": toPhone,
@@ -435,6 +448,27 @@ class FirebaseService: ObservableObject {
                 return PhoneFormatting.smsThreadId(returnedThreadId)
             }
             return PhoneFormatting.smsThreadId(message.threadId)
+        } catch {
+            let msg = FirebaseFunctionsErrorHelper.message(from: error)
+            throw NSError(domain: "FirebaseService", code: -1, userInfo: [NSLocalizedDescriptionKey: msg])
+        }
+    }
+
+    private func sendInstagramMessage(_ message: Message) async throws -> String {
+        let threadId = PhoneFormatting.smsThreadId(message.threadId)
+        let payload: [String: Any] = [
+            "threadId": threadId,
+            "body": message.content,
+            "clientName": message.clientName,
+        ]
+        do {
+            let result = try await functions.httpsCallable("sendClientInstagramMessage").call(payload)
+            let data = result.data as? [String: Any] ?? [:]
+            if let returnedThreadId = data["threadId"] as? String,
+               !returnedThreadId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                return PhoneFormatting.smsThreadId(returnedThreadId)
+            }
+            return threadId
         } catch {
             let msg = FirebaseFunctionsErrorHelper.message(from: error)
             throw NSError(domain: "FirebaseService", code: -1, userInfo: [NSLocalizedDescriptionKey: msg])

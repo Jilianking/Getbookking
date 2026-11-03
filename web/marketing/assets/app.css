@@ -3270,6 +3270,7 @@ button.app-pay-tx.is-link:focus-visible {
 .app-msg-set { display: grid; gap: 8px; padding: 6px 0 14px; border-bottom: 1px solid var(--line); margin-bottom: 10px; }
 .app-msg-set:last-of-type { border-bottom: 0; }
 .app-msg-set .app-btn { justify-self: start; }
+.app-msg-set .app-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 .app-msg-line { margin: 0; display: grid; }
 .app-msg-line strong { font-size: 18px; color: var(--ink); }
 .app-msg-line span { font-size: 13px; color: var(--muted); }

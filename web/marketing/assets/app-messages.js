@@ -30,6 +30,8 @@
     consentFor: "",
     popKind: "",
     menuFor: "",
+    igBusy: "",
+    igError: "",
     readMap: {},
     readSince: 0,
     readSinceSet: false,
@@ -614,13 +616,207 @@
       var el = $(x);
       if (el) el.classList.toggle("hidden", !open);
     });
-    if (open) paintSettings();
+    if (open) {
+      paintSettings();
+      refreshInstagram();
+    }
   }
 
   function usageLine(count, limit) {
     if (limit == null) return "";
     var pct = limit ? Math.min(100, Math.round((count / limit) * 100)) : 0;
     return '<div class="app-msg-usage"><div><span>Texts this month</span><strong>' + (count || 0) + " of " + limit + '</strong></div><i><b style="width:' + pct + '%"></b></i></div>';
+  }
+
+  function planKey(tenant) {
+    var p = String((tenant && tenant.subscriptionPlan) || "solo").trim().toLowerCase();
+    if (p === "studio" || p === "shop") return p;
+    return "other";
+  }
+
+  function instagramPaid(tenant) {
+    if (!tenant) return false;
+    if (tenant.complimentaryPaidAccess === true) return true;
+    var hasBilling = String(tenant.stripeCustomerId || "").trim() || String(tenant.billingSource || "") === "apple";
+    if (!hasBilling) return false;
+    return String(tenant.subscriptionStatus || "").trim().toLowerCase() === "active";
+  }
+
+  function instagramHandle(username) {
+    var trimmed = String(username || "").trim().replace(/^@/, "");
+    return trimmed ? "@" + trimmed : "";
+  }
+
+  // Owner connects the business account. Studio and Shop teammates connect their own.
+  function instagramTarget() {
+    var s = state.session;
+    if (!s) return null;
+    var t = s.tenant || {};
+    if (s.isOwner) {
+      return {
+        scope: "tenant",
+        status: String(t.igStatus || "off").trim().toLowerCase(),
+        username: String(t.igUsername || ""),
+        provisionError: String(t.igProvisionError || ""),
+      };
+    }
+    if (planKey(t) !== "studio" && planKey(t) !== "shop") return null;
+    var uid = s.user && s.user.uid;
+    var me = (s.members || []).filter(function (m) { return m.uid === uid; })[0] || {};
+    return {
+      scope: "member",
+      status: String(me.igStatus || "off").trim().toLowerCase(),
+      username: String(me.igUsername || ""),
+      provisionError: String(me.igProvisionError || ""),
+    };
+  }
+
+  function applyInstagramFields(scope, fields) {
+    var s = state.session;
+    if (!s) return;
+    fields = fields || {};
+    if (scope === "tenant") {
+      var t = s.tenant || (s.tenant = {});
+      t.igStatus = fields.igStatus || "off";
+      t.igUsername = fields.igUsername || "";
+      t.igProvisionError = fields.igProvisionError || "";
+      return;
+    }
+    var uid = s.user && s.user.uid;
+    (s.members || []).forEach(function (m) {
+      if (m.uid !== uid) return;
+      m.igStatus = fields.igStatus || "off";
+      m.igUsername = fields.igUsername || "";
+      m.igProvisionError = fields.igProvisionError || "";
+    });
+  }
+
+  function refreshInstagram() {
+    var target = instagramTarget();
+    var s = state.session;
+    if (!target || !s || !s.tenantId) return Promise.resolve();
+    if (target.scope === "tenant") {
+      return firebase.firestore().collection("tenants").doc(s.tenantId).get().then(function (snap) {
+        var d = (snap && snap.data()) || {};
+        applyInstagramFields("tenant", d);
+        paintInstagram();
+      }).catch(function () {});
+    }
+    return firebase.app().functions(REGION).httpsCallable("listTenantMembers")({}).then(function (res) {
+      var members = (res && res.data && res.data.members) || [];
+      if (members.length) s.members = members;
+      paintInstagram();
+    }).catch(function () {});
+  }
+
+  function instagramSectionHtml() {
+    var target = instagramTarget();
+    if (!target) return "";
+    var s = state.session;
+    var owner = !!(s && s.isOwner);
+    var paid = instagramPaid(s && s.tenant);
+    var handle = instagramHandle(target.username);
+    var connected = target.status === "connected" && !!handle;
+    var busy = state.igBusy;
+    var html = '<section class="app-msg-set" id="msgIgHost"><h3 class="app-req-h">Instagram</h3>';
+    if (!paid) {
+      html += '<p class="app-hint">' + esc(owner
+        ? "Your free trial includes the website builder. Start your paid Get Bookking plan to connect Instagram."
+        : "Instagram messages unlock on a paid plan. Ask the business owner to subscribe.") + "</p>";
+      if (owner) html += '<a class="app-btn app-btn--primary app-btn--small" href="/billing" target="_top">Start paid plan</a>';
+    } else if (connected) {
+      html += '<p class="app-msg-line"><strong>' + esc(handle) + "</strong><span>Clients message you first. You can reply for 24 hours after their last message.</span></p>";
+      if (target.provisionError) html += '<p class="app-sheet-error">' + esc(target.provisionError) + "</p>";
+      html += '<button type="button" class="app-btn app-btn--danger app-btn--small" id="msgIgDisconnect"' + (busy ? " disabled" : "") + ">Disconnect</button>";
+    } else if (busy === "connect") {
+      html += '<p class="app-hint">Connecting Instagram…</p>';
+    } else {
+      if (target.status === "failed" || target.status === "expired") {
+        html += '<p class="app-sheet-error">' + esc(target.provisionError || "Instagram could not be connected.") + "</p>";
+      } else if (target.status === "connecting") {
+        html += '<p class="app-hint">Finish signing in with Instagram, or start again.</p>';
+      } else if (target.provisionError) {
+        html += '<p class="app-sheet-error">' + esc(target.provisionError) + "</p>";
+      }
+      html += '<p class="app-hint">Connect a professional Instagram. New messages show up in Messages.</p>';
+      html += '<button type="button" class="app-btn app-btn--primary app-btn--small" id="msgIgConnect"' + (busy ? " disabled" : "") + ">" +
+        (target.status === "off" ? "Connect Instagram" : "Connect again") + "</button>";
+    }
+    if (state.igError) html += '<p class="app-sheet-error">' + esc(state.igError) + "</p>";
+    html += "</section>";
+    return html;
+  }
+
+  function paintInstagram() {
+    var host = $("msgIgHost");
+    var html = instagramSectionHtml();
+    if (!host) return;
+    if (!html) {
+      host.parentNode.removeChild(host);
+      return;
+    }
+    host.outerHTML = html;
+  }
+
+  function callableMessage(e, fallback) {
+    var msg = String((e && e.message) || "").trim();
+    var prev = "";
+    while (msg && msg !== prev) {
+      prev = msg;
+      msg = msg.replace(/^(FirebaseError|[a-z0-9-]+):\s*/i, "").trim();
+    }
+    return msg || fallback;
+  }
+
+  function connectInstagram() {
+    var target = instagramTarget();
+    if (!target || state.igBusy) return;
+    var popup = window.open("about:blank", "_blank");
+    if (!popup) {
+      state.igError = "Allow pop-ups to connect Instagram, then try again.";
+      paintInstagram();
+      return;
+    }
+    state.igBusy = "connect";
+    state.igError = "";
+    paintInstagram();
+    firebase.app().functions(REGION).httpsCallable("startInstagramConnect")({ scope: target.scope }).then(function (res) {
+      var url = res && res.data && res.data.authorizeUrl;
+      state.igBusy = "";
+      if (!url) {
+        popup.close();
+        state.igError = "Instagram did not return a connect link.";
+        paintInstagram();
+        return;
+      }
+      popup.location = url;
+      paintInstagram();
+      refreshInstagram();
+    }).catch(function (e) {
+      state.igBusy = "";
+      try { popup.close(); } catch (_) {}
+      state.igError = callableMessage(e, "Instagram could not be connected.");
+      paintInstagram();
+    });
+  }
+
+  function disconnectInstagram() {
+    var target = instagramTarget();
+    if (!target || state.igBusy) return;
+    if (!global.confirm("Disconnect Instagram? New DMs stop here. Conversations already in Messages stay.")) return;
+    state.igBusy = "disconnect";
+    state.igError = "";
+    paintInstagram();
+    firebase.app().functions(REGION).httpsCallable("disconnectInstagram")({ scope: target.scope }).then(function () {
+      state.igBusy = "";
+      applyInstagramFields(target.scope, { igStatus: "off", igUsername: "", igProvisionError: "" });
+      paintInstagram();
+      return refreshInstagram();
+    }).catch(function (e) {
+      state.igBusy = "";
+      state.igError = callableMessage(e, "Instagram could not be disconnected.");
+      paintInstagram();
+    });
   }
 
   function paintSettings() {
@@ -642,12 +838,15 @@
         (owner ? '<a class="app-btn app-btn--ghost app-btn--small" href="/billing#messaging" target="_top">' + (on ? "Manage numbers and billing" : "Turn on client texting") + "</a>" +
           '<p class="app-hint">Adding numbers beyond your plan is charged in Plan and billing, with the price shown before you confirm.</p>' : "") +
         "</section>";
+      html += instagramSectionHtml();
     } else if (a.usesOwnSms) {
       html += '<section class="app-msg-set"><h3 class="app-req-h">Your texting line</h3>' +
         '<p class="app-msg-line"><strong>' + esc(prettyPhone(a.memberSmsPhoneNumber || "")) + "</strong><span>Clients see this number when you text them.</span></p>" +
         '<div id="msgSetUsage"></div></section>';
+      html += instagramSectionHtml();
     } else {
       html += '<section class="app-msg-set"><h3 class="app-req-h">Your texting line</h3><p class="app-hint">You don\'t have a texting number yet. Ask the owner to set one up for you.</p></section>';
+      html += instagramSectionHtml();
     }
     // Quick replies and presets
     var quick = quickReplies();
@@ -1084,10 +1283,15 @@
       if (ev.key === "Escape" && state.menuFor) closeRowMenu();
     });
     $("msgSettingsBtn").addEventListener("click", function () { settingsOpen(true); });
+    window.addEventListener("focus", function () {
+      if (state.session && $("msgIgHost")) refreshInstagram();
+    });
     ["msgSettingsClose", "msgSettingsScrim"].forEach(function (x) {
       $(x).addEventListener("click", function () { settingsOpen(false); });
     });
     $("msgSettingsBody").addEventListener("click", function (ev) {
+      if (ev.target.closest("#msgIgConnect")) return connectInstagram();
+      if (ev.target.closest("#msgIgDisconnect")) return disconnectInstagram();
       if (ev.target.closest("#msgSetSave")) return saveSettings();
       if (ev.target.closest("#msgQuickAdd")) {
         var listEl = $("msgQuickList");

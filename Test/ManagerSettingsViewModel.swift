@@ -48,6 +48,12 @@ final class ManagerSettingsViewModel: ObservableObject {
     @Published var smsEnabled: Bool = false
     @Published var smsStatus: String = "off"
     @Published var smsPhoneNumber: String = ""
+    @Published var igStatus: String = "off"
+    @Published var igUsername: String = ""
+    @Published var igProvisionError: String = ""
+    @Published var isConnectingInstagram = false
+    @Published var isDisconnectingInstagram = false
+    @Published var shouldReloadInstagramAfterWeb = false
     @Published var smsCanUse: Bool = false
     @Published var smsProvisionError: String = ""
     @Published var smsMonthlyUsageCount: Int = 0
@@ -321,6 +327,9 @@ final class ManagerSettingsViewModel: ObservableObject {
             smsEnabled = data["smsEnabled"] as? Bool ?? false
             smsStatus = (data["smsStatus"] as? String) ?? "off"
             smsPhoneNumber = (data["smsPhoneNumber"] as? String) ?? ""
+            igStatus = (data["igStatus"] as? String) ?? "off"
+            igUsername = (data["igUsername"] as? String) ?? ""
+            igProvisionError = (data["igProvisionError"] as? String) ?? ""
             smsCanUse = data["smsCanUse"] as? Bool ?? false
             smsProvisionError = (data["smsProvisionError"] as? String) ?? ""
             smsMonthlyLimit = (data["smsMonthlyLimit"] as? Int) ?? 1000
@@ -413,6 +422,55 @@ final class ManagerSettingsViewModel: ObservableObject {
         guard shouldSyncBillingAfterWeb else { return }
         shouldSyncBillingAfterWeb = false
         await syncBillingFromStripe()
+    }
+
+    func reloadInstagramAfterWebIfNeeded() async {
+        guard shouldReloadInstagramAfterWeb else { return }
+        shouldReloadInstagramAfterWeb = false
+        await load(isDemoMode: false)
+    }
+
+    /// Opens Instagram login in Safari. `scope` is `tenant` for the business account or `member` for a teammate.
+    func connectInstagram(scope: String) async {
+        guard !isConnectingInstagram else { return }
+        isConnectingInstagram = true
+        errorMessage = nil
+        do {
+            let result = try await functions.httpsCallable("startInstagramConnect").call([
+                "scope": scope,
+            ])
+            guard let data = result.data as? [String: Any],
+                  let urlString = (data["authorizeUrl"] as? String)?
+                    .trimmingCharacters(in: .whitespacesAndNewlines),
+                  let url = URL(string: urlString) else {
+                throw NSError(
+                    domain: "ManagerSettings",
+                    code: 1,
+                    userInfo: [NSLocalizedDescriptionKey: "Instagram did not return a connect link."]
+                )
+            }
+            shouldReloadInstagramAfterWeb = true
+            igStatus = scope == "tenant" ? "connecting" : igStatus
+            await InAppSafari.openInSystemBrowser(url)
+        } catch {
+            errorMessage = FirebaseFunctionsErrorHelper.message(from: error)
+        }
+        isConnectingInstagram = false
+    }
+
+    func disconnectInstagram(scope: String) async {
+        guard !isDisconnectingInstagram else { return }
+        isDisconnectingInstagram = true
+        errorMessage = nil
+        do {
+            _ = try await functions.httpsCallable("disconnectInstagram").call([
+                "scope": scope,
+            ])
+            await load(isDemoMode: false)
+        } catch {
+            errorMessage = FirebaseFunctionsErrorHelper.message(from: error)
+        }
+        isDisconnectingInstagram = false
     }
 
     /// Opens the App Store payment sheet for this business's plan.
@@ -1062,7 +1120,7 @@ final class ManagerSettingsViewModel: ObservableObject {
 
     private static func parseMembers(_ raw: [[String: Any]]?, ownerUid: String?) -> [TenantTeamMember] {
         guard let raw else { return [] }
-        return raw.compactMap { row in
+        return raw.compactMap { row -> TenantTeamMember? in
             guard let uid = row["uid"] as? String else { return nil }
             let role = TeamAccessRole.fromFirestore(row["accessRole"] as? String ?? row["role"] as? String)
             let fn = (row["firstName"] as? String) ?? ""
@@ -1092,7 +1150,10 @@ final class ManagerSettingsViewModel: ObservableObject {
                     smsMonthlyLimit: (row["smsMonthlyLimit"] as? Int) ?? 1000,
                     memberSettings: TeamMemberSettings(),
                     personalConfirmationType: Self.parsePersonalConfirmationType(row),
-                    effectiveConfirmationType: Self.parseEffectiveConfirmationType(row)
+                    effectiveConfirmationType: Self.parseEffectiveConfirmationType(row),
+                    igStatus: (row["igStatus"] as? String) ?? "off",
+                    igUsername: (row["igUsername"] as? String) ?? "",
+                    igProvisionError: (row["igProvisionError"] as? String) ?? ""
                 )
             }
             return TenantTeamMember(
@@ -1117,7 +1178,10 @@ final class ManagerSettingsViewModel: ObservableObject {
                 smsMonthlyLimit: (row["smsMonthlyLimit"] as? Int) ?? 1000,
                 memberSettings: TeamMemberSettings(dictionary: row["memberSettings"] as? [String: Any]),
                 personalConfirmationType: Self.parsePersonalConfirmationType(row),
-                effectiveConfirmationType: Self.parseEffectiveConfirmationType(row)
+                effectiveConfirmationType: Self.parseEffectiveConfirmationType(row),
+                igStatus: (row["igStatus"] as? String) ?? "off",
+                igUsername: (row["igUsername"] as? String) ?? "",
+                igProvisionError: (row["igProvisionError"] as? String) ?? ""
             )
         }
     }

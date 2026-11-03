@@ -32,6 +32,10 @@
  * Paid subscription (active) required; free trial (trialing) cannot enable SMS —
  * unless BYPASS_SUBSCRIPTION_PAYMENT_GATE is true in sms.js (testing only).
  *
+ * Instagram DMs: set secrets META_APP_SECRET, META_INSTAGRAM_APP_SECRET,
+ * META_WEBHOOK_VERIFY_TOKEN. Paid plans only. Webhook and OAuth URLs are in instagram.js.
+ * Subscribe the webhook in Meta only after metaInstagramWebhook is deployed.
+ *
  * Custom domains (Namecheap): set secret NAMECHEAP_API_KEY and params
  * NAMECHEAP_API_USER, NAMECHEAP_CLIENT_IP; optional NAMECHEAP_USERNAME,
  * NAMECHEAP_API_HOST (sandbox default), NAMECHEAP_NAMESERVER_1/2.
@@ -65,6 +69,7 @@ const {
   normalizeIndustry,
 } = require("./signupPayloads");
 const sms = require("./sms");
+const instagram = require("./instagram");
 const teamPaymentSplit = require("./teamPaymentSplit");
 const {
   isDemoShowcaseStripeAccountId,
@@ -10719,6 +10724,9 @@ function serializeTeamMember(doc, ownerUid, tenant, ownerUserData) {
     smsMonthlyUsageCount: sms.smsMonthlyUsageForMember(d, tenant).count,
     smsMonthlyLimit: sms.smsMonthlyUsageForMember(d, tenant).limit,
     smsMonthlyUsageRemaining: sms.smsMonthlyUsageForMember(d, tenant).remaining,
+    igStatus: (d.igStatus || "off").toString(),
+    igUsername: (d.igUsername || "").toString(),
+    igProvisionError: (d.igProvisionError || "").toString(),
     personalConfirmationType: personalRaw,
     effectiveConfirmationType: (effective.confirmationType || "").toString(),
   };
@@ -13463,6 +13471,9 @@ function serializeMessagingFields(tenant, ownerUserData, lineSummary) {
     smsPhonePurchasingBlockedDuringTestFlight:
       sms.isSmsPhonePurchasingBlockedDuringTestFlight(tenant) === true,
     smsPhonePurchaseBlockMessage: (sms.smsPhonePurchaseBlockReason(tenant) || "").toString(),
+    igStatus: (tenant.igStatus || "off").toString(),
+    igUsername: (tenant.igUsername || "").toString(),
+    igProvisionError: (tenant.igProvisionError || "").toString(),
   };
 }
 
@@ -16989,3 +17000,10 @@ async function notifyOwnerAboutAccount({ tenantId, tenant, title, body, emailSub
     console.warn("notifyOwnerAboutAccount email", tenantId, e.message || e);
   }
 }
+
+exports.metaInstagramWebhook = instagram.metaInstagramWebhook;
+exports.instagramOAuthCallback = instagram.instagramOAuthCallback;
+exports.startInstagramConnect = instagram.startInstagramConnect;
+exports.disconnectInstagram = instagram.disconnectInstagram;
+exports.sendClientInstagramMessage = instagram.sendClientInstagramMessage;
+exports.refreshInstagramTokens = instagram.refreshInstagramTokens;

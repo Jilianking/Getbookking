@@ -55,6 +55,14 @@ service cloud.firestore {
           'smsPaidLinePurchaseExpiresAt',
           'smsMonthlyUsageCount',
           'smsMonthlyUsagePeriod',
+          'igStatus',
+          'igUserId',
+          'igUsername',
+          'igToken',
+          'igTokenExpiresAt',
+          'igConnectedAt',
+          'igConnectedByUid',
+          'igProvisionError',
           'billingSource',
           'appleAppAccountToken',
           'appleOriginalTransactionId',
@@ -95,7 +103,15 @@ service cloud.firestore {
           'smsPhoneNumberSid',
           'smsLineIsPaidExtra',
           'smsPaidLinePurchaseAuthorizationId',
-          'smsPaidLinePurchaseInvoiceId'
+          'smsPaidLinePurchaseInvoiceId',
+          'igStatus',
+          'igUserId',
+          'igUsername',
+          'igToken',
+          'igTokenExpiresAt',
+          'igConnectedAt',
+          'igConnectedByUid',
+          'igProvisionError'
         ])
         && (!('tenantId' in d) || isTenantOwnerUid(d.tenantId))
         && (!('subscriptionStatus' in d) || d.subscriptionStatus == 'trialing');
@@ -145,6 +161,14 @@ service cloud.firestore {
           'smsLineIsPaidExtra',
           'smsMonthlyUsageCount',
           'smsMonthlyUsagePeriod',
+          'igStatus',
+          'igUserId',
+          'igUsername',
+          'igToken',
+          'igTokenExpiresAt',
+          'igConnectedAt',
+          'igConnectedByUid',
+          'igProvisionError',
           'smsLastSoloReplacementInvoiceId',
           'smsLastSoloReplacementAt',
           'smsSoloReplacementAuthorizationId',
@@ -225,6 +249,14 @@ service cloud.firestore {
           'smsLineIsPaidExtra',
           'smsMonthlyUsageCount',
           'smsMonthlyUsagePeriod',
+          'igStatus',
+          'igUserId',
+          'igUsername',
+          'igToken',
+          'igTokenExpiresAt',
+          'igConnectedAt',
+          'igConnectedByUid',
+          'igProvisionError',
           'smsLastSoloReplacementInvoiceId',
           'smsLastSoloReplacementAt',
           'smsSoloReplacementAuthorizationId',
@@ -339,6 +371,14 @@ service cloud.firestore {
           'domainPurchaseBlockExempt',
           'complimentaryPaidAccess',
           'smsLineIsPaidExtra',
+          'igStatus',
+          'igUserId',
+          'igUsername',
+          'igToken',
+          'igTokenExpiresAt',
+          'igConnectedAt',
+          'igConnectedByUid',
+          'igProvisionError',
           'customDomain',
           'customDomainWww',
           'customDomainStatus'
@@ -406,6 +446,10 @@ service cloud.firestore {
       match /paymentLedger/{ledgerId} {
         allow read, write: if false;
       }
+    }
+
+    match /igAccounts/{igUserId} {
+      allow read, write: if false;
     }
   }
 }

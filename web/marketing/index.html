@@ -429,6 +429,7 @@ html { scroll-behavior: smooth; width: 100%; }
       color: var(--brand-dark);
     }
 
+    .hero-trust--mobile { display: none; }
     .hero-trust {
       margin-top: 14px;
       max-width: 320px;
@@ -1017,6 +1018,9 @@ html { scroll-behavior: smooth; width: 100%; }
       .hero-sub { font-size: 18px; margin-left: auto; margin-right: auto; }
       .hero-ctas { align-items: center; margin: 0 auto; }
       .hero-trust { margin-left: auto; margin-right: auto; margin-bottom: 0; }
+      /* Phones: the trust line sits under the three phones. */
+      .hero-trust--desktop { display: none; }
+      .hero-trust--mobile { display: block; margin-top: 4px; }
       .hero-phones-panel {
         min-height: 0;
         margin-top: 0;
@@ -1163,8 +1167,9 @@ html { scroll-behavior: smooth; width: 100%; }
         <div class="hero-ctas">
           <a href="signup.html" class="btn-primary">Sign up</a>
         </div>
-        <p class="hero-trust">Free trial · Cancel anytime</p>
+        <p class="hero-trust hero-trust--desktop">Free trial · Cancel anytime</p>
       </div>
+      <p class="hero-trust hero-trust--mobile">Free trial · Cancel anytime</p>
     </div>
   </section>
 

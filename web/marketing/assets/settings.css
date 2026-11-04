@@ -177,3 +177,4 @@
 .set-ai-warn { font-size: 13px; color: #8a3b3b; }
 .set-ai-list { margin-top: 14px; }
 .set-ai-toggle { display: flex; align-items: center; gap: 6px; font-size: 13px; margin-right: 10px; white-space: nowrap; }
+.set-ai > .set-lead { margin: 0; padding: 14px 16px; }

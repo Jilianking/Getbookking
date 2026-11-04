@@ -16929,6 +16929,8 @@ const { registerTapToPayLaunchEmailFunctions } = require("./tapToPayLaunchEmail"
 registerTapToPayLaunchEmailFunctions(exports);
 const { registerTrialReminderFunctions } = require("./trialReminderEmail");
 registerTrialReminderFunctions(exports, { stripeSecretKey, Stripe });
+const { registerMcpFunctions } = require("./mcp");
+registerMcpFunctions(exports, { stripeSecretKey, Stripe, twilioAccountSid: sms.twilioAccountSid, twilioAuthToken: sms.twilioAuthToken });
 
 const { registerCustomDomainFunctions } = require("./customDomain");
 registerCustomDomainFunctions(exports, {

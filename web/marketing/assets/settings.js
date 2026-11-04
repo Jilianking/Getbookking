@@ -172,6 +172,9 @@
       host.appendChild(section("Payments", [
         row("Payment settings", "", function () { openScreen("payments"); }),
       ]));
+      host.appendChild(section("AI assistant", [
+        row("Connect an AI assistant", "", function () { openScreen("ai"); }),
+      ]));
     } else {
       var mine = [];
       if (!managersLock()) mine.push(row("My booking type", "", function () { openScreen("profile"); }));
@@ -222,8 +225,110 @@
       profile: paintProfile,
       schedule: paintSchedule,
       payments: paintPayments,
+      ai: paintAi,
     };
     (screens[name] || paintBusiness)(body);
+  }
+
+  /* ── AI assistant (MCP): personal keys for Claude and other assistants ── */
+  function paintAi(body) {
+    $("detailTitle").textContent = "AI assistant";
+    $("detailLead").textContent = "Connect Claude or ChatGPT to your shop. It can read your schedule, requests, clients, payments, messages, and website. With actions on, it can also confirm bookings, send payment links, and text clients, but only after you say yes in the chat.";
+    var card = document.createElement("div");
+    card.className = "acct-card set-ai";
+    card.innerHTML = '<p class="set-lead">Loading…</p>';
+    body.appendChild(card);
+    var help = document.createElement("p");
+    help.className = "set-ai-help";
+    help.innerHTML = 'New to this? <a href="/ai-assistant" target="_blank" rel="noopener">See how to connect, step by step</a>.';
+    body.appendChild(help);
+
+    function when(iso) {
+      if (!iso) return "Never";
+      return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+    }
+
+    function render(data) {
+      if (!data.allowed) {
+        card.innerHTML = '<p class="set-lead">The AI assistant is in early access and isn\'t on for your shop yet.</p>';
+        return;
+      }
+      var keys = data.keys || [];
+      card.innerHTML =
+        '<form class="set-form set-ai-create">' +
+        '<label for="aiKeyName">Name this connection</label>' +
+        '<input type="text" id="aiKeyName" maxlength="40" placeholder="Claude or ChatGPT" />' +
+        '<div class="set-actions"><button type="submit" class="set-save">Create connection link</button></div>' +
+        '</form>' +
+        '<div class="set-ai-new hidden" id="aiNew"></div>' +
+        '<div class="set-ai-list">' +
+        (keys.length ? keys.map(function (k) {
+          return '<div class="set-item"><p><strong>' + esc(k.name) + '</strong><span>…' + esc(k.hint) + ' · Created ' + esc(when(k.createdAt)) + ' · Last used ' + esc(when(k.lastUsedAt)) + '</span></p>' +
+            '<label class="set-ai-toggle"><input type="checkbox" data-actions="' + esc(k.id) + '"' + (k.actions !== false ? " checked" : "") + ' /> Can take actions</label>' +
+            '<button type="button" data-revoke="' + esc(k.id) + '">Revoke</button></div>';
+        }).join("") : '<p class="set-lead">No connections yet.</p>') +
+        "</div>";
+      card.querySelector(".set-ai-create").addEventListener("submit", function (ev) {
+        ev.preventDefault();
+        var btn = card.querySelector(".set-save");
+        btn.disabled = true;
+        fns.httpsCallable("createMcpKey")({ name: $("aiKeyName").value.trim() }).then(function (res) {
+          var d = res.data || {};
+          load(function () {
+            var box = $("aiNew");
+            box.classList.remove("hidden");
+            box.innerHTML =
+              '<p><strong>Your connection link</strong> (shown only once, so copy it now):</p>' +
+              '<div class="set-ai-url"><input type="text" readonly value="' + esc(d.connectorUrl) + '" id="aiUrl" /><button type="button" id="aiCopy">Copy</button></div>' +
+              '<p class="set-ai-warn">Anyone with this link can read your shop data. Keep it private, and revoke it if it\'s ever shared.</p>';
+            $("aiCopy").addEventListener("click", function () {
+              var v = $("aiUrl").value;
+              var b = this;
+              (navigator.clipboard ? navigator.clipboard.writeText(v) : Promise.reject()).then(function () {
+                b.textContent = "Copied";
+                setTimeout(function () { b.textContent = "Copy"; }, 1500);
+              }, function () { $("aiUrl").select(); });
+            });
+          });
+        }).catch(function (err) {
+          btn.disabled = false;
+          showMsg(card, callableError(err), false);
+        });
+      });
+      card.querySelectorAll("[data-actions]").forEach(function (cb) {
+        cb.addEventListener("change", function () {
+          cb.disabled = true;
+          fns.httpsCallable("setMcpKeyActions")({ id: cb.getAttribute("data-actions"), actions: cb.checked }).then(function () {
+            cb.disabled = false;
+          }).catch(function (err) {
+            cb.checked = !cb.checked;
+            cb.disabled = false;
+            showMsg(card, callableError(err), false);
+          });
+        });
+      });
+      card.querySelectorAll("[data-revoke]").forEach(function (b) {
+        b.addEventListener("click", function () {
+          if (!window.confirm("Revoke this connection? The assistant using it stops working right away.")) return;
+          b.disabled = true;
+          fns.httpsCallable("revokeMcpKey")({ id: b.getAttribute("data-revoke") }).then(function () { load(); }).catch(function (err) {
+            b.disabled = false;
+            showMsg(card, callableError(err), false);
+          });
+        });
+      });
+    }
+
+    function load(after) {
+      fns.httpsCallable("listMcpKeys")({}).then(function (res) {
+        render(res.data || {});
+        if (after) after();
+      }).catch(function (err) {
+        card.innerHTML = "";
+        showMsg(card, callableError(err), false);
+      });
+    }
+    load();
   }
 
   function paint() {

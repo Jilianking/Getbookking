@@ -172,9 +172,21 @@
       host.appendChild(section("Payments", [
         row("Payment settings", "", function () { openScreen("payments"); }),
       ]));
-      host.appendChild(section("AI assistant", [
-        row("Connect an AI assistant", "", function () { openScreen("ai"); }),
-      ]));
+      // AI assistant: hidden until the shop is on early access (lawyer review pending before everyone).
+      var aiSlot = document.createElement("div");
+      host.appendChild(aiSlot);
+      var showAi = function () {
+        aiSlot.appendChild(section("AI assistant", [
+          row("Connect an AI assistant", "", function () { openScreen("ai"); }),
+        ]));
+      };
+      if (state.aiAllowed === true) showAi();
+      else if (state.aiAllowed !== false) {
+        fns.httpsCallable("listMcpKeys")({}).then(function (res) {
+          state.aiAllowed = !!(res.data && res.data.allowed);
+          if (state.aiAllowed) showAi();
+        }).catch(function () { state.aiAllowed = false; });
+      }
     } else {
       var mine = [];
       if (!managersLock()) mine.push(row("My booking type", "", function () { openScreen("profile"); }));

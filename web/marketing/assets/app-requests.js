@@ -145,7 +145,12 @@
     return ((parts[0] || "?").charAt(0) + (parts.length > 1 ? parts[parts.length - 1].charAt(0) : "")).toUpperCase();
   }
 
-  function chip(status) {
+  function isHoldingSlot(r) {
+    return !!(r && r.holdUntil && (r.status === "pending_deposit" || r.status === "pending_payment"));
+  }
+
+  function chip(status, r) {
+    if (isHoldingSlot(r)) return '<span class="app-req-chip is-wait">Holding slot – waiting for payment</span>';
     var tone = status === "confirmed" ? "ok" : status === "declined" || status === "cancelled" ? "off" : status === "new" || status === "pending" ? "new" : "wait";
     return '<span class="app-req-chip is-' + tone + '">' + esc(STATUS_LABEL[status] || status) + "</span>";
   }
@@ -200,7 +205,7 @@
       return '<button type="button" class="app-req-row' + (r.readAt ? "" : " is-unread") + (r.id === state.openId ? " is-active" : "") + '" data-req-open="' + esc(r.id) + '">' +
         '<span class="app-req-avatar" aria-hidden="true">' + esc(initials(r.name)) + "</span>" +
         '<span class="app-req-copy"><strong>' + esc(r.name) + "</strong><span>" + esc(bits.join(" · ")) + "</span></span>" +
-        '<span class="app-req-side"><time>' + esc(relative(r.createdAt)) + "</time>" + (state.tab === "new" ? (r.readAt ? "" : '<span class="app-req-new" aria-label="Unread"></span>') : chip(r.status)) + "</span>" +
+        '<span class="app-req-side"><time>' + esc(relative(r.createdAt)) + "</time>" + (state.tab === "new" ? (r.readAt ? "" : '<span class="app-req-new" aria-label="Unread"></span>') : chip(r.status, r)) + "</span>" +
         "</button>";
     }).join("");
   }
@@ -297,7 +302,7 @@
     if (!r || !body) return;
     $("reqDetailTitle").textContent = r.name;
     var st = $("reqDetailStatus");
-    if (st) st.outerHTML = chip(r.status).replace('class="app-req-chip', 'id="reqDetailStatus" class="app-req-chip');
+    if (st) st.outerHTML = chip(r.status, r).replace('class="app-req-chip', 'id="reqDetailStatus" class="app-req-chip');
     var charter = isCharter(state.session.tenant);
     // Confirming, declining, and cancelling follow the same rule as the app (owner, or a permitted manager).
     var mayAct = !!(global.ShopAppAccess && ShopAppAccess.can(state.session, "approveRequests"));
@@ -307,7 +312,7 @@
     var dateVal = day ? day.getFullYear() + "-" + pad(day.getMonth() + 1) + "-" + pad(day.getDate()) : "";
     var timeVal = day ? pad(day.getHours()) + ":" + pad(day.getMinutes()) : "";
     var facts = [];
-    facts.push(["Status", STATUS_LABEL[r.status] || r.status]);
+    facts.push(["Status", isHoldingSlot(r) ? "Holding slot – waiting for payment (cancels itself after 15 minutes if unpaid)" : (STATUS_LABEL[r.status] || r.status)]);
     if (r.service) facts.push(["Service", r.service]);
     if (r.start) facts.push(["Time", when(r.start)]);
     else if (r.preferredTime) facts.push(["Asked for", r.preferredTime]);

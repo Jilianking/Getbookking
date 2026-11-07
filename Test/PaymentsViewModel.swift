@@ -544,6 +544,16 @@ class PaymentsViewModel: ObservableObject {
         matchingRefund(in: transactions, matching: transaction, pendingOnly: false)
     }
 
+    /// The client payment a refund line gives back (same charge or PaymentIntent).
+    func originalPayment(for refund: PaymentTransaction) -> PaymentTransaction? {
+        transactions.first { other in
+            guard other.id != refund.id, other.isCredit, !other.isStudioShareLine, !other.isPayoutLine else { return false }
+            if let c = refund.chargeId, other.chargeId == c { return true }
+            if let p = refund.paymentIntentId, other.paymentIntentId == p { return true }
+            return false
+        }
+    }
+
     private func matchingRefund(
         in list: [PaymentTransaction],
         matching transaction: PaymentTransaction,

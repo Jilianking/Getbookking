@@ -441,15 +441,99 @@
     dep.value = wf.depositAmount ? String(wf.depositAmount) : "";
     depWrap.appendChild(depLabel);
     depWrap.appendChild(dep);
+
+    // Different deposit per service: lists every service with its own deposit (blank = the default above).
+    var perSvc = toggleRow(
+      "Different deposit per service",
+      "Set a deposit for each service. Leave one blank to use the amount above.",
+      wf.depositPerService === true,
+      function (on) { svcList.style.display = on ? "" : "none"; if (on) loadSvcDeposits(); }
+    );
+    perSvc.querySelector("input").setAttribute("data-dep", "");
+    depWrap.appendChild(perSvc);
+    var svcList = document.createElement("div");
+    svcList.className = "set-dep-services";
+    svcList.style.display = wf.depositPerService === true ? "" : "none";
+    depWrap.appendChild(svcList);
+    var svcInputs = [];
+    var svcLoaded = false;
+    function loadSvcDeposits() {
+      if (svcLoaded) return;
+      svcLoaded = true;
+      svcList.innerHTML = '<p class="set-lead">Loading services…</p>';
+      db.collection("tenants").doc(state.tenantId).collection("services").get().then(function (snap) {
+        svcList.innerHTML = "";
+        svcInputs = [];
+        if (snap.empty) {
+          svcList.innerHTML = '<p class="set-lead">Add services first, then set their deposits here.</p>';
+          return;
+        }
+        snap.docs.forEach(function (d) {
+          var sv = d.data() || {};
+          var row = document.createElement("div");
+          row.className = "set-dep-row";
+          var name = document.createElement("span");
+          name.textContent = sv.name || "Service";
+          var inp = document.createElement("input");
+          inp.type = "number";
+          inp.min = "0";
+          inp.step = "0.01";
+          inp.placeholder = dep.value ? "$" + dep.value : "Default";
+          inp.value = Number(sv.depositAmount) > 0 ? String(sv.depositAmount) : (dep.value || "");
+          inp.setAttribute("aria-label", "Deposit for " + (sv.name || "service"));
+          row.appendChild(name);
+          row.appendChild(inp);
+          svcList.appendChild(row);
+          svcInputs.push({ id: d.id, input: inp, was: Number(sv.depositAmount) || 0 });
+        });
+      }).catch(function () {
+        svcList.innerHTML = '<p class="set-lead">Couldn\'t load services.</p>';
+        svcLoaded = false;
+      });
+    }
+    if (wf.depositPerService === true) loadSvcDeposits();
+    // Calendar shops keep their confirmation type, which can still take a deposit.
+    function takesDeposit(v) {
+      if (v === "calendar_slots") v = String(wf.confirmationType || "");
+      return v === "deposit_to_confirm" || v === "approve_and_deposit";
+    }
     function syncDep() {
-      var v = select.value;
-      depWrap.style.display = (v === "deposit_to_confirm" || v === "approve_and_deposit") ? "" : "none";
+      depWrap.style.display = takesDeposit(select.value) ? "" : "none";
     }
     select.addEventListener("change", syncDep);
     syncDep();
     form.appendChild(typeLabel);
     form.appendChild(select);
     form.appendChild(depWrap);
+
+    var charterShop = String((state.tenant && state.tenant.subscriptionPlan) || "").toLowerCase() === "charter";
+    function pick(labelText, id, options, value) {
+      var l = document.createElement("label");
+      l.setAttribute("for", id);
+      l.textContent = labelText;
+      var sel = document.createElement("select");
+      sel.id = id;
+      options.forEach(function (o) {
+        var opt = document.createElement("option");
+        opt.value = String(o[0]);
+        opt.textContent = o[1];
+        if (String(o[0]) === String(value)) opt.selected = true;
+        sel.appendChild(opt);
+      });
+      form.appendChild(l);
+      form.appendChild(sel);
+      return sel;
+    }
+    var balDue = pick("Balance due", "bkBalDue", [
+      ["at", charterShop ? "At the trip" : "At the appointment"],
+      ["before", charterShop ? "Before departure" : "Before the appointment"],
+    ], wf.balanceDue || (charterShop ? "before" : "at"));
+    var remindDays = pick("Balance reminder", "bkRemind", [
+      [0, "Off"], [1, "1 day before"], [2, "2 days before"], [3, "3 days before"], [7, "1 week before"],
+    ], wf.balanceReminderDays != null ? wf.balanceReminderDays : (charterShop ? 2 : 1));
+    var depRefund = pick("Deposits when a booking is cancelled", "bkDepRefund", [
+      ["yes", "Refundable"], ["no", "Non-refundable"],
+    ], wf.depositRefundable === false ? "no" : "yes");
 
     if (isTeam()) {
       form.appendChild(toggleRow(
@@ -488,7 +572,7 @@
     form.appendChild(actions);
     form.addEventListener("submit", function (ev) {
       ev.preventDefault();
-      var boxes = form.querySelectorAll('input[type="checkbox"]');
+      var boxes = form.querySelectorAll('input[type="checkbox"]:not([data-dep])');
       var teamLock = isTeam() ? boxes[0].checked : managersLock();
       var viewAll = boxes[isTeam() ? 1 : 0].checked;
       var onNew = boxes[isTeam() ? 2 : 1].checked;
@@ -502,13 +586,35 @@
         payload.bookingMode = "form";
         payload.confirmationType = chosen;
       }
-      if (chosen === "deposit_to_confirm" || chosen === "approve_and_deposit") {
+      if (takesDeposit(chosen)) {
         var amount = Number(dep.value);
         if (amount > 0) payload.depositAmount = amount;
       }
       save.disabled = true;
+      var perSvcOn = perSvc.querySelector("input").checked;
+      var balPayload = {
+        balanceDue: balDue.value,
+        balanceReminderDays: Number(remindDays.value),
+        depositRefundable: depRefund.value === "yes",
+        depositPerService: perSvcOn,
+      };
       fns.httpsCallable("updateTenantBookingWorkflow")(payload).then(function () {
-        var next = Object.assign({}, workflow(), payload);
+        return fns.httpsCallable("updateBalanceSettings")(balPayload);
+      }).then(function () {
+        if (!perSvcOn || !svcInputs.length) return null;
+        var batch = db.batch();
+        var changed = 0;
+        svcInputs.forEach(function (row) {
+          var v = Number(row.input.value);
+          var next = v > 0 ? Math.round(v * 100) / 100 : null;
+          if ((next || 0) === row.was) return;
+          batch.update(db.collection("tenants").doc(state.tenantId).collection("services").doc(row.id), { depositAmount: next });
+          row.was = next || 0;
+          changed++;
+        });
+        return changed ? batch.commit() : null;
+      }).then(function () {
+        var next = Object.assign({}, workflow(), payload, balPayload);
         state.tenant.workflow = next;
         return savePolicy(
           { viewAllBookings: viewAll },

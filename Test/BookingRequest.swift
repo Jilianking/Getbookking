@@ -43,6 +43,14 @@ struct BookingRequest: Identifiable {
     var stripePaymentIntentId: String? = nil
     /// `pending` | `refunded` | `failed` | `already_refunded` after a paid cancel.
     var cancelRefundStatus: String? = nil
+    /// Set while the slot is held for the client to pay at booking (cancels itself if unpaid).
+    var holdUntil: Date? = nil
+
+    var isHoldingSlotForPayment: Bool {
+        guard holdUntil != nil else { return false }
+        let s = BookingRequestStatus.normalized(status)
+        return s == BookingRequestStatus.pendingDeposit || s == BookingRequestStatus.pendingPayment
+    }
 
     var isRefundPending: Bool {
         (cancelRefundStatus ?? "").trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "pending"
@@ -60,6 +68,9 @@ struct BookingRequest: Identifiable {
         }
         if BookingRequestStatus.normalized(status) == BookingRequestStatus.cancelled, isRefundPending {
             return "refund_pending"
+        }
+        if isHoldingSlotForPayment {
+            return "holding_slot"
         }
         return status
     }

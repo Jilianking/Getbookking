@@ -517,7 +517,8 @@ class FirebaseService: ObservableObject {
                 smsConsentAt: (d["smsConsentAt"] as? Timestamp)?.dateValue(),
                 paidCents: BookingRequest.intField(d["paidCents"]),
                 stripePaymentIntentId: d["stripePaymentIntentId"] as? String,
-                cancelRefundStatus: d["cancelRefundStatus"] as? String
+                cancelRefundStatus: d["cancelRefundStatus"] as? String,
+                holdUntil: (d["holdUntil"] as? Timestamp)?.dateValue()
             )
         }
         if status != nil {

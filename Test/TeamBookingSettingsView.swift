@@ -12,6 +12,7 @@ struct TeamBookingSettingsView: View {
     var isSoloBusinessSettings: Bool = false
     @State private var depositAmountText = ""
     @FocusState private var isDepositAmountFocused: Bool
+    @StateObject private var depositBalance = DepositBalanceSettingsModel()
 
     /// Single Booking type picker: classic types + Calendar / slots.
     private var bookingTypeSelection: Binding<StudioBookingTypeOption> {
@@ -63,6 +64,12 @@ struct TeamBookingSettingsView: View {
                 ownerAlertsSection
             }
 
+            DepositBalanceSettingsSection(
+                model: depositBalance,
+                showsDeposit: settingsViewModel.confirmationType.requiresDeposit,
+                isCharter: isCharterPlan
+            )
+
             if isCalendarType {
                 availabilitySection
             }
@@ -85,6 +92,13 @@ struct TeamBookingSettingsView: View {
                 settingsViewModel.applyCharterBookingConstraints()
             }
             syncDepositAmountTextFromModel()
+        }
+        .task(id: settingsViewModel.tenantId) {
+            await depositBalance.load(
+                tenantId: settingsViewModel.tenantId,
+                isCharter: isCharterPlan,
+                defaultDeposit: settingsViewModel.depositAmount ?? 0
+            )
         }
         .onChange(of: settingsViewModel.depositAmount) { _, _ in
             guard !isDepositAmountFocused else { return }
@@ -346,6 +360,10 @@ struct TeamBookingSettingsView: View {
                 await teamPolicyViewModel.saveManagerPolicy()
                 await teamPolicyViewModel.load(isDemoMode: authViewModel.isDemoMode)
             }
+        }
+        if let err = await depositBalance.save() {
+            settingsViewModel.errorMessage = err
+            settingsViewModel.saveSuccess = false
         }
         await authViewModel.refreshTeamAccess()
     }

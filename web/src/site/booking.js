@@ -596,6 +596,43 @@ function setupCalendarBookingForm(fm, tenant, services) {
   var minMonthKey = viewYear * 12 + viewMonth;
   var maxMonthKey = minMonthKey + MONTH_HORIZON;
 
+  // Times already taken (held, requested or booked) so two clients can't pick the same one.
+  var busy = [];
+  if (typeof functions !== 'undefined' && tenant && tenant.slug) {
+    functions.httpsCallable('getShopBusyTimes')({ tenantSlug: tenant.slug }).then(function(res) {
+      busy = (res && res.data && res.data.busy) || [];
+      if (busy.length) paintMonthGrid();
+    }).catch(function() { /* page still works; the server re-checks on submit */ });
+  }
+  function isoOf(date) {
+    return date.getFullYear() + '-' + String(date.getMonth() + 1).padStart(2, '0') + '-' + String(date.getDate()).padStart(2, '0');
+  }
+  function serviceMinutes() {
+    var id = serviceInput && serviceInput.value;
+    for (var i = 0; i < (services || []).length; i++) {
+      if (services[i] && services[i].id === id) {
+        var m = Number(services[i].durationMinutes);
+        if (m > 0) return m;
+      }
+    }
+    return 30;
+  }
+  function openSlots(date) {
+    var slots = calendarSlotsForDay(tenant, date, 30);
+    if (!busy.length) return slots;
+    var iso = isoOf(date);
+    var who = (staffInput && staffInput.value) || '';
+    var dur = serviceMinutes();
+    return slots.filter(function(sl) {
+      for (var i = 0; i < busy.length; i++) {
+        var b = busy[i];
+        if (b.date !== iso || (b.member || '') !== who) continue;
+        if (sl.min < b.endMin && b.startMin < sl.min + dur) return false;
+      }
+      return true;
+    });
+  }
+
   function showError(msg) {
     if (!errEl) return;
     if (!msg) {
@@ -630,12 +667,13 @@ function setupCalendarBookingForm(fm, tenant, services) {
 
   function dayIsBookable(date) {
     if (isPastDay(date)) return false;
-    var slots = calendarSlotsForDay(tenant, date, 30);
+    var slots = openSlots(date);
     return slots.length > 0;
   }
 
   function selectDay(iso, pretty, longLabel) {
     selectedIso = iso || '';
+    fm.setAttribute('data-cal-iso', selectedIso);
     selectedPretty = pretty || iso || '';
     selectedTime = '';
     if (timeInput) timeInput.value = '';
@@ -733,7 +771,7 @@ function setupCalendarBookingForm(fm, tenant, services) {
     }
     var parts = selectedIso.split('-');
     var date = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10), 12, 0, 0, 0);
-    var slots = calendarSlotsForDay(tenant, date, 30);
+    var slots = openSlots(date);
     if (!slots.length) {
       slotsEl.innerHTML = '<p class="booking-cal-empty">No open times this day.</p>';
       return;
@@ -1523,6 +1561,56 @@ function bookingSmsConsentAnchor(fm) {
   return fm.querySelector('#form-error') ||
     fm.querySelector('button[type="submit"]') ||
     fm;
+}
+
+/** Shops with "Deposit to confirm": the client pays the deposit right after booking. */
+function siteNeedsDepositAtBooking(tenant) {
+  var w = (tenant && tenant.workflow) || {};
+  var plan = String((tenant && tenant.subscriptionPlan) || '').toLowerCase();
+  return plan !== 'charter' && String(w.confirmationType || '').toLowerCase() === 'deposit_to_confirm';
+}
+
+function siteDepositDollarsFor(tenant, service) {
+  var w = (tenant && tenant.workflow) || {};
+  if (w.depositPerService === true && service && Number(service.depositAmount) > 0) return Number(service.depositAmount);
+  return Number(w.depositAmount) > 0 ? Number(w.depositAmount) : 0;
+}
+
+/** Note above the submit button ("A $50 deposit confirms your appointment…") that follows the picked service. */
+function injectBookingDepositNote(fm, tenant, services) {
+  if (!fm || !siteNeedsDepositAtBooking(tenant)) return;
+  if (fm.querySelector('[data-deposit-note]')) return;
+  var btn = fm.querySelector('button[type="submit"]');
+  if (!btn) return;
+  var note = document.createElement('p');
+  note.className = 'booking-deposit-note';
+  note.setAttribute('data-deposit-note', '');
+  note.style.cssText = 'margin:12px 0 8px;font-size:14px;line-height:1.5;opacity:.85;';
+  btn.parentNode.insertBefore(note, btn);
+  var baseLabel = btn.textContent;
+  function pickedService() {
+    var sel = fm.querySelector('[data-key="service"]');
+    var id = sel ? sel.value : '';
+    var list = services || [];
+    for (var i = 0; i < list.length; i++) if (String(list[i].id) === String(id)) return list[i];
+    return null;
+  }
+  function paint() {
+    var dollars = siteDepositDollarsFor(tenant, pickedService());
+    if (dollars >= 0.5) {
+      var amt = '$' + (Number.isInteger(dollars) ? dollars : dollars.toFixed(2));
+      note.textContent = 'A ' + amt + ' deposit confirms your appointment. You\u2019ll pay it securely on the next screen.';
+      note.style.display = '';
+      btn.textContent = 'Continue to deposit';
+    } else {
+      note.style.display = 'none';
+      btn.textContent = baseLabel;
+    }
+  }
+  fm.addEventListener('change', function (ev) {
+    if (ev.target && ev.target.getAttribute && ev.target.getAttribute('data-key') === 'service') paint();
+  });
+  paint();
 }
 
 function injectBookingSmsConsent(fm, tenant) {

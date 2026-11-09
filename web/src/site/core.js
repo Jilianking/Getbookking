@@ -2291,6 +2291,7 @@ function init() {
         setupGuidedBookingForm(fm, setupDropzones);
         setupCalendarBookingForm(fm, tenant, services);
         injectBookingSmsConsent(fm, tenant);
+        injectBookingDepositNote(fm, tenant, services);
         attachTitleCaseNameInputs(fm);
         fm.addEventListener('submit', function(ev){
           ev.preventDefault();
@@ -2408,7 +2409,9 @@ function init() {
               btn.textContent = origText;
               return;
             }
-            return functions.httpsCallable('createBookingRequestFromWeb')({
+            var bookingFn = siteNeedsDepositAtBooking(tenant) ? 'startBookingDepositCheckout' : 'createBookingRequestFromWeb';
+            if (bookingFn === 'startBookingDepositCheckout') btn.textContent = 'Opening payment…';
+            return functions.httpsCallable(bookingFn)({
               tenantSlug: tenant.slug,
               memberSlug: (tenant._activeProvider && tenant._activeProvider.memberSlug) || null,
               assignmentPreference: tenant._assignmentPreference || null,
@@ -2421,10 +2424,17 @@ function init() {
               serviceName: serviceName,
               preferredTime: preferredTime,
               preferredDays: preferredDays,
+              scheduledDate: fm.getAttribute('data-cal-iso') || null,
               notes: formResponses.notes || null,
               formResponses: formResponses
             });
-          }).then(function(){
+          }).then(function(res){
+            // Deposit due: go to the shop's secure payment page (paying confirms the booking).
+            var payUrl = res && res.data && res.data.payUrl;
+            if (payUrl) {
+              window.location.href = payUrl;
+              return;
+            }
             var doneHtml = bookingSuccessHtml(tenant);
             document.getElementById('root').innerHTML = (usesThemedChrome(tenant) || isStudio12Theme(tenant)) ? doneHtml : '<div class="container">' + doneHtml + '</div>';
             applyBranding(tenant);

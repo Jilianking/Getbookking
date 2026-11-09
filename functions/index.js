@@ -83,6 +83,7 @@ const {
   buildDemoAppSnapshot,
 } = require("./demoAppSnapshot");
 const charterOccupancy = require("./charterOccupancy");
+const shopSlots = require("./shopSlots");
 const appleSubscription = require("./appleSubscription");
 
 const stripeSecretKey = defineSecret("STRIPE_SECRET_KEY");
@@ -3727,6 +3728,7 @@ exports.createDepositLink = functions
       chargeStripeAccountId: stripeAccountId,
       chargeStripeScope: payCtx.scope || "tenant",
       checkoutChannel: "deposit_link",
+      ...(data && data.balanceLink === true ? { balanceLink: "true" } : {}),
       ...splitFee.splitMeta,
     };
     const pi = await createCustomerCheckoutPaymentIntent(stripe, stripeAccountId, {
@@ -3766,6 +3768,7 @@ exports.createDepositLink = functions
       totalCents: checkout.totalCents,
       attributedMemberUid,
       chargeStripeScope: payCtx.scope || "tenant",
+      stripeAccountId,
     };
   });
 
@@ -5805,14 +5808,51 @@ async function connectAccountIdsForBookingRefund(tenant, tenantId, booking) {
   return ids;
 }
 
-async function refundBookingPaymentIfNeeded({
+/**
+ * Cancel refund for a booking: the first card payment (as before), then any other card payments
+ * from booking balances. Deposits are kept when the shop marks them non-refundable.
+ */
+async function refundBookingPaymentIfNeeded(args) {
+  const { booking, tenant } = args;
+  const plan = booking && booking.latePaymentRefund
+    ? { ...balances.refundPlan(booking, { ...(tenant || {}), workflow: { ...((tenant && tenant.workflow) || {}), depositRefundable: true } }) }
+    : balances.refundPlan(booking || {}, tenant || {});
+  const primaryPi = (booking.stripePaymentIntentId || "").toString().trim();
+  const results = [];
+  if (!plan.keepPrimary) {
+    results.push(await refundOneBookingPayment({ ...args, piId: primaryPi, keySuffix: "" }));
+  }
+  for (const piId of plan.extra) {
+    results.push(await refundOneBookingPayment({ ...args, piId, keySuffix: "_" + piId }));
+  }
+  const refundAttempt =
+    Math.max(0, Math.round(Number(booking.cancelRefundAttempts) || 0)) + 1;
+  if (!results.length) {
+    return plan.keptDepositCents > 0
+      ? { refunded: false, depositKept: true, keptCents: plan.keptDepositCents, refundAttempt }
+      : { refunded: false, refundAttempt };
+  }
+  if (results.length === 1 && !plan.keptDepositCents) return results[0];
+  // Several payments: combine into one result for the booking.
+  const first = results.find((r) => r.chargeId) || results[0];
+  const refundCents = results.reduce((s, r) => s + (Number(r.refundCents) || 0), 0);
+  const error = results.find((r) => r.refundError);
+  if (error) return { ...error, refundCents };
+  if (results.some((r) => r.refundPending)) return { refunded: false, refundPending: true, refundAttempt, refundCents, chargeId: first.chargeId };
+  if (results.every((r) => r.alreadyRefunded)) return { refunded: false, alreadyRefunded: true, refundAttempt, chargeId: first.chargeId };
+  return { refunded: true, refundAttempt, refundCents, chargeId: first.chargeId, keptCents: plan.keptDepositCents || 0 };
+}
+
+async function refundOneBookingPayment({
   stripe,
   tenant,
   tenantId,
   booking,
   requestId,
+  piId: piIdIn,
+  keySuffix,
 }) {
-  const piId = (booking.stripePaymentIntentId || "").toString().trim();
+  const piId = (piIdIn || "").toString().trim();
   const refundAttempt =
     Math.max(0, Math.round(Number(booking.cancelRefundAttempts) || 0)) + 1;
   if (!piId.startsWith("pi_")) {
@@ -5873,7 +5913,7 @@ async function refundBookingPaymentIfNeeded({
       chargeId: String(chargeId),
       amountCents: null,
       reason: "requested_by_customer",
-      idempotencyKey: `cancel_booking_${tenantId}_${requestId}_${refundAttempt}`,
+      idempotencyKey: `cancel_booking_${tenantId}_${requestId}_${refundAttempt}${keySuffix || ""}`,
       queueIfUnsettled: true,
     });
     const chargePatch = { chargeId: String(chargeId) };
@@ -5907,6 +5947,13 @@ async function refundBookingPaymentIfNeeded({
 
 function cancelRefundPatchFromResult(refundResult) {
   if (!refundResult) return null;
+  if (refundResult.depositKept) {
+    return {
+      cancelRefundStatus: "deposit_kept",
+      depositKeptCents: refundResult.keptCents || 0,
+      cancelRefundError: admin.firestore.FieldValue.delete(),
+    };
+  }
   const chargeId = (refundResult.chargeId || "").toString().trim();
   const chargePatch = chargeId.startsWith("ch_") ? { stripeChargeId: chargeId } : {};
   const attempt = Math.max(0, Math.round(Number(refundResult.refundAttempt) || 0));
@@ -6285,11 +6332,13 @@ exports.createBookingRequestFromWeb = functions.https.onCall(async (data, contex
       boatFilterId,
     });
   } else {
-    ref = await db
-      .collection("tenants")
-      .doc(tenantId)
-      .collection("bookingRequests")
-      .add(bookingData);
+    // Shop calendars: length of the service, then save only if the time is still free.
+    if (!bookingData.durationMinutes && serviceId) {
+      const svc = await db.collection("tenants").doc(tenantId).collection("services").doc(serviceId).get().catch(() => null);
+      const mins = svc && svc.exists ? Number((svc.data() || {}).durationMinutes) : 0;
+      if (mins > 0) bookingData.durationMinutes = Math.round(mins);
+    }
+    ref = await shopSlots.reserveShopSlot(tenantId, tenantData, bookingData, !isSingleOperatorPlan(tenantData.subscriptionPlan));
   }
 
   const customerRef = db
@@ -9994,6 +10043,19 @@ async function confirmBookingAfterDepositPaid(tenantId, bookingRequestId, paymen
     patch.depositPaidAt = admin.firestore.FieldValue.serverTimestamp();
     patch.reviewedAt = admin.firestore.FieldValue.serverTimestamp();
   }
+  if (pi && ["cancelled", "canceled", "declined"].includes(status) && patch.stripePaymentIntentId) {
+    // Paid after the booking was closed (e.g. Pay tapped as the shop cancelled): give it all back.
+    patch.latePaymentRefund = true;
+    patch.cancelRefundStatus = "pending";
+    patch.cancelRefundQueuedAt = admin.firestore.FieldValue.serverTimestamp();
+    console.warn("confirmBookingAfterDepositPaid late payment on closed booking; refund queued", rid, pi.id);
+  }
+  if (pi) {
+    // Booking balances: list this payment (no-op if already listed).
+    await balances
+      .recordCardPaymentOnBooking(tid, rid, pi, { role: status === "pending_deposit" ? "deposit" : null })
+      .catch((e) => console.warn("recordCardPaymentOnBooking", rid, e.message || e));
+  }
   if (!Object.keys(patch).length) return false;
   await reqRef.set(patch, { merge: true });
   return true;
@@ -11575,7 +11637,7 @@ exports.retryPendingBookingRefunds = functions
     for (const doc of docs) {
       const d = doc.data() || {};
       const status = (d.status || "").toString().trim().toLowerCase();
-      if (status !== "cancelled" && status !== "canceled") continue;
+      if (status !== "cancelled" && status !== "canceled" && !(status === "declined" && d.latePaymentRefund)) continue;
       const refundStatus = (d.cancelRefundStatus || "").toString().trim().toLowerCase();
       if (refundStatus === "pending" && !d.cancelRefundQueuedAt) {
         console.warn(
@@ -16940,6 +17002,16 @@ const { registerTapToPayLaunchEmailFunctions } = require("./tapToPayLaunchEmail"
 registerTapToPayLaunchEmailFunctions(exports);
 const { registerTrialReminderFunctions } = require("./trialReminderEmail");
 registerTrialReminderFunctions(exports, { stripeSecretKey, Stripe });
+const { registerMcpFunctions } = require("./mcp");
+const { registerShopSlotFunctions } = shopSlots;
+registerShopSlotFunctions(exports, { stripeSecretKey, resolveTenantBySlug, isTeam: (t) => !isSingleOperatorPlan(t && t.subscriptionPlan) });
+const { registerBookingDepositFunctions } = require("./bookingDeposit");
+registerBookingDepositFunctions(exports, { stripeSecretKey, resolveTenantBySlug });
+
+const balances = require("./balances");
+balances.registerBalanceFunctions(exports, { getMemberAccessContext, sms, stripeSecretKey, twilioAccountSid: sms.twilioAccountSid, twilioAuthToken: sms.twilioAuthToken });
+
+registerMcpFunctions(exports, { stripeSecretKey, Stripe, twilioAccountSid: sms.twilioAccountSid, twilioAuthToken: sms.twilioAuthToken });
 
 const { registerCustomDomainFunctions } = require("./customDomain");
 registerCustomDomainFunctions(exports, {

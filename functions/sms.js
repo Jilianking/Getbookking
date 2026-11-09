@@ -1951,12 +1951,41 @@ function bookingStatusSmsBody(tenant, status, booking) {
   const service = ((booking && booking.serviceName) || "").toString().trim();
   const ctx = { business, service };
   if (status === "confirmed") {
-    return withRequiredSmsWording(renderSmsPreset(presets.smsPresetConfirmed, ctx), business);
+    const base = renderSmsPreset(presets.smsPresetConfirmed, ctx);
+    const total = bookingTotalSmsLine(tenant, booking);
+    const stopAt = total ? base.search(/\s*reply stop\b/i) : -1;
+    const withTotal = stopAt >= 0 ? base.slice(0, stopAt) + total + base.slice(stopAt) : base + total;
+    return withRequiredSmsWording(withTotal, business);
   }
   if (status === "declined") {
     return withRequiredSmsWording(renderSmsPreset(presets.smsPresetDeclined, ctx), business);
   }
   return null;
+}
+
+/** " Total: $400 · Paid: $100 · Balance $300 due at your appointment." when the booking has a price. */
+function bookingTotalSmsLine(tenant, booking) {
+  const price = Number(booking && booking.priceCents);
+  if (!Number.isFinite(price) || price <= 0) return "";
+  const fmt = (c) => {
+    const v = c / 100;
+    return "$" + (Number.isInteger(v) ? String(v) : v.toFixed(2));
+  };
+  const payments = (booking && booking.payments) || {};
+  let paid = 0;
+  for (const k of Object.keys(payments)) {
+    const p = payments[k] || {};
+    paid += Math.max(0, (Number(p.cents) || 0) - (Number(p.refundedCents) || 0));
+  }
+  const balance = Math.max(0, Math.round(price - paid));
+  const charter = String((tenant && tenant.subscriptionPlan) || "").toLowerCase() === "charter";
+  const w = (tenant && tenant.workflow) || {};
+  const before = w.balanceDue === "before" || (w.balanceDue !== "at" && charter);
+  let line = ` Total: ${fmt(price)}`;
+  if (paid > 0) line += ` · Paid: ${fmt(paid)}`;
+  if (balance > 0) line += ` · Balance ${fmt(balance)} due ${before ? (charter ? "before departure" : "before your appointment") : "at your appointment"}.`;
+  else line += " · Paid in full.";
+  return line;
 }
 
 /**

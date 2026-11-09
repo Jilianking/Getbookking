@@ -1066,10 +1066,10 @@
     .signup-card-note { font-size: 12px; color: #8a7a6a; margin: 6px 0 0; }
     .signup-card-error { font-size: 13px; color: #b3261e; margin: 6px 0 0; min-height: 0; }
     .success-app { margin-top: 20px; display: flex; flex-direction: column; align-items: center; gap: 6px; }
-    .success-app-badge { display: inline-block; line-height: 0; border-radius: 8px; }
-    .success-app-badge img { display: block; width: 135px; height: auto; }
-    .success-app-badge:focus-visible { outline: 2px solid #8B6F47; outline-offset: 3px; }
-    .success-app-note { margin: 0; font-size: 12px; color: #8a7a6a; }
+    .success-app-beta { display: inline-block; padding: 11px 20px; border-radius: 999px; background: #2b2118; color: #fff; font-size: 15px; font-weight: 500; text-decoration: none; }
+    .success-app-beta:hover { background: #3a2d21; }
+    .success-app-beta:focus-visible { outline: 2px solid #8B6F47; outline-offset: 3px; }
+    .success-wrap .success-app-note { margin: 4px 0 0; font-size: 13px; line-height: 1.5; color: #8a7a6a; max-width: 22em; text-align: center; }
     .success-site-link {
       display: block;
       margin-top: 16px;
@@ -1379,18 +1379,16 @@
             <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
           </div>
           <h2>You're all set!</h2>
-          <p id="signupSuccessAppCopy">Your booking site is now live. Download the Get Bookking app and sign in with the email and password you used to create this account.</p>
+          <p id="signupSuccessAppCopy">Your booking site is now live. Get the Get Bookking iPhone app (beta) and sign in with the email and password you used to create this account.</p>
           <div class="success-stripe">
             <p>Stripe Connect is for client deposits and Tap to Pay.</p>
             <button type="button" class="btn-stripe-setup" id="stripeSetupBtn">Set up Stripe payments →</button>
             <p class="success-stripe-status" id="stripeSetupStatus" role="status"></p>
           </div>
           <div class="success-app">
-            <!-- TestFlight while the app is in review; swap for the App Store link once approved. -->
-            <a href="https://testflight.apple.com/join/GD8AUjpS" target="_blank" rel="noopener" class="success-app-badge" data-bk-cta="signup_app_download">
-              <img src="assets/brand/app-store-badge-black.png" alt="Download on the App Store" width="135" height="45" decoding="async" />
-            </a>
-            <p class="success-app-note">Install TestFlight first, then tap Open.</p>
+            <!-- Our own button while the app is in beta; swap for the official App Store badge once approved. -->
+            <a href="https://testflight.apple.com/join/GD8AUjpS" target="_blank" rel="noopener" class="success-app-beta" data-bk-cta="signup_app_download">Get the iPhone app (beta) &rarr;</a>
+            <p class="success-app-note">It&rsquo;s on TestFlight. You&rsquo;ll install TestFlight first, then tap Join to get Get Bookking.</p>
           </div>
           <a href="billing.html" class="success-site-link" style="margin-top:12px;display:inline-block;">Manage billing →</a>
           <a href="#" class="success-site-link" id="siteLink" target="_blank">Visit your booking site &rarr;</a>

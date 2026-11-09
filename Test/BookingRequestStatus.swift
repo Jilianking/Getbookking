@@ -57,6 +57,7 @@ enum BookingRequestStatus {
         case declined: return "Declined"
         case cancelled: return "Cancelled"
         case "refund_pending": return "Refund pending"
+        case "holding_slot": return "Holding slot – waiting for payment"
         case "refunded": return "Refunded"
         case "partially_refunded": return "Partially refunded"
         default:

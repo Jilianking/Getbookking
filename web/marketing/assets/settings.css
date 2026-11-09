@@ -169,3 +169,16 @@
 @media (max-width: 560px) {
   .set-ship-row, .set-ship-row--4 { grid-template-columns: 1fr 1fr; }
 }
+.set-ai-help { font-size: 14px; margin-top: 12px; }
+.set-ai-new { margin: 14px 0; padding: 12px; border-radius: 10px; background: #f6f3ee; }
+.set-ai-new.hidden { display: none; }
+.set-ai-url { display: flex; gap: 8px; margin: 8px 0; }
+.set-ai-url input { flex: 1; min-width: 0; font-size: 13px; }
+.set-ai-warn { font-size: 13px; color: #8a3b3b; }
+.set-ai-list { margin-top: 14px; }
+.set-ai-toggle { display: flex; align-items: center; gap: 6px; font-size: 13px; margin-right: 10px; white-space: nowrap; }
+.set-ai > .set-lead { margin: 0; padding: 14px 16px; }
+.set-dep-services { margin: 4px 0 12px; display: grid; gap: 8px; }
+.set-dep-row { display: flex; align-items: center; gap: 10px; }
+.set-dep-row span { flex: 1; font-size: 14px; }
+.set-dep-row input { width: 110px; }

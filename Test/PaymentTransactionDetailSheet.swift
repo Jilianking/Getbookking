@@ -242,10 +242,64 @@ struct PaymentTransactionDetailSheet: View {
         }
     }
 
+    private var isRefundLine: Bool {
+        !transaction.isCredit && (transaction.type == "refund" || transaction.channelLabel == "Refund")
+    }
+
+    /// Refund: what the client got back, the Stripe card fee Stripe keeps, and the shop's cost.
+    @ViewBuilder
+    private var refundBreakdown: some View {
+        let refunded = transaction.grossAmount > 0 ? transaction.grossAmount : transaction.amount
+        let original = viewModel.originalPayment(for: transaction)
+        let originalLabel = original.map { o -> String in
+            if let l = o.serviceLabel, !l.isEmpty { return l }
+            return o.channelLabel
+        }
+        if let originalLabel, !originalLabel.isEmpty {
+            breakdownRow(label: "For", value: originalLabel, valueIsText: true)
+            Divider()
+        }
+        breakdownRow(label: "Client refunded", value: PaymentsViewModel.formatUSD(refunded))
+        if let original {
+            let serviceCents = Int(round((original.sourcePaymentService ?? original.amount) * 100))
+            let cardFeeCents = CardCheckoutPricing.breakdown(serviceCents: max(serviceCents, 0), channel: original.checkoutChannel).cardProcessingFeeCents
+            if cardFeeCents > 0 {
+                let cardFee = Double(cardFeeCents) / 100
+                Divider()
+                HStack {
+                    Text("Stripe card fee (not returned)")
+                        .font(.subheadline)
+                        .foregroundStyle(AppDesign.textSecondary)
+                    Spacer()
+                    Text(PaymentsViewModel.formatUSD(cardFee))
+                        .font(.subheadline)
+                        .foregroundStyle(AppDesign.textPrimary)
+                }
+                Divider()
+                HStack {
+                    Text("Your cost")
+                        .font(.subheadline.weight(.semibold))
+                    Spacer()
+                    Text(PaymentsViewModel.formatUSD(cardFee))
+                        .font(.subheadline.weight(.bold))
+                        .foregroundStyle(AppDesign.textPrimary)
+                }
+            }
+        }
+        Text(transaction.status == "pending"
+             ? "Stripe sends the refund once the payment finishes processing, usually within 2 business days. Stripe keeps its card fee on refunds. Your 1% platform fee is returned."
+             : "Stripe keeps its card fee on refunds. Your 1% platform fee is returned.")
+            .font(.caption)
+            .foregroundStyle(AppDesign.textSecondary)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+
     @ViewBuilder
     private var paymentBreakdown: some View {
         if transaction.isPayoutLine {
             payoutBreakdown
+        } else if isRefundLine {
+            refundBreakdown
         } else {
             if let serviceAmount = transaction.serviceAmount {
                 itemRow(label: "Service", name: serviceLabel, amount: serviceAmount)

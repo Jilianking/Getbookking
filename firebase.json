@@ -87,6 +87,7 @@
         { "source": "/templates", "destination": "/templates.html" },
         { "source": "/tap-to-pay", "destination": "/tap-to-pay.html" },
         { "source": "/messaging", "destination": "/messaging.html" },
+        { "source": "/ai-assistant", "destination": "/ai-assistant.html" },
         { "source": "/teams", "destination": "/teams.html" },
         { "source": "/contact", "destination": "/contact.html" },
         { "source": "/privacy", "destination": "/privacy.html" },

@@ -427,7 +427,15 @@ final class ManagerSettingsViewModel: ObservableObject {
     func reloadInstagramAfterWebIfNeeded() async {
         guard shouldReloadInstagramAfterWeb else { return }
         shouldReloadInstagramAfterWeb = false
-        await load(isDemoMode: false)
+        // The server can take a moment to save the connection, so keep showing
+        // "Connecting…" and check a few times instead of flashing "Connect again".
+        isConnectingInstagram = true
+        for attempt in 0..<6 {
+            await load(isDemoMode: false)
+            if igStatus.lowercased() != "connecting" { break }
+            if attempt < 5 { try? await Task.sleep(nanoseconds: 1_000_000_000) }
+        }
+        isConnectingInstagram = false
     }
 
     /// Opens Instagram login in Safari. `scope` is `tenant` for the business account or `member` for a teammate.
@@ -451,11 +459,16 @@ final class ManagerSettingsViewModel: ObservableObject {
             }
             shouldReloadInstagramAfterWeb = true
             igStatus = scope == "tenant" ? "connecting" : igStatus
-            await InAppSafari.openInSystemBrowser(url)
+            if await InAppSafari.openInSystemBrowser(url) == false {
+                shouldReloadInstagramAfterWeb = false
+                isConnectingInstagram = false
+                errorMessage = "Couldn’t open Instagram. Try again."
+            }
+            // Otherwise stay on "Connecting…" while Safari is open; the check on return clears it.
         } catch {
             errorMessage = FirebaseFunctionsErrorHelper.message(from: error)
+            isConnectingInstagram = false
         }
-        isConnectingInstagram = false
     }
 
     func disconnectInstagram(scope: String) async {

@@ -1284,7 +1284,15 @@
     });
     $("msgSettingsBtn").addEventListener("click", function () { settingsOpen(true); });
     window.addEventListener("focus", function () {
-      if (state.session && $("msgIgHost")) refreshInstagram();
+      if (!(state.session && $("msgIgHost"))) return;
+      // The server can take a moment to save a new connection; check again briefly.
+      var tries = 0;
+      (function check() {
+        refreshInstagram().then(function () {
+          var t = instagramTarget();
+          if (t && t.status === "connecting" && ++tries < 5) setTimeout(check, 1000);
+        });
+      })();
     });
     ["msgSettingsClose", "msgSettingsScrim"].forEach(function (x) {
       $(x).addEventListener("click", function () { settingsOpen(false); });

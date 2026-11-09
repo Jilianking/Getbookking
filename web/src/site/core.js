@@ -1626,6 +1626,7 @@ function init() {
     }
     applyPreviewThemeOverride(tenant);
     applyBranding(tenant);
+    mountPoweredByBadge();
     if (p.isPayPath) {
       document.getElementById('root').innerHTML = depositPayPageHtml(tenant);
       bindDepositPayPage(tenant);

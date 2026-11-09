@@ -297,9 +297,8 @@
   }
 
   /* On iPhone, the Website builder button offers the iPhone app (the desktop editor is cramped on a phone). */
-  // Swap for the App Store link once the app is approved.
-  var IPHONE_APP_URL = "https://testflight.apple.com/join/GD8AUjpS";
-  var IPHONE_APP_LABEL = "Open in TestFlight";
+  var IPHONE_APP_URL = "https://apps.apple.com/us/app/id6785088401";
+  var IPHONE_APP_LABEL = "Open in the App Store";
 
   function isIPhone() {
     return /iPhone|iPod/.test(navigator.userAgent || "");

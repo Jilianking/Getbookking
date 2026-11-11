@@ -18,6 +18,7 @@ const functions = require("firebase-functions");
 const { defineString } = require("firebase-functions/params");
 const admin = require("firebase-admin");
 const crypto = require("crypto");
+const oauth = require("./mcpOAuth");
 
 const mcpAllowedEmails = defineString("MCP_ALLOWED_EMAILS", { default: "" });
 
@@ -122,6 +123,7 @@ function textResult(obj) {
 const TOOLS = [
   {
     name: "get_schedule",
+    title: "Get schedule",
     description: "Booked appointments for a day or a range of days (shop's time zone). Defaults to today.",
     inputSchema: {
       type: "object",
@@ -130,38 +132,42 @@ const TOOLS = [
         days: { type: "integer", minimum: 1, maximum: 14, description: "How many days to include (1–14). Default 1." },
       },
     },
-    annotations: { readOnlyHint: true },
+    annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
   },
   {
     name: "list_booking_requests",
+    title: "List booking requests",
     description: "Booking requests waiting for a response (new or pending), newest first.",
     inputSchema: {
       type: "object",
       properties: { limit: { type: "integer", minimum: 1, maximum: 25, description: "Max results (default 10)." } },
     },
-    annotations: { readOnlyHint: true },
+    annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
   },
   {
     name: "find_client",
+    title: "Find a client",
     description: "Look up clients by name, phone, or email. Returns contact info, VIP status, visit count, and recent notes.",
     inputSchema: {
       type: "object",
       properties: { query: { type: "string", description: "Part of a name, phone number, or email." } },
       required: ["query"],
     },
-    annotations: { readOnlyHint: true },
+    annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
   },
   {
     name: "payments_summary",
+    title: "Payments summary",
     description: "Card payments taken through Stripe for today, this week, or this month: total, count, and recent payments.",
     inputSchema: {
       type: "object",
       properties: { period: { type: "string", enum: ["today", "week", "month"], description: "Default week." } },
     },
-    annotations: { readOnlyHint: true },
+    annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
   },
   {
     name: "recent_messages",
+    title: "Recent messages",
     description: "Recent client text conversations, newest first, with whether each has unread messages.",
     inputSchema: {
       type: "object",
@@ -170,13 +176,14 @@ const TOOLS = [
         unread_only: { type: "boolean", description: "Only conversations with unread messages." },
       },
     },
-    annotations: { readOnlyHint: true },
+    annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
   },
   {
     name: "get_website_info",
+    title: "Website info",
     description: "The shop's website: address, template, business info, hours, and services with prices.",
     inputSchema: { type: "object", properties: {} },
-    annotations: { readOnlyHint: true },
+    annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
   },
   {
     name: "confirm_booking_request",
@@ -596,14 +603,19 @@ function rawKeyFrom(req) {
 /** Returns { uid, tenantId, keyId } or throws { status, message }. Also enforces rate limits. */
 async function authenticate(req) {
   const raw = rawKeyFrom(req);
-  if (!raw || !raw.startsWith(KEY_PREFIX)) throw { status: 401, message: "Missing or invalid Get Bookking key." };
-  const keyId = hashKey(raw);
+  if (!raw || !raw.startsWith(KEY_PREFIX)) throw { status: 401, message: "Sign in to Get Bookking to connect.", oauth: true };
+  // "Sign in with Get Bookking" tokens point at their connection; link keys are the connection.
+  let keyId = hashKey(raw);
+  if (raw.startsWith(oauth.ACCESS_PREFIX)) {
+    const linkKey = await db().collection("mcpKeys").doc(keyId).get();
+    if (!linkKey.exists) keyId = await oauth.grantForAccessToken(raw);
+  }
   const ref = db().collection("mcpKeys").doc(keyId);
   return db().runTransaction(async (tx) => {
     const snap = await tx.get(ref);
-    if (!snap.exists) throw { status: 401, message: "This key isn't valid. Create a new one in Get Bookking (Settings → AI assistant)." };
+    if (!snap.exists) throw { status: 401, message: "This connection isn't valid. Reconnect Get Bookking.", oauth: "invalid_token" };
     const k = snap.data() || {};
-    if (k.revokedAt) throw { status: 401, message: "This key was revoked." };
+    if (k.revokedAt) throw { status: 401, message: "This connection was turned off in Get Bookking. Reconnect to use it again.", oauth: "invalid_token" };
     const now = new Date();
     const minute = now.toISOString().slice(0, 16);
     const day = now.toISOString().slice(0, 10);
@@ -684,10 +696,13 @@ function registerMcpFunctions(exportsObj, depsIn) {
     .runWith({ secrets: [deps.stripeSecretKey, deps.twilioAccountSid, deps.twilioAuthToken].filter(Boolean), maxInstances: 3, memory: "256MB", timeoutSeconds: 60 })
     .https.onRequest(async (req, res) => {
       res.set("Cache-Control", "no-store");
+      // Sign-in pages for ChatGPT, Claude, etc. (www.getbookking.com/.well-known/* and /oauth/*).
+      if (await oauth.handleOAuthHttp(req, res)) return;
       if (req.method === "OPTIONS") {
         res.set("Access-Control-Allow-Origin", "*");
         res.set("Access-Control-Allow-Headers", "authorization, content-type, mcp-protocol-version, mcp-session-id");
         res.set("Access-Control-Allow-Methods", "POST, OPTIONS");
+        res.set("Access-Control-Expose-Headers", "www-authenticate, mcp-session-id");
         return res.status(204).send("");
       }
       if (req.method !== "POST") {
@@ -699,6 +714,11 @@ function registerMcpFunctions(exportsObj, depsIn) {
         auth = await authenticate(req);
       } catch (e) {
         const status = e && e.status ? e.status : 500;
+        // Tells the AI app where to sign in, so it can show "Connect".
+        if (status === 401) {
+          res.set("Access-Control-Allow-Origin", "*");
+          res.set("WWW-Authenticate", oauth.wwwAuthenticate(typeof (e && e.oauth) === "string" ? e.oauth : null));
+        }
         return res.status(status).json({ jsonrpc: "2.0", id: null, error: { code: -32001, message: (e && e.message) || "Unauthorized" } });
       }
       const body = req.body;
@@ -728,6 +748,8 @@ function registerMcpFunctions(exportsObj, depsIn) {
     const allowed = tenant.mcpEnabled === true || allowListed(email);
     return { uid, tenantId, tenant, allowed };
   }
+
+  oauth.registerMcpOAuthCallables(exportsObj, { ownerContext });
 
   exportsObj.createMcpKey = functions.https.onCall(async (data, context) => {
     const o = await ownerContext(context);
@@ -762,11 +784,12 @@ function registerMcpFunctions(exportsObj, depsIn) {
           lastUsedAt: toDate(k.lastUsedAt) ? toDate(k.lastUsedAt).toISOString() : null,
           revoked: !!k.revokedAt,
           actions: k.actions !== false,
+          kind: k.kind === "oauth" ? "signin" : "link",
         };
       })
       .filter((k) => !k.revoked)
       .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
-    return { allowed: o.allowed, keys, serverUrl: connectorBaseUrl() };
+    return { allowed: o.allowed, keys, serverUrl: connectorBaseUrl(), connectUrl: oauth.resourceUrl() };
   });
 
   exportsObj.setMcpKeyActions = functions.https.onCall(async (data, context) => {

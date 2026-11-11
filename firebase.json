@@ -78,6 +78,14 @@
         { "source": "/app/website", "destination": "/design", "type": 302 }
       ],
       "rewrites": [
+        { "source": "/mcp", "function": "mcpServer" },
+        { "source": "/oauth/**", "function": "mcpServer" },
+        { "source": "/.well-known/oauth-protected-resource", "function": "mcpServer" },
+        { "source": "/.well-known/oauth-protected-resource/**", "function": "mcpServer" },
+        { "source": "/.well-known/oauth-authorization-server", "function": "mcpServer" },
+        { "source": "/.well-known/oauth-authorization-server/**", "function": "mcpServer" },
+        { "source": "/.well-known/openid-configuration", "function": "mcpServer" },
+        { "source": "/ai-connect", "destination": "/ai-connect.html" },
         { "source": "/fishing-charter-software", "destination": "/fishing-charter-software.html" },
         { "source": "/personal-trainer-software", "destination": "/personal-trainer-software.html" },
         { "source": "/hair-salon-software", "destination": "/hair-salon-software.html" },

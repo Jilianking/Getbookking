@@ -14,6 +14,7 @@ struct SettingsView: View {
     @StateObject private var viewModel = SettingsViewModel()
     @StateObject private var teamPolicyViewModel = ManagerSettingsViewModel()
     @StateObject private var paymentsViewModel = PaymentsViewModel()
+    @StateObject private var aiViewModel = AIAssistantViewModel()
     @State private var showingLogoutAlert = false
     @State private var showingDeleteAccountSheet = false
     @State private var settingsAlertMessage: String?
@@ -30,6 +31,9 @@ struct SettingsView: View {
                     if !authViewModel.isDemoMode && viewModel.hasProfile {
                         businessSection
                         paymentsSection
+                        if viewModel.isTenantOwner && aiViewModel.allowed == true {
+                            aiSection
+                        }
                     }
 
                     accountSection
@@ -94,6 +98,9 @@ struct SettingsView: View {
                     sessionStore: sessionStore
                 )
                 await paymentsViewModel.prewarmConnectLinkIfNeeded(isDemoMode: authViewModel.isDemoMode)
+                if !authViewModel.isDemoMode && viewModel.isTenantOwner {
+                    await aiViewModel.checkAccess()
+                }
             }
             .refreshable {
                 await viewModel.loadData(isDemoMode: authViewModel.isDemoMode)
@@ -106,6 +113,9 @@ struct SettingsView: View {
                     sessionStore: sessionStore
                 )
                 await authViewModel.refreshTeamAccess()
+                if !authViewModel.isDemoMode && viewModel.isTenantOwner {
+                    await aiViewModel.load(quiet: true)
+                }
             }
             .sheet(isPresented: $showingDeleteAccountSheet) {
                 DeleteAccountSettingsSheet(viewModel: viewModel)
@@ -342,6 +352,27 @@ struct SettingsView: View {
                         title: "Payment settings",
                         status: status.label,
                         statusColor: status.color
+                    )
+                }
+                .buttonStyle(.plain)
+            }
+            .appCard()
+        }
+    }
+
+    /// AI assistant (early access only, like the website).
+    private var aiSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            AppSectionHeader(title: "AI assistant")
+            VStack(spacing: 0) {
+                NavigationLink {
+                    AIAssistantSettingsView(viewModel: aiViewModel)
+                } label: {
+                    AppSettingsRow(
+                        icon: "sparkles",
+                        iconColor: AppDesign.brandWarm,
+                        title: "Connect an AI assistant",
+                        value: aiViewModel.connections.isEmpty ? nil : "\(aiViewModel.connections.count) connected"
                     )
                 }
                 .buttonStyle(.plain)

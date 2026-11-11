@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="robots" content="noindex" />
+  <title>Connect to Get Bookking</title>
+  <link rel="icon" type="image/png" sizes="32x32" href="assets/brand/favicon-32.png?v=13" />
+  <link rel="apple-touch-icon" sizes="256x256" href="assets/brand/favicon-256.png?v=13" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --brand-dark: #2C2018;
+      --brand-warm: #8B6F47;
+      --brand-cream: #F5EDD8;
+      --brand-offwhite: #FDFAF6;
+      --text-primary: #1A1410;
+      --text-secondary: #6B5E4A;
+      --border: #E8E0D4;
+      --error: #b42318;
+    }
+    body {
+      font-family: 'DM Sans', sans-serif;
+      color: var(--text-primary);
+      background: var(--brand-offwhite);
+      font-size: 16px;
+      line-height: 1.6;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 32px 16px;
+      -webkit-font-smoothing: antialiased;
+    }
+    .card {
+      width: 100%;
+      max-width: 440px;
+      background: #fff;
+      border-radius: 16px;
+      border: 1px solid var(--border);
+      padding: 36px 32px;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.04);
+    }
+    .logos { display: flex; align-items: center; gap: 10px; margin-bottom: 22px; }
+    .logos img { width: 44px; height: 44px; border-radius: 10px; }
+    .logos .app-badge {
+      width: 44px; height: 44px; border-radius: 10px; background: var(--brand-cream);
+      display: flex; align-items: center; justify-content: center; font-weight: 500; color: var(--brand-dark);
+    }
+    .logos .dots { color: var(--text-secondary); letter-spacing: 2px; }
+    h1 { font-family: 'Instrument Serif', serif; font-size: 28px; font-weight: 400; line-height: 1.2; margin-bottom: 8px; }
+    .sub { font-size: 14px; color: var(--text-secondary); margin-bottom: 22px; }
+    .sub strong { color: var(--text-primary); font-weight: 500; }
+    .list { list-style: none; border-top: 1px solid var(--border); margin-bottom: 18px; }
+    .list li { font-size: 14px; padding: 10px 0; border-bottom: 1px solid var(--border); display: flex; gap: 10px; }
+    .list li span:first-child { width: 18px; flex: none; text-align: center; }
+    .toggle { display: flex; gap: 12px; align-items: flex-start; background: var(--brand-offwhite); border: 1px solid var(--border); border-radius: 12px; padding: 14px; margin-bottom: 20px; cursor: pointer; }
+    .toggle input { margin-top: 4px; width: 18px; height: 18px; accent-color: var(--brand-dark); flex: none; }
+    .toggle b { font-weight: 500; display: block; font-size: 15px; }
+    .toggle small { color: var(--text-secondary); font-size: 13px; }
+    .btn { width: 100%; padding: 14px 20px; border-radius: 10px; font-size: 15px; font-family: inherit; font-weight: 500; cursor: pointer; }
+    .btn-primary { background: var(--brand-dark); color: var(--brand-cream); border: none; }
+    .btn-primary:disabled { opacity: 0.55; cursor: not-allowed; }
+    .btn-secondary { background: transparent; color: var(--text-primary); border: 1px solid var(--border); margin-top: 10px; }
+    .fine { font-size: 12px; color: var(--text-secondary); margin-top: 18px; text-align: center; }
+    .fine a { color: var(--brand-warm); }
+    .error { color: var(--error); font-size: 14px; margin-top: 12px; }
+    .hidden { display: none; }
+    .account { font-size: 13px; color: var(--text-secondary); margin-bottom: 18px; }
+    .account button { background: none; border: none; color: var(--brand-warm); font: inherit; cursor: pointer; text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <main class="card">
+    <div class="logos">
+      <img src="assets/brand/logo-dark-128.png?v=12" alt="Get Bookking" />
+      <span class="dots">···</span>
+      <div class="app-badge" id="appBadge" aria-hidden="true">AI</div>
+    </div>
+
+    <div id="loading"><p class="sub">Loading…</p></div>
+
+    <div id="ask" class="hidden">
+      <h1>Allow <span id="appName">this app</span> to access <span id="shopName">your shop</span>?</h1>
+      <p class="sub" id="appHostLine"></p>
+      <p class="account">Signed in as <strong id="email"></strong> · <button type="button" id="switchBtn">Not you?</button></p>
+      <ul class="list">
+        <li><span>📅</span><span>See your schedule and booking requests</span></li>
+        <li><span>👤</span><span>Look up clients</span></li>
+        <li><span>💳</span><span>See payments and your website info</span></li>
+        <li><span>💬</span><span>Read recent client texts</span></li>
+      </ul>
+      <label class="toggle">
+        <input type="checkbox" id="actions" />
+        <span>
+          <b>Can take actions</b>
+          <small>Confirm bookings, text clients, and send payment links. It always shows you a preview and waits for your yes first.</small>
+        </span>
+      </label>
+      <button type="button" class="btn btn-primary" id="allowBtn">Allow</button>
+      <button type="button" class="btn btn-secondary" id="denyBtn">Cancel</button>
+      <p class="fine">You can turn this off any time in Get Bookking under Settings → AI assistant. <a href="/privacy" target="_blank" rel="noopener">Privacy</a></p>
+    </div>
+
+    <div id="notAllowed" class="hidden">
+      <h1>Not available yet</h1>
+      <p class="sub">The AI assistant is in early access and isn't on for your shop yet.</p>
+      <button type="button" class="btn btn-secondary" id="backBtn">Go back</button>
+    </div>
+
+    <div id="problem" class="hidden">
+      <h1>Something's not right</h1>
+      <p class="sub" id="problemText"></p>
+    </div>
+
+    <p class="error hidden" id="errorMsg"></p>
+  </main>
+
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-functions-compat.js"></script>
+  <script src="js/firebase-config.js"></script>
+  <script>
+    (function () {
+      firebase.initializeApp(firebaseConfig);
+      var auth = firebase.auth();
+      var fns = firebase.app().functions("us-central1");
+      if (location.hostname === "localhost" || location.hostname === "127.0.0.1") {
+        fns.useEmulator("127.0.0.1", 5001);
+        auth.useEmulator("http://127.0.0.1:9099");
+      }
+      var reqId = new URLSearchParams(location.search).get("req") || "";
+      var $ = function (id) { return document.getElementById(id); };
+      function show(id) {
+        ["loading", "ask", "notAllowed", "problem"].forEach(function (x) { $(x).classList.toggle("hidden", x !== id); });
+      }
+      function problem(msg) { $("problemText").textContent = msg; show("problem"); }
+      function error(msg) { $("errorMsg").textContent = msg; $("errorMsg").classList.remove("hidden"); }
+      function busy(on) { $("allowBtn").disabled = on; $("denyBtn").disabled = on; }
+
+      if (!reqId) return problem("This page needs to be opened from ChatGPT, Claude, or another AI app. Go back and tap Connect.");
+
+      function goLogin() {
+        location.href = "login.html?next=" + encodeURIComponent("ai-connect.html?req=" + reqId);
+      }
+
+      function decide(allow) {
+        busy(true);
+        $("errorMsg").classList.add("hidden");
+        fns.httpsCallable("mcpOAuthDecide")({ req: reqId, allow: allow, actions: $("actions").checked })
+          .then(function (r) { location.replace(r.data.redirect); })
+          .catch(function (e) { busy(false); error((e && e.message) || "That didn't work. Try again."); });
+      }
+
+      auth.onAuthStateChanged(function (user) {
+        if (!user) return goLogin();
+        $("email").textContent = user.email || "";
+        fns.httpsCallable("mcpOAuthRequestInfo")({ req: reqId })
+          .then(function (r) {
+            var d = r.data || {};
+            $("appName").textContent = d.appName || "this app";
+            $("shopName").textContent = d.shopName || "your shop";
+            $("appBadge").textContent = String(d.appName || "AI").trim().charAt(0).toUpperCase() || "AI";
+            $("appHostLine").textContent = d.appHost ? "You'll go back to " + d.appHost + " when you're done." : "";
+            show(d.allowed ? "ask" : "notAllowed");
+          })
+          .catch(function (e) {
+            var code = e && e.code;
+            if (code === "functions/permission-denied") return problem("Only the shop owner can connect an AI assistant. Sign in with the owner's account.");
+            problem((e && e.message) || "Something went wrong. Go back to your AI app and tap Connect again.");
+          });
+      });
+
+      $("allowBtn").addEventListener("click", function () { decide(true); });
+      $("denyBtn").addEventListener("click", function () { decide(false); });
+      $("backBtn").addEventListener("click", function () { decide(false); });
+      $("switchBtn").addEventListener("click", function () { auth.signOut().then(goLogin); });
+    })();
+  </script>
+</body>
+</html>

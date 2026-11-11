@@ -1,7 +1,7 @@
 /**
  * "Sign in with Get Bookking" for ChatGPT, Claude and other AI apps (OAuth 2.1 for MCP).
  *
- * People connect at https://www.getbookking.com/mcp. The app finds these pages on its own:
+ * People connect at https://getbookking.com/mcp. The app finds these pages on its own:
  *   /.well-known/oauth-protected-resource      which sign-in server to use
  *   /.well-known/oauth-authorization-server    where to sign in and get tokens
  *   /oauth/register                            apps register themselves (dynamic client registration)
@@ -20,7 +20,7 @@ const crypto = require("crypto");
 const dns = require("dns").promises;
 const net = require("net");
 
-const publicOrigin = defineString("MCP_PUBLIC_ORIGIN", { default: "https://www.getbookking.com" });
+const publicOrigin = defineString("MCP_PUBLIC_ORIGIN", { default: "https://getbookking.com" });
 
 const ACCESS_PREFIX = "gbk_at_";
 const REFRESH_PREFIX = "gbk_rt_";
@@ -41,7 +41,7 @@ function token(prefix) {
   return prefix + crypto.randomBytes(32).toString("base64url");
 }
 function origin() {
-  return String(publicOrigin.value() || "https://www.getbookking.com").replace(/\/+$/, "");
+  return String(publicOrigin.value() || "https://getbookking.com").replace(/\/+$/, "");
 }
 function resourceUrl() {
   return origin() + "/mcp";

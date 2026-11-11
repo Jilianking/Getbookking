@@ -696,7 +696,7 @@ function registerMcpFunctions(exportsObj, depsIn) {
     .runWith({ secrets: [deps.stripeSecretKey, deps.twilioAccountSid, deps.twilioAuthToken].filter(Boolean), maxInstances: 3, memory: "256MB", timeoutSeconds: 60 })
     .https.onRequest(async (req, res) => {
       res.set("Cache-Control", "no-store");
-      // Sign-in pages for ChatGPT, Claude, etc. (www.getbookking.com/.well-known/* and /oauth/*).
+      // Sign-in pages for ChatGPT, Claude, etc. (getbookking.com/.well-known/* and /oauth/*).
       if (await oauth.handleOAuthHttp(req, res)) return;
       if (req.method === "OPTIONS") {
         res.set("Access-Control-Allow-Origin", "*");

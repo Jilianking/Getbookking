@@ -3,7 +3,7 @@
  * Plays the part of ChatGPT/Claude: discover → register → authorize → Allow → token → use a tool
  * → renew → reuse detection → revoke. Run: node scripts/test-mcp-oauth.js
  */
-process.env.MCP_PUBLIC_ORIGIN = "https://www.getbookking.com";
+process.env.MCP_PUBLIC_ORIGIN = "https://getbookking.com";
 const assert = require("assert");
 const crypto = require("crypto");
 const mcp = require("../mcp");
@@ -95,11 +95,11 @@ function call(handler, { method = "GET", path = "/", query = {}, body, headers =
 
   // 1. Not signed in → 401 with the sign-in pointer.
   let r = await call(server, { method: "POST", path: "/mcp", body: { jsonrpc: "2.0", id: 1, method: "tools/list" } });
-  ok(r.status === 401 && /resource_metadata="https:\/\/www\.getbookking\.com\/\.well-known\/oauth-protected-resource"/.test(r.headers["www-authenticate"]), "unsigned request gets 401 + WWW-Authenticate");
+  ok(r.status === 401 && /resource_metadata="https:\/\/getbookking\.com\/\.well-known\/oauth-protected-resource"/.test(r.headers["www-authenticate"]), "unsigned request gets 401 + WWW-Authenticate");
 
   // 2. Discovery.
   r = await call(server, { path: "/.well-known/oauth-protected-resource/mcp" });
-  ok(r.body.resource === "https://www.getbookking.com/mcp" && r.body.authorization_servers[0] === "https://www.getbookking.com", "protected resource metadata");
+  ok(r.body.resource === "https://getbookking.com/mcp" && r.body.authorization_servers[0] === "https://getbookking.com", "protected resource metadata");
   r = await call(server, { path: "/.well-known/oauth-authorization-server" });
   ok(r.body.code_challenge_methods_supported.includes("S256") && r.body.registration_endpoint.endsWith("/oauth/register"), "authorization server metadata");
 
@@ -114,13 +114,13 @@ function call(handler, { method = "GET", path = "/", query = {}, body, headers =
   // 4. Authorize → our approve page.
   const verifier = crypto.randomBytes(32).toString("base64url");
   const challenge = crypto.createHash("sha256").update(verifier).digest("base64url");
-  const authQ = { response_type: "code", client_id: clientId, redirect_uri: redirect, code_challenge: challenge, code_challenge_method: "S256", state: "xyz", resource: "https://www.getbookking.com/mcp", scope: "shop" };
+  const authQ = { response_type: "code", client_id: clientId, redirect_uri: redirect, code_challenge: challenge, code_challenge_method: "S256", state: "xyz", resource: "https://getbookking.com/mcp", scope: "shop" };
   r = await call(server, { path: "/oauth/authorize", query: { ...authQ, redirect_uri: "https://evil.example/cb" } });
   ok(r.status === 400 && !r.headers.location, "wrong redirect_uri never redirects");
   r = await call(server, { path: "/oauth/authorize", query: { ...authQ, code_challenge_method: "plain" } });
   ok(r.status === 302 && /error=invalid_request/.test(r.headers.location), "PKCE S256 required");
   r = await call(server, { path: "/oauth/authorize", query: authQ });
-  ok(r.status === 302 && r.headers.location.startsWith("https://www.getbookking.com/ai-connect?req="), "authorize sends owner to /ai-connect");
+  ok(r.status === 302 && r.headers.location.startsWith("https://getbookking.com/ai-connect?req="), "authorize sends owner to /ai-connect");
   const reqId = new URL(r.headers.location).searchParams.get("req");
 
   // 5. Approve page.
@@ -128,13 +128,13 @@ function call(handler, { method = "GET", path = "/", query = {}, body, headers =
   ok(info.appName === "ChatGPT" && info.shopName === "Harbor Charters" && info.allowed === true, "approve page shows app + shop");
   const decided = await exportsObj.mcpOAuthDecide.run({ req: reqId, allow: true, actions: false }, ownerCtx);
   const back = new URL(decided.redirect);
-  ok(back.origin + back.pathname === redirect && back.searchParams.get("state") === "xyz" && back.searchParams.get("iss") === "https://www.getbookking.com", "Allow returns code + state + iss");
+  ok(back.origin + back.pathname === redirect && back.searchParams.get("state") === "xyz" && back.searchParams.get("iss") === "https://getbookking.com", "Allow returns code + state + iss");
   await assert.rejects(exportsObj.mcpOAuthDecide.run({ req: reqId, allow: true }, ownerCtx));
   ok(true, "approve link can't be used twice");
   const code = back.searchParams.get("code");
 
   // 6. Token exchange.
-  const tokenBody = { grant_type: "authorization_code", code, redirect_uri: redirect, client_id: clientId, resource: "https://www.getbookking.com/mcp" };
+  const tokenBody = { grant_type: "authorization_code", code, redirect_uri: redirect, client_id: clientId, resource: "https://getbookking.com/mcp" };
   r = await call(server, { method: "POST", path: "/oauth/token", body: { ...tokenBody, code_verifier: "wrong" } });
   ok(r.status === 400, "wrong PKCE verifier rejected");
   // The code was burned by the failed attempt; run a fresh authorize for the real exchange.

@@ -187,8 +187,13 @@ function call(handler, { method = "GET", path = "/", query = {}, body, headers =
   db.store.set("tenants/shop1", { ownerUid: "owner1", businessName: "Harbor Charters", mcpEnabled: false });
   r = await call(server, { path: "/oauth/authorize", query: authQ });
   const req5 = new URL(r.headers.location).searchParams.get("req");
-  await assert.rejects(exportsObj.mcpOAuthDecide.run({ req: req5, allow: true }, ownerCtx), /early access/);
-  ok(true, "shops not on early access can't approve");
+  await assert.rejects(exportsObj.mcpOAuthDecide.run({ req: req5, allow: true }, ownerCtx), /turned off/);
+  ok(true, "a shop switched off (mcpEnabled false) can't approve");
+  db.store.set("tenants/shop1", { ownerUid: "owner1", businessName: "Harbor Charters" });
+  r = await call(server, { path: "/oauth/authorize", query: authQ });
+  const req6 = new URL(r.headers.location).searchParams.get("req");
+  const open = await exportsObj.mcpOAuthDecide.run({ req: req6, allow: true }, ownerCtx);
+  ok(/code=/.test(open.redirect), "any shop owner can approve (open to all)");
 
   // 11. Link keys still work.
   db.store.set("tenants/shop1", { ownerUid: "owner1", businessName: "Harbor Charters", mcpEnabled: true });

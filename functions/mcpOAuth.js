@@ -444,7 +444,7 @@ function registerMcpOAuthCallables(exportsObj, { ownerContext }) {
       await ref.set({ usedAt: new Date(), decision: "denied" }, { merge: true });
       return { redirect: returnUrl(r, { error: "access_denied" }) };
     }
-    if (!o.allowed) throw new functions.https.HttpsError("permission-denied", "The AI assistant is in early access and isn't on for this shop yet.");
+    if (!o.allowed) throw new functions.https.HttpsError("permission-denied", "The AI assistant is turned off for this shop. Contact Get Bookking to turn it on.");
 
     // One connection per app per owner: connecting again replaces the old one.
     const old = await db().collection("mcpKeys").where("uid", "==", o.uid).where("clientId", "==", r.clientId).get();

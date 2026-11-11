@@ -91,34 +91,30 @@
 
   <main class="ai">
     <section class="ai-hero">
-      <p class="ai-eyebrow">Early access</p>
+      <p class="ai-eyebrow">Works with Claude and ChatGPT</p>
       <h1>Ask your shop anything.</h1>
       <p class="ai-lead">Connect Claude or ChatGPT to Get Bookking and ask about your day in plain English. “Who’s on my schedule tomorrow?” “How much did I take in this week?” “Did Maria text me back?”</p>
     </section>
 
     <section class="ai-block">
       <h2>How to connect</h2>
-      <ol class="ai-steps">
-        <li><strong>Create a connection link.</strong> In Get Bookking on the web, go to <a href="/settings">Settings</a> → <em>Connect an AI assistant</em>. Give it a name and tap <em>Create connection link</em>. Copy the link. It’s shown only once.</li>
-        <li><strong>Add it to your assistant</strong>, using the steps below for Claude or ChatGPT.</li>
-      </ol>
+      <p>You need a Get Bookking account (shop owner) and a Claude or ChatGPT account. It takes about a minute.</p>
 
       <h3>Claude</h3>
       <ol class="ai-steps">
-        <li>On claude.ai or the Claude desktop app, open <em>Settings</em> → <em>Connectors</em> → <em>Add custom connector</em>.</li>
-        <li>Name it “Get Bookking”, paste your link, and tap <em>Add</em>.</li>
-        <li>Start a new chat, turn on Get Bookking in the tools menu, and ask a question.</li>
+        <li>In Claude (web, desktop, or phone), open <em>Settings</em> → <em>Connectors</em> and search for <strong>Get Bookking</strong>. Not listed yet? Tap <em>Add custom connector</em>, name it “Get Bookking”, and enter <code>https://getbookking.com/mcp</code>.</li>
+        <li>Tap <em>Connect</em>. A Get Bookking page opens. Sign in with your Get Bookking email and password.</li>
+        <li>Choose whether Claude can take actions, then tap <em>Allow</em>.</li>
+        <li>Start a new chat, make sure Get Bookking is on in the tools menu, and ask a question.</li>
       </ol>
-      <p class="ai-note">Using Claude Code? Run <code>claude mcp add --transport http getbookking YOUR_LINK</code>.</p>
 
       <h3>ChatGPT</h3>
       <ol class="ai-steps">
-        <li>On chatgpt.com (web, not the phone app), open <em>Plugins</em>, tap <em>+</em>, then <em>Add custom MCP server</em>.</li>
-        <li>Name it “Get Bookking” and paste your link as the server URL. Set <em>Authentication</em> to <em>No authentication</em>. Your link already includes your key.</li>
-        <li>Check <em>I understand and want to continue</em> and create it. ChatGPT shows a warning because custom servers aren’t reviewed by OpenAI. That’s expected.</li>
-        <li>Start a new chat, type <strong>@</strong>, pick Get Bookking, and ask a question.</li>
+        <li>In ChatGPT, open <em>Apps</em> and search for <strong>Get Bookking</strong>. Not listed yet? Turn on <em>Developer mode</em> in Settings, create an app, and enter <code>https://getbookking.com/mcp</code> as the server URL.</li>
+        <li>Tap <em>Connect</em>, sign in with your Get Bookking email and password, and tap <em>Allow</em>.</li>
+        <li>Start a new chat, pick Get Bookking, and ask a question.</li>
       </ol>
-      <p class="ai-note">Custom servers in ChatGPT need a paid plan, and some accounts must turn on <em>Developer mode</em> first under Settings. ChatGPT’s menus change often. If yours look different, see OpenAI’s help article on connecting custom MCP servers.</p>
+      <p class="ai-note">ChatGPT’s and Claude’s menus change often. If yours look different, look for “Connectors” or “Apps” in Settings.</p>
     </section>
 
     <section class="ai-block">
@@ -141,21 +137,21 @@
       <p><strong>Read:</strong> your schedule, booking requests, clients and notes, payments, messages, and your website’s services.</p>
       <p><strong>Take actions:</strong> confirm a booking request, text a client a deposit or payment link, and text a client.</p>
       <p><strong>You always approve first.</strong> Before anything is sent or changed, the assistant shows you exactly what it will do, like “Text Maria (555-0142): ‘Running 10 min late!’”, and waits for your yes. Texts and links go out from your shop’s number and show up in Messages like any other.</p>
-      <p>It can’t cancel, refund, or charge a saved card. Want reading only? Turn off <em>Can take actions</em> for that connection in Settings.</p>
+      <p>It can’t cancel, refund, or charge a saved card. Want reading only? Leave <em>Can take actions</em> off when you tap Allow, or turn it off later in Settings → AI assistant.</p>
     </section>
 
     <section class="ai-block">
       <h2>Keeping it safe</h2>
       <ul class="ai-list">
-        <li>Your link works like a password. Don’t share it or post it anywhere.</li>
-        <li>Revoke a link anytime in Settings and it stops working right away.</li>
-        <li>Only the shop owner can create links.</li>
-        <li>What you ask, and what Claude reads, is handled by the AI provider you connect (Anthropic for Claude, OpenAI for ChatGPT) under their own privacy terms.</li>
+        <li>You sign in on getbookking.com. Claude and ChatGPT never see your Get Bookking password.</li>
+        <li>See and turn off connected apps anytime in Settings → AI assistant. They stop working right away.</li>
+        <li>Only the shop owner can connect an AI assistant.</li>
+        <li>What you ask, and what the assistant reads, is handled by the AI provider you connect (Anthropic for Claude, OpenAI for ChatGPT) under their own privacy terms.</li>
       </ul>
     </section>
 
     <section class="ai-block ai-cta">
-      <p>The AI assistant is in early access. Want it turned on for your shop? <a href="/contact">Get in touch</a>.</p>
+      <p>Questions or trouble connecting? <a href="/contact">Get in touch</a>.</p>
     </section>
   </main>
 

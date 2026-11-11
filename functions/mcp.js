@@ -9,7 +9,8 @@
  *   - or the base URL plus header:  Authorization: Bearer <key>
  *
  * Keys are created in the web app (Settings → AI assistant). Only a SHA-256 hash is stored
- * (collection mcpKeys/{hash}). While in early access, only owners on the allow-list can create keys:
+ * (collection mcpKeys/{hash}). Open to every shop owner (MCP_OPEN_TO_ALL, default "true"). With it set to "false",
+ * only owners on the allow-list can connect:
  * MCP_ALLOWED_EMAILS (comma-separated) in functions/.env, or tenants/{id}.mcpEnabled == true.
  *
  * Every tool only reads the key owner's own shop, and every call is logged to tenants/{id}/mcpLog.
@@ -21,6 +22,8 @@ const crypto = require("crypto");
 const oauth = require("./mcpOAuth");
 
 const mcpAllowedEmails = defineString("MCP_ALLOWED_EMAILS", { default: "" });
+// Every shop owner can connect. Set to "false" in functions/.env to go back to early access only.
+const mcpOpenToAll = defineString("MCP_OPEN_TO_ALL", { default: "true" });
 
 const SERVER_INFO = { name: "get-bookking", version: "1.0.0" };
 const SUPPORTED_VERSIONS = ["2025-06-18", "2025-03-26", "2024-11-05"];
@@ -745,7 +748,9 @@ function registerMcpFunctions(exportsObj, depsIn) {
     const tenant = (await db().collection("tenants").doc(tenantId).get()).data() || {};
     if (String(tenant.ownerUid || "") !== uid) throw new functions.https.HttpsError("permission-denied", "Only the shop owner can manage AI assistant keys.");
     const email = context.auth.token.email || user.email || "";
-    const allowed = tenant.mcpEnabled === true || allowListed(email);
+    // A single shop can still be switched off with tenants/{id}.mcpEnabled == false.
+    const open = String(mcpOpenToAll.value() || "true").toLowerCase() !== "false";
+    const allowed = tenant.mcpEnabled !== false && (open || tenant.mcpEnabled === true || allowListed(email));
     return { uid, tenantId, tenant, allowed };
   }
 
@@ -753,7 +758,7 @@ function registerMcpFunctions(exportsObj, depsIn) {
 
   exportsObj.createMcpKey = functions.https.onCall(async (data, context) => {
     const o = await ownerContext(context);
-    if (!o.allowed) throw new functions.https.HttpsError("permission-denied", "The AI assistant is in early access and isn't on for this shop yet.");
+    if (!o.allowed) throw new functions.https.HttpsError("permission-denied", "The AI assistant is turned off for this shop. Contact Get Bookking to turn it on.");
     const active = await db().collection("mcpKeys").where("uid", "==", o.uid).where("revokedAt", "==", null).get();
     if (active.size >= 5) throw new functions.https.HttpsError("resource-exhausted", "You have 5 active keys. Revoke one first.");
     const raw = newRawKey();

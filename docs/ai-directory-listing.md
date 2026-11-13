@@ -58,9 +58,9 @@ ChatGPT: platform.openai.com/plugins → Upload new or existing plugin.
 
 1. **Today's schedule.** Prompt: "What's on my schedule today?" Tools: get_schedule. Expected: lists today's appointments with times, clients, and services, or says the day is open.
 2. **New requests.** Prompt: "Do I have any new booking requests?" Tools: list_booking_requests. Expected: lists waiting requests with client, service, and requested time.
-3. **Client lookup.** Prompt: "Pull up my notes on [demo client name]." Tools: find_client. Expected: shows that client's contact info, visit count, and recent notes.
-4. **Payments.** Prompt: "How much did I take in payments this week?" Tools: payments_summary. Expected: gives the week's total, count, and recent payments.
-5. **Confirm with approval.** Prompt: "Confirm the newest booking request." Tools: list_booking_requests, confirm_booking_request. Expected: shows a preview and asks for a yes; only after the user says yes, calls again with the confirm code and reports it's confirmed.
+3. **Client lookup.** Prompt: "Pull up notes on test4@example.com." Tools: find_client. Expected: finds the client and shows their contact info and recent notes.
+4. **Payments.** Prompt: "How much did I take in payments this month?" Tools: payments_summary. Expected: gives the month's total, amount after fees, and recent payments.
+5. **Text a client with approval.** Prompt: "Message test4@example.com asking when they are free this weekend." Tools: text_client. Expected: drafts the text, shows a preview, and asks for approval; only after the user says yes (or taps Send), calls again with the confirm code and reports the text was sent.
 
 ### Negative test cases (exactly 3)
 

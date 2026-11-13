@@ -97,7 +97,7 @@ function addDays(ymd, n) {
 }
 
 /** Same start-time rules as the web app calendar (requestedStartTime, then scheduledDate + minutes). */
-function appointmentStart(doc) {
+function appointmentStart(doc, tz) {
   const requested = toDate(doc.requestedStartTime);
   if (requested) return requested;
   const iso = String(doc.scheduledDate || "").trim();
@@ -105,9 +105,34 @@ function appointmentStart(doc) {
   if (typeof startMin === "string") startMin = parseInt(startMin, 10);
   if (iso.length >= 10 && typeof startMin === "number" && !isNaN(startMin)) {
     const [y, m, d] = iso.split("-").map(Number);
-    return new Date(y, m - 1, d, Math.floor(startMin / 60), startMin % 60);
+    return zonedDate(y, m, d, Math.floor(startMin / 60), startMin % 60, tz || "America/New_York");
   }
   return null;
+}
+
+/** A wall-clock time in the shop's time zone, as a real Date (the server runs in UTC). */
+function zonedDate(y, m, d, h, min, tz) {
+  const guess = Date.UTC(y, m - 1, d, h, min);
+  const parts = new Intl.DateTimeFormat("en-US", { timeZone: tz, hourCycle: "h23", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }).formatToParts(new Date(guess));
+  const get = (t) => Number(parts.find((p) => p.type === t).value);
+  const asIfUtc = Date.UTC(get("year"), get("month") - 1, get("day"), get("hour") % 24, get("minute"));
+  return new Date(guess - (asIfUtc - guess));
+}
+
+/** What the client asked for, with the date whenever we have one. */
+function requestedLabel(doc, tz) {
+  const s = appointmentStart(doc, tz);
+  if (s) return whenLabel(s, tz);
+  const time = String(doc.preferredTime || "").trim();
+  const iso = String(doc.scheduledDate || "").trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(iso)) {
+    const [y, m, d] = iso.split("-").map(Number);
+    const day = new Date(Date.UTC(y, m - 1, d, 12)).toLocaleDateString("en-US", { timeZone: "UTC", weekday: "short", month: "short", day: "numeric" });
+    return time ? day + ", " + time : day;
+  }
+  const days = Array.isArray(doc.preferredDays) ? doc.preferredDays.filter(Boolean).join(", ") : String(doc.preferredDays || "").trim();
+  if (days) return (time || "Any time") + " on " + days + " (client's preferred days; no date picked yet)";
+  return time ? time + " (no date picked yet)" : "No date or time picked yet";
 }
 
 const BOOKED = new Set(["confirmed", "pending_deposit", "pending_payment", "completed"]);
@@ -257,7 +282,7 @@ async function toolGetSchedule(ctx, args) {
     const d = doc.data() || {};
     const status = String(d.status || "").toLowerCase();
     if (!BOOKED.has(status)) return;
-    const s = appointmentStart(d);
+    const s = appointmentStart(d, tz);
     if (!s) return;
     const k = dayKey(s, tz);
     if (k < start || k > end) return;
@@ -285,14 +310,13 @@ async function toolListRequests(ctx, args) {
     const d = doc.data() || {};
     const status = String(d.status || "").toLowerCase();
     if (!REQUEST.has(status)) return;
-    const s = appointmentStart(d);
     const created = toDate(d.createdAt);
     rows.push({
       request_id: doc.id,
       client: String(d.customerName || "Client"),
       phone: String(d.customerPhone || ""),
       service: String(d.serviceName || ""),
-      requestedFor: s ? whenLabel(s, tz) : String(d.preferredTime || ""),
+      requestedFor: requestedLabel(d, tz),
       received: created ? whenLabel(created, tz) : "",
       status,
       notes: String(d.notes || "").slice(0, 300),
@@ -448,8 +472,7 @@ async function planAction(ctx, name, args) {
     const d = snap.data() || {};
     const status = String(d.status || "").toLowerCase();
     if (!REQUEST.has(status)) return { error: "This request is already \"" + status + "\"." };
-    const s = appointmentStart(d);
-    const when = s ? whenLabel(s, tzOf(ctx.tenant)) : String(d.preferredTime || "no time set");
+    const when = requestedLabel(d, tzOf(ctx.tenant));
     return {
       run: { requestId: id },
       preview: "Confirm " + (d.customerName || "this client") + "'s " + (d.serviceName || "booking") + " for " + when + ".",
@@ -820,4 +843,4 @@ function registerMcpFunctions(exportsObj, depsIn) {
   });
 }
 
-module.exports = { registerMcpFunctions, TOOLS, hashKey, _test: { HANDLERS, handleRpc, planAction, handleAction, setDb: (d) => { dbOverride = d; } } };
+module.exports = { registerMcpFunctions, TOOLS, hashKey, _test: { requestedLabel, appointmentStart, HANDLERS, handleRpc, planAction, handleAction, setDb: (d) => { dbOverride = d; } } };

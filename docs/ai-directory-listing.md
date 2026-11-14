@@ -54,6 +54,8 @@ ChatGPT: platform.openai.com/plugins → Upload new or existing plugin.
   2. Do I have any new booking requests?
   3. How much did I take in payments this week?
 
+- **Demo video (review → demo recording URL):** https://drive.google.com/file/d/1FUUnAFtfPxM4IfxhJ6WWiYQEoIKE3EjZ/view?usp=sharing
+
 ### Positive test cases (exactly 5)
 
 1. **Today's schedule.** Prompt: "What's on my schedule today?" Tools: get_schedule. Expected: lists today's appointments with times, clients, and services, or says the day is open.

@@ -85,6 +85,7 @@
         { "source": "/.well-known/oauth-authorization-server", "function": "mcpServer" },
         { "source": "/.well-known/oauth-authorization-server/**", "function": "mcpServer" },
         { "source": "/.well-known/openid-configuration", "function": "mcpServer" },
+        { "source": "/.well-known/openai-apps-challenge", "function": "mcpServer" },
         { "source": "/ai-connect", "destination": "/ai-connect.html" },
         { "source": "/fishing-charter-software", "destination": "/fishing-charter-software.html" },
         { "source": "/personal-trainer-software", "destination": "/personal-trainer-software.html" },

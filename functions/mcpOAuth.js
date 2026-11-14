@@ -21,6 +21,8 @@ const dns = require("dns").promises;
 const net = require("net");
 
 const publicOrigin = defineString("MCP_PUBLIC_ORIGIN", { default: "https://getbookking.com" });
+// Token OpenAI gives you to prove you own the domain (ChatGPT app submission). Set in functions/.env.
+const openaiAppsChallenge = defineString("OPENAI_APPS_CHALLENGE", { default: "none" });
 
 const ACCESS_PREFIX = "gbk_at_";
 const REFRESH_PREFIX = "gbk_rt_";
@@ -250,7 +252,7 @@ async function handleAuthorize(req, res) {
     clientId: client.clientId,
     clientName: client.clientName,
     redirectUri,
-    state: q.state ? String(q.state).slice(0, 500) : null,
+    state: q.state ? String(q.state).slice(0, 4000) : null,
     codeChallenge: String(q.code_challenge),
     resource: q.resource ? String(q.resource) : resourceUrl(),
     expiresAt: new Date(Date.now() + REQUEST_MINUTES * 60000),
@@ -378,7 +380,11 @@ async function handleOAuthHttp(req, res) {
     return true;
   }
   try {
-    if (path.startsWith("/.well-known/oauth-protected-resource")) res.json(protectedResourceMetadata());
+    if (path === "/.well-known/openai-apps-challenge") {
+      const t = String(openaiAppsChallenge.value() || "").trim();
+      if (!t || t === "none") res.status(404).type("text/plain").send("not set");
+      else res.status(200).type("text/plain").send(t);
+    } else if (path.startsWith("/.well-known/oauth-protected-resource")) res.json(protectedResourceMetadata());
     else if (path.startsWith("/.well-known/oauth-authorization-server") || path.startsWith("/.well-known/openid-configuration")) res.json(authServerMetadata());
     else if (path === "/oauth/register" && req.method === "POST") await handleRegister(req, res);
     else if (path === "/oauth/authorize" && req.method === "GET") await handleAuthorize(req, res);

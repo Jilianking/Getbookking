@@ -31,7 +31,7 @@ struct SettingsView: View {
                     if !authViewModel.isDemoMode && viewModel.hasProfile {
                         businessSection
                         paymentsSection
-                        if viewModel.isTenantOwner && aiViewModel.allowed == true {
+                        if viewModel.isTenantOwner && aiViewModel.showRow {
                             aiSection
                         }
                     }
@@ -88,34 +88,10 @@ struct SettingsView: View {
                 Text(settingsAlertMessage ?? "")
             }
             .task {
-                await viewModel.loadData(isDemoMode: authViewModel.isDemoMode)
-                await viewModel.loadAccountLifecycle(isDemoMode: authViewModel.isDemoMode)
-                if viewModel.isTenantOwner {
-                    await teamPolicyViewModel.load(isDemoMode: authViewModel.isDemoMode)
-                }
-                await paymentsViewModel.loadData(
-                    isDemoMode: authViewModel.isDemoMode,
-                    sessionStore: sessionStore
-                )
-                await paymentsViewModel.prewarmConnectLinkIfNeeded(isDemoMode: authViewModel.isDemoMode)
-                if !authViewModel.isDemoMode && viewModel.isTenantOwner {
-                    await aiViewModel.checkAccess()
-                }
+                await loadSettings(refresh: false)
             }
             .refreshable {
-                await viewModel.loadData(isDemoMode: authViewModel.isDemoMode)
-                await viewModel.loadAccountLifecycle(isDemoMode: authViewModel.isDemoMode)
-                if viewModel.isTenantOwner {
-                    await teamPolicyViewModel.load(isDemoMode: authViewModel.isDemoMode)
-                }
-                await paymentsViewModel.loadData(
-                    isDemoMode: authViewModel.isDemoMode,
-                    sessionStore: sessionStore
-                )
-                await authViewModel.refreshTeamAccess()
-                if !authViewModel.isDemoMode && viewModel.isTenantOwner {
-                    await aiViewModel.load(quiet: true)
-                }
+                await loadSettings(refresh: true)
             }
             .sheet(isPresented: $showingDeleteAccountSheet) {
                 DeleteAccountSettingsSheet(viewModel: viewModel)
@@ -360,6 +336,40 @@ struct SettingsView: View {
         }
     }
 
+    /// Loads everything the Settings list shows. Rows fill from last-known values first,
+    /// then independent loads run at the same time instead of one after another.
+    private func loadSettings(refresh: Bool) async {
+        let demo = authViewModel.isDemoMode
+        if !demo {
+            aiViewModel.restoreCache()
+            teamPolicyViewModel.restoreCachedSms()
+        }
+
+        // AI connections only need a signed-in owner; start right away.
+        async let ai: Void = {
+            guard !demo else { return }
+            if refresh { await aiViewModel.load(quiet: true) } else { await aiViewModel.checkAccess() }
+        }()
+        async let payments: Void = paymentsViewModel.loadData(isDemoMode: demo, sessionStore: sessionStore)
+
+        // Business info decides owner / plan, which the team load needs.
+        await viewModel.loadData(isDemoMode: demo)
+        async let lifecycle: Void = viewModel.loadAccountLifecycle(isDemoMode: demo)
+        async let team: Void = {
+            if viewModel.isTenantOwner { await teamPolicyViewModel.load(isDemoMode: demo) }
+        }()
+        async let access: Void = {
+            if refresh { await authViewModel.refreshTeamAccess() }
+        }()
+
+        _ = await (ai, payments, lifecycle, team, access)
+
+        // Slow, nothing on screen waits for it.
+        if !refresh {
+            await paymentsViewModel.prewarmConnectLinkIfNeeded(isDemoMode: demo)
+        }
+    }
+
     /// AI assistant (early access only, like the website).
     private var aiSection: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -372,7 +382,7 @@ struct SettingsView: View {
                         icon: "sparkles",
                         iconColor: AppDesign.brandWarm,
                         title: "Connect an AI assistant",
-                        value: aiViewModel.connections.isEmpty ? nil : "\(aiViewModel.connections.count) connected"
+                        value: aiViewModel.connectedLabel
                     )
                 }
                 .buttonStyle(.plain)

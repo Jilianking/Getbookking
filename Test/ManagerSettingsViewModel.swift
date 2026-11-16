@@ -78,6 +78,26 @@ final class ManagerSettingsViewModel: ObservableObject {
     @Published var smsFreeRemaining: Int = 1
     @Published var smsNeedsPurchaseForNextLine: Bool = false
     @Published var smsNeedsMonthlyExtraForNextLine: Bool = false
+
+    /// Last-known texting line, so Settings shows it instantly while refreshing.
+    private static func smsCacheKey() -> String? {
+        guard let uid = Auth.auth().currentUser?.uid else { return nil }
+        return "settingsCache.sms.\(uid)"
+    }
+
+    /// Fill the texting row from the last load (call before the network refresh).
+    func restoreCachedSms() {
+        guard smsStatus == "off", smsPhoneNumber.isEmpty,
+              let key = Self.smsCacheKey(),
+              let cached = UserDefaults.standard.dictionary(forKey: key) else { return }
+        smsStatus = (cached["status"] as? String) ?? "off"
+        smsPhoneNumber = (cached["phone"] as? String) ?? ""
+    }
+
+    private func saveCachedSms() {
+        guard let key = Self.smsCacheKey() else { return }
+        UserDefaults.standard.set(["status": smsStatus, "phone": smsPhoneNumber], forKey: key)
+    }
     @Published var smsNeedsOneTimePurchaseForNextLine: Bool = false
     @Published var smsAtMaxLines: Bool = false
     @Published var smsCanAddWithoutPurchase: Bool = true
@@ -321,6 +341,7 @@ final class ManagerSettingsViewModel: ObservableObject {
             smsEnabled = data["smsEnabled"] as? Bool ?? false
             smsStatus = (data["smsStatus"] as? String) ?? "off"
             smsPhoneNumber = (data["smsPhoneNumber"] as? String) ?? ""
+            saveCachedSms()
             smsCanUse = data["smsCanUse"] as? Bool ?? false
             smsProvisionError = (data["smsProvisionError"] as? String) ?? ""
             smsMonthlyLimit = (data["smsMonthlyLimit"] as? Int) ?? 1000

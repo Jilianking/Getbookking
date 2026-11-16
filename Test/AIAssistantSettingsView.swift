@@ -8,6 +8,7 @@ import SwiftUI
 import Combine
 import UIKit
 import FirebaseFunctions
+import FirebaseAuth
 
 struct AIConnection: Identifiable, Equatable {
     let id: String
@@ -27,6 +28,39 @@ final class AIAssistantViewModel: ObservableObject {
     @Published var busyId: String?
     @Published var newLink: String?
     @Published var errorMessage: String?
+    /// Connection count from the last load, shown until the live list arrives.
+    @Published var cachedCount: Int?
+
+    /// Label for the Settings row ("4 connected"), using the cached count while loading.
+    var connectedLabel: String? {
+        let n = connections.isEmpty ? (allowed == nil ? (cachedCount ?? 0) : 0) : connections.count
+        return n > 0 ? "\(n) connected" : nil
+    }
+
+    private static func cacheKey() -> String? {
+        guard let uid = Auth.auth().currentUser?.uid else { return nil }
+        return "settingsCache.ai.\(uid)"
+    }
+
+    /// Show the row instantly from the last load (call before the network refresh).
+    func restoreCache() {
+        guard allowed == nil, let key = Self.cacheKey(),
+              let cached = UserDefaults.standard.dictionary(forKey: key),
+              (cached["allowed"] as? Bool) == true else { return }
+        cachedCount = cached["count"] as? Int
+        // Keep `allowed` nil so checkAccess still refreshes; the row shows via `showRow`.
+        cachedAllowed = true
+    }
+
+    @Published var cachedAllowed = false
+
+    /// Whether Settings should show the AI row (live answer, or last-known while loading).
+    var showRow: Bool { allowed ?? cachedAllowed }
+
+    private func saveCache() {
+        guard let key = Self.cacheKey(), let allowed else { return }
+        UserDefaults.standard.set(["allowed": allowed, "count": connections.count], forKey: key)
+    }
 
     private let functions = Functions.functions(region: Constants.Firebase.cloudFunctionsRegion)
 
@@ -66,6 +100,7 @@ final class AIAssistantViewModel: ObservableObject {
                     actions: (row["actions"] as? Bool) != false
                 )
             }
+            saveCache()
         } catch {
             if quiet {
                 allowed = false

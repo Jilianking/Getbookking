@@ -1,7 +1,7 @@
 /**
  * Cookie consent (wording and buttons from Get Bookking's lawyer).
- * Essential cookies always run. Analytics (Google Tag Manager) and advertising (ChatGPT Ads pixel)
- * stay off until the visitor chooses. The choice is saved in this browser, so the banner shows once.
+ * Essential cookies always run. Analytics (Google Tag Manager) and advertising (ChatGPT Ads pixel,
+ * Meta Pixel) stay off until the visitor chooses. The choice is saved in this browser, so the banner shows once.
  * "Cookie preferences" in the footer reopens it.
  */
 (function () {
@@ -9,6 +9,7 @@
   var KEY = "bkCookieConsent";
   var GTM_ID = "GTM-PHZKXCNL";
   var PIXEL_ID = "Hq1QRMn1nHgCjhGbki399G";
+  var META_PIXEL_ID = "1843684870004373";
   var loaded = { analytics: false, marketing: false };
   var embedded = false;
   try { embedded = window.self !== window.top; } catch (e) { embedded = true; }
@@ -58,8 +59,37 @@
         document.head.appendChild(p);
       }
       window.oaiq("init", { pixelId: PIXEL_ID });
+      loadMetaPixel();
     }
   }
+
+  /** Meta Pixel (Get Bookking's own Facebook / Instagram ads). Only after marketing consent. */
+  function loadMetaPixel() {
+    if (!window.fbq) {
+      var f = function () {
+        if (f.callMethod) f.callMethod.apply(f, arguments);
+        else f.queue.push(arguments);
+      };
+      if (!window._fbq) window._fbq = f;
+      f.push = f;
+      f.loaded = true;
+      f.version = "2.0";
+      f.queue = [];
+      window.fbq = f;
+      var s = document.createElement("script");
+      s.async = true;
+      s.src = "https://connect.facebook.net/en_US/fbevents.js";
+      document.head.appendChild(s);
+    }
+    window.fbq("init", META_PIXEL_ID);
+    window.fbq("track", "PageView");
+  }
+
+  /** Sends a standard Meta event (e.g. CompleteRegistration) only if marketing is allowed. */
+  window.bkMetaTrack = function (event, params) {
+    if (!loaded.marketing || typeof window.fbq !== "function") return;
+    window.fbq("track", event, params || {});
+  };
 
   // Everything optional starts denied until the visitor chooses.
   gtag("consent", "default", {

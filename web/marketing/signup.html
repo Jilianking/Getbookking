@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <script src="assets/gtm-events.js?v=2"></script>
-  <script src="assets/cookie-consent.js?v=5"></script>
+  <script src="assets/cookie-consent.js?v=6"></script>
   <title>Sign Up — Get Bookking</title>
   <meta name="description" content="Start your 14-day free trial on Get Bookking. All-in-one booking platform with custom websites, Tap to Pay on iPhone, and client texting." />
   <link rel="canonical" href="https://getbookking.com/signup" />
@@ -2045,6 +2045,10 @@
     function showSuccess() {
       document.querySelectorAll('.step-panel').forEach(p => p.classList.remove('active'));
       document.getElementById('stepSuccess').classList.add('active');
+      if (typeof window.bkMetaTrack === 'function' && !showSuccess.metaSent) {
+        showSuccess.metaSent = true;
+        window.bkMetaTrack('CompleteRegistration', { content_name: state.plan || 'signup' });
+      }
       if (typeof window.bkTrackOnce === 'function') {
         window.bkTrackOnce('sign_up', 'sign_up', {
           method: 'web',

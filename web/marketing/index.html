@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="apple-itunes-app" content="app-id=6785088401" />
   <script src="assets/gtm-events.js?v=2"></script>
   <script src="assets/cookie-consent.js?v=6"></script>
   <title>Get Bookking — Your business, fully booked.</title>
@@ -367,6 +368,10 @@ html { scroll-behavior: smooth; width: 100%; }
       max-width: 320px;
       margin-bottom: 0;
     }
+
+    .hero-app-link { align-self: center; font-size: 14px; font-weight: 500; color: var(--brand-warm); text-decoration: none; }
+    .hero-app-link:hover { color: var(--brand-dark); text-decoration: underline; text-underline-offset: 3px; }
+    .hero-app-link:focus-visible { outline: 2px solid var(--brand-warm); outline-offset: 3px; border-radius: 4px; }
 
     .hero-ctas .btn-primary,
     .hero-ctas .btn-secondary,
@@ -1085,7 +1090,7 @@ html { scroll-behavior: smooth; width: 100%; }
     }
   </style>
     <link rel="stylesheet" href="assets/footer.css?v=5" />
-  <link rel="stylesheet" href="assets/nav.css?v=25" />
+  <link rel="stylesheet" href="assets/nav.css?v=26" />
 </head>
 <body>
 
@@ -1104,6 +1109,7 @@ html { scroll-behavior: smooth; width: 100%; }
       <li><a href="#faq">FAQ</a></li>
     </ul>
     <div class="nav-actions">
+      <a href="https://calendar.app.google/fkwfFsgPNhmG3C2a9" class="nav-cta nav-cta--desktop nav-cta--text nav-demo nav-auth-login" target="_blank" rel="noopener">Book a demo</a>
       <a href="login.html" class="nav-cta nav-cta--desktop nav-auth-login">Log in</a>
       <a href="signup.html" class="nav-cta nav-cta--desktop nav-cta--filled nav-auth-signup">Sign up</a>
       <div class="nav-account-wrap nav-auth-account nav-auth-hidden">
@@ -1135,6 +1141,7 @@ html { scroll-behavior: smooth; width: 100%; }
         <li><a href="teams.html">Teams</a></li>
         <li><a href="pricing.html">Pricing</a></li>
         <li><a href="#faq">FAQ</a></li>
+        <li class="nav-auth-login-item nav-demo-item"><a href="https://calendar.app.google/fkwfFsgPNhmG3C2a9" target="_blank" rel="noopener">Book a demo</a></li>
         <li class="nav-auth-login-item"><a href="login.html">Log in</a></li>
         <li class="nav-auth-account-item nav-auth-hidden"><a href="/app" class="nav-drawer-profile-link"><span class="nav-account-avatar nav-auth-avatar" aria-hidden="true">?</span><span class="nav-auth-name">Account</span></a></li>
         <li class="nav-auth-signout-item nav-auth-hidden"><button type="button" class="nav-drawer-signout nav-auth-signout">Sign out</button></li>
@@ -1166,6 +1173,7 @@ html { scroll-behavior: smooth; width: 100%; }
         <p class="hero-sub">Messages, bookings, payments, and your website — all in one place.</p>
         <div class="hero-ctas">
           <a href="signup.html" class="btn-primary">Sign up</a>
+          <a class="hero-app-link" id="hero-app-store" href="https://apps.apple.com/us/app/id6785088401" target="_blank" rel="noopener">or download on the App Store &rarr;</a>
         </div>
         <p class="hero-trust hero-trust--desktop">Free trial · Cancel anytime</p>
       </div>

@@ -159,6 +159,23 @@ body > nav .nav-cta--filled:hover {
   color: var(--brand-cream, #f5edd8);
 }
 
+/* "Book a demo": quieter text-style link next to Log in */
+body > nav .nav-cta--text,
+body > nav .nav-cta--text:visited {
+  border-color: transparent;
+  background: transparent;
+  color: var(--brand-warm, #8b6f47);
+  padding-left: 8px;
+  padding-right: 8px;
+  font-weight: 500;
+}
+body > nav .nav-cta--text:hover {
+  background: transparent;
+  color: var(--brand-dark, #2c2018);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
 /* Tighter header — hide wordmark only while center links are visible */
 @media (min-width: 901px) and (max-width: 1100px) {
   body > nav .nav-logo > span {

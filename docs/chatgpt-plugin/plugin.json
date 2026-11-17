@@ -1,0 +1,113 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "get-bookking",
+  "version": "1.0.0",
+  "description": "Bookings, clients, payments, and client texts for appointment businesses, with owner-approved actions.",
+  "author": {
+    "name": "Software By King LLC",
+    "email": "jilianking@getbookking.com",
+    "url": "https://getbookking.com"
+  },
+  "homepage": "https://getbookking.com/ai-assistant",
+  "keywords": [
+    "bookings",
+    "appointments",
+    "scheduling",
+    "salon",
+    "clients",
+    "payments",
+    "texting"
+  ],
+  "extensions": {
+    "com.openai": {
+      "interface": {
+        "displayName": "Get Bookking",
+        "shortDescription": "Your bookings, clients & texts",
+        "longDescription": "Get Bookking helps appointment businesses run bookings, payments, and client texts in one place, from salons and tattoo studios to barbers, nail techs, personal trainers, and fishing charters.\n\nConnect your Get Bookking shop and ask about your business:\n- \"What's on my schedule tomorrow?\"\n- \"Any new booking requests?\"\n- \"How much did I take in payments this week?\"\n- \"Pull up my notes on Jordan.\"\n- \"Any unread texts I need to answer?\"\n\nWith actions turned on, ChatGPT can also confirm a booking request, text a client, or send a client a deposit or payment link. Every action shows you a preview first and only happens after you say yes. It can't cancel, refund, or charge a saved card.\n\nYou sign in on getbookking.com, and ChatGPT never sees your password. Choose read-only or actions when you connect, and turn the connection off anytime in Get Bookking under Settings → AI assistant.\n\nRequires a Get Bookking account (shop owner).",
+        "developerName": "Software By King LLC",
+        "category": "Productivity",
+        "capabilities": [
+          "View your schedule",
+          "Review booking requests",
+          "Look up clients and notes",
+          "Payment summaries",
+          "Read client texts",
+          "Confirm bookings with approval",
+          "Text clients with approval",
+          "Send payment links with approval"
+        ],
+        "websiteURL": "https://getbookking.com",
+        "supportURL": "https://getbookking.com/contact",
+        "privacyPolicyURL": "https://getbookking.com/privacy",
+        "termsOfServiceURL": "https://getbookking.com/terms",
+        "defaultPrompt": [
+          "What's on my schedule today?",
+          "Do I have any new booking requests?",
+          "How much did I take in payments this week?"
+        ],
+        "brandColor": "#2C2018",
+        "logo": "./assets/logo.png",
+        "composerIcon": "./assets/composer-icon.png"
+      },
+      "review": {
+        "test_cases": {
+          "positive": [
+            {
+              "description": "Today's schedule",
+              "prompt": "What's on my schedule today?",
+              "tools_triggered": "get_schedule",
+              "expected_behavior": "Lists today's appointments with times, clients, and services, or says the day is open."
+            },
+            {
+              "description": "New booking requests",
+              "prompt": "Do I have any new booking requests?",
+              "tools_triggered": "list_booking_requests",
+              "expected_behavior": "Lists waiting requests with client, service, when it was received, and the requested date and time (or that none was picked)."
+            },
+            {
+              "description": "Client lookup",
+              "prompt": "Pull up notes on test4@example.com.",
+              "tools_triggered": "find_client",
+              "expected_behavior": "Finds the client and shows their contact info and recent notes."
+            },
+            {
+              "description": "Payments this month",
+              "prompt": "How much did I take in payments this month?",
+              "tools_triggered": "payments_summary",
+              "expected_behavior": "Gives the month's card payment total, amount after fees, and recent payments."
+            },
+            {
+              "description": "Text a client with approval",
+              "prompt": "Message test4@example.com asking when they are free this weekend.",
+              "tools_triggered": "text_client",
+              "expected_behavior": "Drafts the text and shows a preview asking for approval. Only after the user says yes does it call text_client again with the confirm code and report the text was sent."
+            }
+          ],
+          "negative": [
+            {
+              "description": "Unrelated question: Not about the shop. Expected: Answers without calling Get Bookking.",
+              "prompt": "What's the weather in Miami?"
+            },
+            {
+              "description": "Refund request: Refunds aren't supported by these tools. Expected: Says it can't refund and points the owner to the Payments screen in Get Bookking.",
+              "prompt": "Refund Jordan's last payment."
+            },
+            {
+              "description": "Bulk marketing text: Bulk marketing texts aren't supported, and each text needs the owner's approval. Expected: Declines bulk sending and offers to text one specific client with a preview.",
+              "prompt": "Text all my clients a 20% off promo."
+            }
+          ]
+        },
+        "demo_recording_url": "https://drive.google.com/file/d/1FUUnAFtfPxM4IfxhJ6WWiYQEoIKE3EjZ/view?usp=sharing",
+        "commerce": false,
+        "commerce_description": "No purchases happen in ChatGPT. The send_payment_link tool can text a shop's own client a Stripe payment link for the shop's services, only after the owner approves a preview."
+      },
+      "publication": {
+        "countries": [
+          "US"
+        ],
+        "release_notes": "Initial release."
+      }
+    }
+  }
+}

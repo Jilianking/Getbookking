@@ -9,7 +9,8 @@
  *   - or the base URL plus header:  Authorization: Bearer <key>
  *
  * Keys are created in the web app (Settings → AI assistant). Only a SHA-256 hash is stored
- * (collection mcpKeys/{hash}). While in early access, only owners on the allow-list can create keys:
+ * (collection mcpKeys/{hash}). Open to every shop owner (MCP_OPEN_TO_ALL, default "true"). With it set to "false",
+ * only owners on the allow-list can connect:
  * MCP_ALLOWED_EMAILS (comma-separated) in functions/.env, or tenants/{id}.mcpEnabled == true.
  *
  * Every tool only reads the key owner's own shop, and every call is logged to tenants/{id}/mcpLog.
@@ -18,8 +19,11 @@ const functions = require("firebase-functions");
 const { defineString } = require("firebase-functions/params");
 const admin = require("firebase-admin");
 const crypto = require("crypto");
+const oauth = require("./mcpOAuth");
 
 const mcpAllowedEmails = defineString("MCP_ALLOWED_EMAILS", { default: "" });
+// Every shop owner can connect. Set to "false" in functions/.env to go back to early access only.
+const mcpOpenToAll = defineString("MCP_OPEN_TO_ALL", { default: "true" });
 
 const SERVER_INFO = { name: "get-bookking", version: "1.0.0" };
 const SUPPORTED_VERSIONS = ["2025-06-18", "2025-03-26", "2024-11-05"];
@@ -93,7 +97,7 @@ function addDays(ymd, n) {
 }
 
 /** Same start-time rules as the web app calendar (requestedStartTime, then scheduledDate + minutes). */
-function appointmentStart(doc) {
+function appointmentStart(doc, tz) {
   const requested = toDate(doc.requestedStartTime);
   if (requested) return requested;
   const iso = String(doc.scheduledDate || "").trim();
@@ -101,9 +105,34 @@ function appointmentStart(doc) {
   if (typeof startMin === "string") startMin = parseInt(startMin, 10);
   if (iso.length >= 10 && typeof startMin === "number" && !isNaN(startMin)) {
     const [y, m, d] = iso.split("-").map(Number);
-    return new Date(y, m - 1, d, Math.floor(startMin / 60), startMin % 60);
+    return zonedDate(y, m, d, Math.floor(startMin / 60), startMin % 60, tz || "America/New_York");
   }
   return null;
+}
+
+/** A wall-clock time in the shop's time zone, as a real Date (the server runs in UTC). */
+function zonedDate(y, m, d, h, min, tz) {
+  const guess = Date.UTC(y, m - 1, d, h, min);
+  const parts = new Intl.DateTimeFormat("en-US", { timeZone: tz, hourCycle: "h23", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }).formatToParts(new Date(guess));
+  const get = (t) => Number(parts.find((p) => p.type === t).value);
+  const asIfUtc = Date.UTC(get("year"), get("month") - 1, get("day"), get("hour") % 24, get("minute"));
+  return new Date(guess - (asIfUtc - guess));
+}
+
+/** What the client asked for, with the date whenever we have one. */
+function requestedLabel(doc, tz) {
+  const s = appointmentStart(doc, tz);
+  if (s) return whenLabel(s, tz);
+  const time = String(doc.preferredTime || "").trim();
+  const iso = String(doc.scheduledDate || "").trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(iso)) {
+    const [y, m, d] = iso.split("-").map(Number);
+    const day = new Date(Date.UTC(y, m - 1, d, 12)).toLocaleDateString("en-US", { timeZone: "UTC", weekday: "short", month: "short", day: "numeric" });
+    return time ? day + ", " + time : day;
+  }
+  const days = Array.isArray(doc.preferredDays) ? doc.preferredDays.filter(Boolean).join(", ") : String(doc.preferredDays || "").trim();
+  if (days) return (time || "Any time") + " on " + days + " (client's preferred days; no date picked yet)";
+  return time ? time + " (no date picked yet)" : "No date or time picked yet";
 }
 
 const BOOKED = new Set(["confirmed", "pending_deposit", "pending_payment", "completed"]);
@@ -122,6 +151,7 @@ function textResult(obj) {
 const TOOLS = [
   {
     name: "get_schedule",
+    title: "Get schedule",
     description: "Booked appointments for a day or a range of days (shop's time zone). Defaults to today.",
     inputSchema: {
       type: "object",
@@ -130,38 +160,42 @@ const TOOLS = [
         days: { type: "integer", minimum: 1, maximum: 14, description: "How many days to include (1–14). Default 1." },
       },
     },
-    annotations: { readOnlyHint: true },
+    annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
   },
   {
     name: "list_booking_requests",
+    title: "List booking requests",
     description: "Booking requests waiting for a response (new or pending), newest first.",
     inputSchema: {
       type: "object",
       properties: { limit: { type: "integer", minimum: 1, maximum: 25, description: "Max results (default 10)." } },
     },
-    annotations: { readOnlyHint: true },
+    annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
   },
   {
     name: "find_client",
+    title: "Find a client",
     description: "Look up clients by name, phone, or email. Returns contact info, VIP status, visit count, and recent notes.",
     inputSchema: {
       type: "object",
       properties: { query: { type: "string", description: "Part of a name, phone number, or email." } },
       required: ["query"],
     },
-    annotations: { readOnlyHint: true },
+    annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
   },
   {
     name: "payments_summary",
+    title: "Payments summary",
     description: "Card payments taken through Stripe for today, this week, or this month: total, count, and recent payments.",
     inputSchema: {
       type: "object",
       properties: { period: { type: "string", enum: ["today", "week", "month"], description: "Default week." } },
     },
-    annotations: { readOnlyHint: true },
+    annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
   },
   {
     name: "recent_messages",
+    title: "Recent messages",
     description: "Recent client text conversations, newest first, with whether each has unread messages.",
     inputSchema: {
       type: "object",
@@ -170,13 +204,14 @@ const TOOLS = [
         unread_only: { type: "boolean", description: "Only conversations with unread messages." },
       },
     },
-    annotations: { readOnlyHint: true },
+    annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
   },
   {
     name: "get_website_info",
+    title: "Website info",
     description: "The shop's website: address, template, business info, hours, and services with prices.",
     inputSchema: { type: "object", properties: {} },
-    annotations: { readOnlyHint: true },
+    annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
   },
   {
     name: "confirm_booking_request",
@@ -247,7 +282,7 @@ async function toolGetSchedule(ctx, args) {
     const d = doc.data() || {};
     const status = String(d.status || "").toLowerCase();
     if (!BOOKED.has(status)) return;
-    const s = appointmentStart(d);
+    const s = appointmentStart(d, tz);
     if (!s) return;
     const k = dayKey(s, tz);
     if (k < start || k > end) return;
@@ -275,14 +310,13 @@ async function toolListRequests(ctx, args) {
     const d = doc.data() || {};
     const status = String(d.status || "").toLowerCase();
     if (!REQUEST.has(status)) return;
-    const s = appointmentStart(d);
     const created = toDate(d.createdAt);
     rows.push({
       request_id: doc.id,
       client: String(d.customerName || "Client"),
       phone: String(d.customerPhone || ""),
       service: String(d.serviceName || ""),
-      requestedFor: s ? whenLabel(s, tz) : String(d.preferredTime || ""),
+      requestedFor: requestedLabel(d, tz),
       received: created ? whenLabel(created, tz) : "",
       status,
       notes: String(d.notes || "").slice(0, 300),
@@ -438,8 +472,7 @@ async function planAction(ctx, name, args) {
     const d = snap.data() || {};
     const status = String(d.status || "").toLowerCase();
     if (!REQUEST.has(status)) return { error: "This request is already \"" + status + "\"." };
-    const s = appointmentStart(d);
-    const when = s ? whenLabel(s, tzOf(ctx.tenant)) : String(d.preferredTime || "no time set");
+    const when = requestedLabel(d, tzOf(ctx.tenant));
     return {
       run: { requestId: id },
       preview: "Confirm " + (d.customerName || "this client") + "'s " + (d.serviceName || "booking") + " for " + when + ".",
@@ -596,14 +629,19 @@ function rawKeyFrom(req) {
 /** Returns { uid, tenantId, keyId } or throws { status, message }. Also enforces rate limits. */
 async function authenticate(req) {
   const raw = rawKeyFrom(req);
-  if (!raw || !raw.startsWith(KEY_PREFIX)) throw { status: 401, message: "Missing or invalid Get Bookking key." };
-  const keyId = hashKey(raw);
+  if (!raw || !raw.startsWith(KEY_PREFIX)) throw { status: 401, message: "Sign in to Get Bookking to connect.", oauth: true };
+  // "Sign in with Get Bookking" tokens point at their connection; link keys are the connection.
+  let keyId = hashKey(raw);
+  if (raw.startsWith(oauth.ACCESS_PREFIX)) {
+    const linkKey = await db().collection("mcpKeys").doc(keyId).get();
+    if (!linkKey.exists) keyId = await oauth.grantForAccessToken(raw);
+  }
   const ref = db().collection("mcpKeys").doc(keyId);
   return db().runTransaction(async (tx) => {
     const snap = await tx.get(ref);
-    if (!snap.exists) throw { status: 401, message: "This key isn't valid. Create a new one in Get Bookking (Settings → AI assistant)." };
+    if (!snap.exists) throw { status: 401, message: "This connection isn't valid. Reconnect Get Bookking.", oauth: "invalid_token" };
     const k = snap.data() || {};
-    if (k.revokedAt) throw { status: 401, message: "This key was revoked." };
+    if (k.revokedAt) throw { status: 401, message: "This connection was turned off in Get Bookking. Reconnect to use it again.", oauth: "invalid_token" };
     const now = new Date();
     const minute = now.toISOString().slice(0, 16);
     const day = now.toISOString().slice(0, 10);
@@ -684,10 +722,13 @@ function registerMcpFunctions(exportsObj, depsIn) {
     .runWith({ secrets: [deps.stripeSecretKey, deps.twilioAccountSid, deps.twilioAuthToken].filter(Boolean), maxInstances: 3, memory: "256MB", timeoutSeconds: 60 })
     .https.onRequest(async (req, res) => {
       res.set("Cache-Control", "no-store");
+      // Sign-in pages for ChatGPT, Claude, etc. (getbookking.com/.well-known/* and /oauth/*).
+      if (await oauth.handleOAuthHttp(req, res)) return;
       if (req.method === "OPTIONS") {
         res.set("Access-Control-Allow-Origin", "*");
         res.set("Access-Control-Allow-Headers", "authorization, content-type, mcp-protocol-version, mcp-session-id");
         res.set("Access-Control-Allow-Methods", "POST, OPTIONS");
+        res.set("Access-Control-Expose-Headers", "www-authenticate, mcp-session-id");
         return res.status(204).send("");
       }
       if (req.method !== "POST") {
@@ -699,6 +740,11 @@ function registerMcpFunctions(exportsObj, depsIn) {
         auth = await authenticate(req);
       } catch (e) {
         const status = e && e.status ? e.status : 500;
+        // Tells the AI app where to sign in, so it can show "Connect".
+        if (status === 401) {
+          res.set("Access-Control-Allow-Origin", "*");
+          res.set("WWW-Authenticate", oauth.wwwAuthenticate(typeof (e && e.oauth) === "string" ? e.oauth : null));
+        }
         return res.status(status).json({ jsonrpc: "2.0", id: null, error: { code: -32001, message: (e && e.message) || "Unauthorized" } });
       }
       const body = req.body;
@@ -725,13 +771,17 @@ function registerMcpFunctions(exportsObj, depsIn) {
     const tenant = (await db().collection("tenants").doc(tenantId).get()).data() || {};
     if (String(tenant.ownerUid || "") !== uid) throw new functions.https.HttpsError("permission-denied", "Only the shop owner can manage AI assistant keys.");
     const email = context.auth.token.email || user.email || "";
-    const allowed = tenant.mcpEnabled === true || allowListed(email);
+    // A single shop can still be switched off with tenants/{id}.mcpEnabled == false.
+    const open = String(mcpOpenToAll.value() || "true").toLowerCase() !== "false";
+    const allowed = tenant.mcpEnabled !== false && (open || tenant.mcpEnabled === true || allowListed(email));
     return { uid, tenantId, tenant, allowed };
   }
 
+  oauth.registerMcpOAuthCallables(exportsObj, { ownerContext });
+
   exportsObj.createMcpKey = functions.https.onCall(async (data, context) => {
     const o = await ownerContext(context);
-    if (!o.allowed) throw new functions.https.HttpsError("permission-denied", "The AI assistant is in early access and isn't on for this shop yet.");
+    if (!o.allowed) throw new functions.https.HttpsError("permission-denied", "The AI assistant is turned off for this shop. Contact Get Bookking to turn it on.");
     const active = await db().collection("mcpKeys").where("uid", "==", o.uid).where("revokedAt", "==", null).get();
     if (active.size >= 5) throw new functions.https.HttpsError("resource-exhausted", "You have 5 active keys. Revoke one first.");
     const raw = newRawKey();
@@ -762,11 +812,12 @@ function registerMcpFunctions(exportsObj, depsIn) {
           lastUsedAt: toDate(k.lastUsedAt) ? toDate(k.lastUsedAt).toISOString() : null,
           revoked: !!k.revokedAt,
           actions: k.actions !== false,
+          kind: k.kind === "oauth" ? "signin" : "link",
         };
       })
       .filter((k) => !k.revoked)
       .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
-    return { allowed: o.allowed, keys, serverUrl: connectorBaseUrl() };
+    return { allowed: o.allowed, keys, serverUrl: connectorBaseUrl(), connectUrl: oauth.resourceUrl() };
   });
 
   exportsObj.setMcpKeyActions = functions.https.onCall(async (data, context) => {
@@ -792,4 +843,4 @@ function registerMcpFunctions(exportsObj, depsIn) {
   });
 }
 
-module.exports = { registerMcpFunctions, TOOLS, hashKey, _test: { HANDLERS, handleRpc, planAction, handleAction, setDb: (d) => { dbOverride = d; } } };
+module.exports = { registerMcpFunctions, TOOLS, hashKey, _test: { requestedLabel, appointmentStart, HANDLERS, handleRpc, planAction, handleAction, setDb: (d) => { dbOverride = d; } } };

@@ -40,3 +40,20 @@ enum ServiceColors {
         return Color(hex: hex)
     }
 }
+
+/// "Client confirmed ✓" / "Wants to reschedule" from a reminder reply.
+struct ReminderReplyBadge: View {
+    let reply: String?
+
+    var body: some View {
+        if reply == "confirmed" {
+            Label("Client confirmed", systemImage: "checkmark.circle.fill")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(AppDesign.accentGreen)
+        } else if reply == "reschedule" {
+            Label("Wants to reschedule", systemImage: "arrow.triangle.2.circlepath")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(AppDesign.statusPending)
+        }
+    }
+}

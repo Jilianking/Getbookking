@@ -12,6 +12,8 @@ struct Event: Codable, Identifiable {
     var notes: String?
     var color: String?
     var documents: [String]?
+    /// "confirmed" (client replied C) or "reschedule" (replied R) to a reminder text.
+    var reminderReply: String? = nil
     
     enum EventType: String, Codable {
         case appointment = "appointment"

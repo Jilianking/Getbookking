@@ -392,6 +392,7 @@ struct EventRow: View {
             Text(event.clientName)
                 .font(.subheadline)
                 .foregroundStyle(AppDesign.textSecondary)
+            ReminderReplyBadge(reply: event.reminderReply)
             HStack {
                 AppStatusPill(text: event.status.calendarLabel, soft: true)
                 Spacer()

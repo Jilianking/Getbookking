@@ -659,6 +659,9 @@ class RequestsViewModel: ObservableObject {
             }
             if let scheduledStart {
                 updates["requestedStartTime"] = scheduledStart
+                // New time: the old reminder reply (C / R) no longer applies.
+                updates["clientConfirmedAt"] = FieldValue.delete()
+                updates["rescheduleRequestedAt"] = FieldValue.delete()
             }
             if let preferredTimeLabel, !preferredTimeLabel.isEmpty {
                 updates["preferredTime"] = preferredTimeLabel

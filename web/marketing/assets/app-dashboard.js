@@ -188,6 +188,8 @@
       boatId: String(data.boatId || "").trim(),
       // Any money taken (deposit or full payment): such bookings are cancelled, never deleted.
       paid: !!(data.stripePaymentIntentId || data.paymentIntentId || data.paidAt || data.depositPaidAt),
+      // Reply to a reminder text: "confirmed" (C) or "reschedule" (R).
+      reminderReply: data.rescheduleRequestedAt ? "reschedule" : data.clientConfirmedAt ? "confirmed" : "",
       assignedName: String(data.assignedMemberName || "").trim(),
       assignedUid: String(data.assignedMemberUid || "").trim(),
       readAt: toDate(data.readAt),
@@ -1011,11 +1013,17 @@
       height +
       'px">' +
       "<strong>" +
-      esc(b.customerName) +
+      esc(b.customerName) + replyMark(b) +
       "</strong><span>" +
       esc(sub) +
       "</span></button>"
     );
+  }
+
+  function replyMark(b) {
+    if (b.reminderReply === "confirmed") return ' <i class="app-cal-reply is-ok" title="Client confirmed">✓</i>';
+    if (b.reminderReply === "reschedule") return ' <i class="app-cal-reply is-resched" title="Wants to reschedule">↻</i>';
+    return "";
   }
 
   function timesHtml() {
@@ -1427,7 +1435,9 @@
         detailRow("Staff", booking.assignedName) +
         detailRow("Email", booking.customerEmail) +
         detailRow("Phone", booking.customerPhone) +
-        detailRow("Notes", booking.notes);
+        detailRow("Notes", booking.notes) +
+        detailRow("Client reply", booking.reminderReply === "confirmed" ? "Confirmed ✓ (replied C)" :
+          booking.reminderReply === "reschedule" ? "Wants to reschedule (replied R)" : "");
     }
     paintDetailActions(booking);
   }
@@ -1674,6 +1684,11 @@
         notes: notes || "",
         updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
       };
+      if (!booking.start || start.getTime() !== booking.start.getTime()) {
+        // New time: the old C / R answer no longer applies, and the next reminder is for the new time.
+        patch.clientConfirmedAt = firebase.firestore.FieldValue.delete();
+        patch.rescheduleRequestedAt = firebase.firestore.FieldValue.delete();
+      }
       if (service) {
         patch.serviceId = service.id;
         patch.serviceSlug = service.slug || "";

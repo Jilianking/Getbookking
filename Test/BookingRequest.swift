@@ -45,6 +45,10 @@ struct BookingRequest: Identifiable {
     var cancelRefundStatus: String? = nil
     /// Set while the slot is held for the client to pay at booking (cancels itself if unpaid).
     var holdUntil: Date? = nil
+    /// Client replied C to a reminder text.
+    var clientConfirmedAt: Date? = nil
+    /// Client replied R to a reminder text (wants a new time).
+    var rescheduleRequestedAt: Date? = nil
 
     var isHoldingSlotForPayment: Bool {
         guard holdUntil != nil else { return false }

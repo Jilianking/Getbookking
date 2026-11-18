@@ -3652,3 +3652,8 @@ body.is-cal-dragging, body.is-cal-dragging * { cursor: grabbing !important; user
 .app-cal-pill.has-svc.is-hold { background: color-mix(in srgb, var(--svc) 9%, var(--paper)); }
 .app-cal-tw-chip.has-svc { background: color-mix(in srgb, var(--svc) 15%, var(--card)); }
 .app-shop-visible.is-disabled { opacity: 0.6; }
+
+/* Reminder reply marks */
+.app-cal-reply { font-style: normal; font-weight: 700; margin-left: 2px; }
+.app-cal-reply.is-ok { color: #3f7d4e; }
+.app-cal-reply.is-resched { color: #b7791f; }

@@ -1225,6 +1225,25 @@
       function () {}
     ));
 
+    // Automatic reminder texts (sent from the shop's texting number; clients reply C to confirm or R to reschedule).
+    var remind = state.tenant.appointmentReminders || {};
+    var remindHead = document.createElement("p");
+    remindHead.className = "set-subhead";
+    remindHead.textContent = "Appointment reminders";
+    form.appendChild(remindHead);
+    var remindNote = document.createElement("p");
+    remindNote.className = "set-hint";
+    remindNote.textContent = state.tenant.smsStatus === "active"
+      ? "Texts confirmed clients from your shop's number. They can reply C to confirm or R to reschedule."
+      : "Set up your texting number in Messaging to send reminders.";
+    form.appendChild(remindNote);
+    var dayBeforeRow = toggleRow("Day before", "Sent between 10 AM and 9 PM the day before.", remind.dayBefore === true, function () {});
+    dayBeforeRow.querySelector("input").id = "remindDayBefore";
+    form.appendChild(dayBeforeRow);
+    var twoHoursRow = toggleRow("2 hours before", "Sent about 2 hours before the appointment.", remind.twoHours === true, function () {});
+    twoHoursRow.querySelector("input").id = "remindTwoHours";
+    form.appendChild(twoHoursRow);
+
     var tzLabel = document.createElement("label");
     tzLabel.textContent = "Time zone";
     var tz = document.createElement("select");
@@ -1328,6 +1347,10 @@
         showBusinessHoursOnPage: show,
         timeZone: tz.value,
         blockedDates: blocked,
+        appointmentReminders: {
+          dayBefore: !!(form.querySelector("#remindDayBefore") || {}).checked,
+          twoHours: !!(form.querySelector("#remindTwoHours") || {}).checked,
+        },
       };
       var overrides = state.tenant.webCopyOverrides;
       if (overrides && typeof overrides === "object" && overrides["wc.contact.hours"] != null) {

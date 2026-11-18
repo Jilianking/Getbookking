@@ -778,6 +778,12 @@ struct ManualPaymentSheet: View {
     @State private var phase: Phase = .amount
     @State private var receiptDetail: PaymentReceiptDetail?
     @FocusState private var isAmountFocused: Bool
+    @EnvironmentObject private var sessionStore: TenantSessionStore
+    /// Tip screen first (when the shop asks for tips), then Stripe's card checkout.
+    @State private var showTipPicker = false
+    @State private var chosenTipCents = 0
+
+    private var tipsOn: Bool { ShopTipSettings.enabled(sessionStore.tenant) }
 
     private var serviceAmountCents: Int {
         let value = Double(amountText.replacingOccurrences(of: ",", with: "")) ?? 0
@@ -789,6 +795,12 @@ struct ManualPaymentSheet: View {
     }
 
     private var canOpen: Bool { serviceAmountCents >= 50 }
+
+    private var primaryButtonTitle: String {
+        tipsOn
+            ? "Continue · \(CardCheckoutPricing.formatUSD(cents: checkout.totalCents))"
+            : "Open checkout · \(CardCheckoutPricing.formatUSD(cents: checkout.totalCents))"
+    }
 
     var body: some View {
         ZStack {
@@ -867,9 +879,15 @@ struct ManualPaymentSheet: View {
                 }
 
                 Button {
-                    Task { await openCheckout() }
+                    localError = nil
+                    isAmountFocused = false
+                    if tipsOn {
+                        showTipPicker = true
+                    } else {
+                        Task { await openCheckout(tipCents: 0) }
+                    }
                 } label: {
-                    Text("Open checkout · \(CardCheckoutPricing.formatUSD(cents: checkout.totalCents))")
+                    Text(primaryButtonTitle)
                         .frame(maxWidth: .infinity)
                         .padding()
                         .background(canOpen ? AppDesign.brandDark : Color.gray)
@@ -892,6 +910,25 @@ struct ManualPaymentSheet: View {
                     Button("Done") { onDismiss() }
                 }
             }
+            .fullScreenCover(isPresented: $showTipPicker) {
+                TipPickerSheet(
+                    serviceCents: serviceAmountCents,
+                    baseTotalCents: checkout.totalCents,
+                    feeCents: checkout.passThroughFeeCents,
+                    taxCents: checkout.taxCents,
+                    channel: .online,
+                    percents: ShopTipSettings.percents(sessionStore.tenant),
+                    onChoose: { tip in
+                        showTipPicker = false
+                        Task {
+                            // Let the tip screen close before Stripe's card sheet opens.
+                            try? await Task.sleep(nanoseconds: 350_000_000)
+                            await openCheckout(tipCents: tip)
+                        }
+                    },
+                    onCancel: { showTipPicker = false }
+                )
+            }
             .onAppear {
                 localError = nil
                 viewModel.errorMessage = nil
@@ -903,22 +940,29 @@ struct ManualPaymentSheet: View {
         }
     }
 
-    /// Clean white + crown behind Stripe PaymentSheet (manual only).
+    /// Clean white + crown behind Stripe PaymentSheet (manual only), with the breakdown (tip included)
+    /// in the space above Stripe's sheet.
     private var checkoutBrandingBackdrop: some View {
-        ZStack(alignment: .top) {
+        let shown = CardCheckoutPricing.withTip(checkout, tipCents: chosenTipCents)
+        return ZStack(alignment: .top) {
             Color.white.ignoresSafeArea()
-            Image("BookkingCrownMark")
-                .resizable()
-                .scaledToFit()
-                .frame(width: 200, height: 200)
-                .padding(.top, 40)
-                .accessibilityHidden(true)
+            VStack(spacing: 16) {
+                Image("BookkingCrownMark")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 130, height: 130)
+                    .accessibilityHidden(true)
+                ManualCheckoutBreakdownCard(breakdown: shown)
+                    .padding(.horizontal, 32)
+            }
+            .padding(.top, 28)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .interactiveDismissDisabled(true)
     }
 
-    private func openCheckout() async {
+    private func openCheckout(tipCents: Int = 0) async {
+        chosenTipCents = tipCents
         localError = nil
         isAmountFocused = false
         withAnimation(.easeOut(duration: 0.38)) {
@@ -927,7 +971,7 @@ struct ManualPaymentSheet: View {
         // Kick off Stripe as the white crown screen slides in from the top.
         await Task.yield()
 
-        let result = await viewModel.chargeManualCheckoutInApp(serviceAmountCents: serviceAmountCents)
+        let result = await viewModel.chargeManualCheckoutInApp(serviceAmountCents: serviceAmountCents, tipCents: tipCents)
         switch result {
         case .success(let intent):
             presentReceipt(intent: intent)
@@ -967,7 +1011,8 @@ struct ManualPaymentSheet: View {
             return .notCompleted
         }()
         receiptDetail = PaymentReceiptDetail.fromTapToPayUnsuccessful(
-            checkout: checkout,
+            // Show the tip that was attempted, too.
+            checkout: CardCheckoutPricing.withTip(checkout, tipCents: chosenTipCents),
             businessName: viewModel.effectiveTapToPayDisplayName,
             customerName: nil,
             note: nil,
@@ -978,6 +1023,39 @@ struct ManualPaymentSheet: View {
         withAnimation(.easeOut(duration: 0.25)) {
             phase = .receipt
         }
+    }
+}
+
+/// Service · Fees · Tip · Total, shown above Stripe's card sheet on manual payments.
+private struct ManualCheckoutBreakdownCard: View {
+    let breakdown: CardCheckoutBreakdown
+    @State private var shown = false
+
+    private func row(_ label: String, _ cents: Int, bold: Bool = false) -> some View {
+        HStack {
+            Text(label)
+            Spacer()
+            Text(CardCheckoutPricing.formatUSD(cents: cents))
+        }
+        .font(bold ? .subheadline.weight(.bold) : .subheadline)
+        .foregroundStyle(bold ? AppDesign.textPrimary : AppDesign.textSecondary)
+    }
+
+    var body: some View {
+        VStack(spacing: 8) {
+            row("Service", breakdown.serviceCents)
+            if breakdown.taxCents > 0 { row("Sales tax", breakdown.taxCents) }
+            if breakdown.passThroughFeeCents > 0 { row("Fees", breakdown.passThroughFeeCents) }
+            if breakdown.tipCents > 0 { row("Tip", breakdown.tipCents) }
+            Divider()
+            row("Total", breakdown.totalCents, bold: true)
+        }
+        .padding(16)
+        .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Color.white))
+        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(AppDesign.chipBorder, lineWidth: 1))
+        .opacity(shown ? 1 : 0)
+        .offset(y: shown ? 0 : 24)
+        .onAppear { withAnimation(.spring(response: 0.5, dampingFraction: 0.85).delay(0.1)) { shown = true } }
     }
 }
 

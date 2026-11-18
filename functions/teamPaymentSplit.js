@@ -490,6 +490,8 @@ async function recordAndSettleTenantPayment(stripe, deps) {
   const surchargeCents = parseInt(meta.surchargeCents, 10);
   const taxCentsMeta = parseInt(meta.taxCents, 10);
   const resolvedTax = Number.isNaN(taxCentsMeta) ? 0 : Math.max(0, taxCentsMeta);
+  // Tip: 100% to the staff member, outside the studio share and the platform fee.
+  const tipCents = Math.max(0, parseInt(meta.tipCents, 10) || 0);
   const paymentKind = (meta.paymentKind || "service").toString();
   const bookingRequestId = (meta.bookingRequestId || "").toString().trim();
   const resolvedService =
@@ -498,14 +500,15 @@ async function recordAndSettleTenantPayment(stripe, deps) {
           0,
           (pi.amount || 0) -
             (Number.isNaN(surchargeCents) ? 0 : surchargeCents) -
-            resolvedTax
+            resolvedTax -
+            tipCents
         )
       : serviceCents;
   const resolvedSurcharge = Number.isNaN(surchargeCents)
     ? 0
     : Math.max(0, surchargeCents);
   const grossCents =
-    pi.amount || resolvedService + resolvedTax + resolvedSurcharge;
+    pi.amount || resolvedService + resolvedTax + resolvedSurcharge + tipCents;
 
   let stripeFeeCents = 0;
   const chargeId =
@@ -531,7 +534,7 @@ async function recordAndSettleTenantPayment(stripe, deps) {
       console.warn("recordAndSettleTenantPayment fee lookup", feeErr.message);
     }
   }
-  const platformFee = platformFeeCents(grossCents);
+  const platformFee = platformFeeCents(Math.max(0, grossCents - tipCents));
 
   const booking = await loadBookingRequestForPayment(tenantId, bookingRequestId);
   const initiatedByUid = (
@@ -613,6 +616,7 @@ async function recordAndSettleTenantPayment(stripe, deps) {
     serviceCents: resolvedService,
     taxCents: resolvedTax,
     surchargeCents: resolvedSurcharge,
+    tipCents,
     grossCents,
     stripeFeeCents,
     platformFeeCents: platformFee,

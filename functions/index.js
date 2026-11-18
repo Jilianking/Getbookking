@@ -2645,6 +2645,40 @@ async function createCustomerCheckoutPaymentIntent(stripe, stripeAccountId, payl
   throw lastErr;
 }
 
+/** Tips are on unless the owner turned them off (Payment settings). */
+function tipsEnabledForTenant(tenant) {
+  return !(tenant && tenant.tipsEnabled === false);
+}
+
+/** Payment kinds a client can tip on (not deposits, shop orders, or charter trips). */
+function paymentKindAllowsTip(kind) {
+  const k = (kind || "").toString().toLowerCase();
+  return k !== "deposit" && k !== "shop" && k !== "charter" && k !== "subscription";
+}
+
+/**
+ * Card fee on a tip, paid by the client so the staff member nets the full tip. Card rate only (the fixed
+ * fee is already covered by the service, and the 1% platform fee is not taken on tips).
+ */
+function tipCardFeeCents(tipCents, channel) {
+  const tip = Math.max(0, Math.round(Number(tipCents) || 0));
+  if (tip <= 0) return 0;
+  const rate = checkoutRateForChannel(channel);
+  return Math.ceil(tip / (1 - rate.bps / 10000)) - tip;
+}
+
+/** Whole cents, 0 when missing; capped at 2× the service (or $500) so a typo can't run up a card. */
+function parseTipCents(raw, serviceCents) {
+  const n = Math.round(Number(raw));
+  if (!Number.isFinite(n) || n <= 0) return 0;
+  const cap = Math.max(50000, Math.round((Number(serviceCents) || 0) * 2));
+  return Math.min(n, cap);
+}
+
+/**
+ * Card fee + 1% platform fee are figured on the service only. A tip is added on top: the client pays no
+ * card fee on it, no platform fee is taken from it, and no studio share comes out of it (it goes to staff).
+ */
 function pricedCustomerCheckoutFromMetadata(meta, method) {
   const feeBase = parseInt(meta.feeBaseCents, 10);
   const service = parseInt(meta.serviceAmountCents, 10);
@@ -2652,18 +2686,23 @@ function pricedCustomerCheckoutFromMetadata(meta, method) {
   if (!Number.isFinite(base) || base <= 0) return null;
   const taxOutside = (meta.taxOutsideFeeBase || "") === "1";
   const tax = taxOutside ? Math.max(0, parseInt(meta.taxCents, 10) || 0) : 0;
+  const tip = Math.max(0, parseInt(meta.tipCents, 10) || 0);
   const priced = computeCardCheckoutAmounts(base, method);
-  const totalCents = priced.totalCents + tax;
+  const beforeTip = priced.totalCents + tax;
+  const tipFee = tipCardFeeCents(tip, method);
+  const totalCents = beforeTip + tip + tipFee;
   const splitApplied = (meta.splitApplied || "") === "true";
   const studioShare = splitApplied ? Math.max(0, parseInt(meta.studioShareCents, 10) || 0) : 0;
-  const platform = platformFeeCents(totalCents);
+  const platform = platformFeeCents(beforeTip);
   const rate = checkoutRateForChannel(method);
   return {
     method: checkoutMethodId(method),
     rateLabel: rate.label,
     serviceCents: Number.isFinite(service) ? service : base,
-    surchargeCents: priced.surchargeCents,
+    // Fees shown to the client include the card fee on the tip.
+    surchargeCents: priced.surchargeCents + tipFee,
     taxCents: tax,
+    tipCents: tip,
     totalCents,
     platformFeeCents: platform,
     applicationFeeCents: platform + studioShare,
@@ -3839,6 +3878,14 @@ exports.repriceInAppCheckout = functions
       const tax = parseInt(meta.taxCents, 10) || 0;
       pricingMeta = { ...meta, feeBaseCents: String(service + tax) };
     }
+    if (data && data.tipCents != null && paymentKindAllowsTip(meta.paymentKind)) {
+      const tSnap = tenantId ? await db.collection("tenants").doc(tenantId).get() : null;
+      const allow = tipsEnabledForTenant(tSnap && tSnap.exists ? tSnap.data() : {});
+      pricingMeta = {
+        ...pricingMeta,
+        tipCents: String(allow ? parseTipCents(data.tipCents, parseInt(meta.serviceAmountCents, 10) || 0) : 0),
+      };
+    }
     const priced = pricedCustomerCheckoutFromMetadata(pricingMeta, classified);
     if (!priced) {
       throw new functions.https.HttpsError(
@@ -3855,6 +3902,7 @@ exports.repriceInAppCheckout = functions
           ...meta,
           feeBaseCents: pricingMeta.feeBaseCents,
           surchargeCents: String(priced.surchargeCents),
+          tipCents: String(priced.tipCents || 0),
           checkoutMethod: priced.method,
           platformFeeCents: String(priced.platformFeeCents),
         },
@@ -3867,6 +3915,7 @@ exports.repriceInAppCheckout = functions
       serviceCents: priced.serviceCents,
       taxCents: Math.max(0, parseInt(meta.taxCents, 10) || 0),
       surchargeCents: priced.surchargeCents,
+      tipCents: priced.tipCents || 0,
       totalCents: priced.totalCents,
       platformFeeCents: priced.platformFeeCents,
     };
@@ -3927,14 +3976,19 @@ exports.createPaymentIntentForManualCheckout = functions
     );
     const taxCents = tax.taxCents || 0;
     const priced = computeInPersonCheckoutTotals(serviceAmount, taxCents, "online");
-    const totalCents = priced.totalCents;
+    const tipCents = tipsEnabledForTenant(tenantData) && paymentKindAllowsTip(paymentKind)
+      ? parseTipCents(data?.tipCents, priced.serviceCents)
+      : 0;
+    const tipFeeCents = tipCardFeeCents(tipCents, "online");
+    const totalCents = priced.totalCents + tipCents + tipFeeCents;
     const splitFee = await buildTeamSplitFeeAndMetaForCharge({
       tenant: tenantData,
       tenantId,
       payCtx,
       paymentKind,
       serviceCents: priced.serviceCents,
-      grossCents: totalCents,
+      // Platform fee is on the service total, not the tip.
+      grossCents: priced.totalCents,
     });
     const feeCents = splitFee.applicationFeeCents;
     const attributedMemberUid = (payCtx.attributedMemberUid || uid).toString();
@@ -3951,7 +4005,8 @@ exports.createPaymentIntentForManualCheckout = functions
           serviceAmountCents: String(priced.serviceCents),
           feeBaseCents: String(priced.serviceCents + priced.taxCents),
           taxCents: String(priced.taxCents),
-          surchargeCents: String(priced.surchargeCents),
+          surchargeCents: String(priced.surchargeCents + tipFeeCents),
+          tipCents: String(tipCents),
           ...(tax.taxCalculationId ? { taxCalculationId: tax.taxCalculationId } : {}),
           bookingRequestId,
           initiatedByUid: uid,
@@ -3975,7 +4030,8 @@ exports.createPaymentIntentForManualCheckout = functions
       studioShareCents: splitFee.studioShareCents,
       serviceCents: priced.serviceCents,
       taxCents: priced.taxCents,
-      surchargeCents: priced.surchargeCents,
+      surchargeCents: priced.surchargeCents + tipFeeCents,
+      tipCents,
       totalCents,
       attributedMemberUid,
       chargeStripeScope: payCtx.scope || "tenant",
@@ -4557,16 +4613,18 @@ function receiptLineItemsFromAmounts({
   paymentKind,
   grossCents,
   taxCents = 0,
+  tipCents = 0,
 }) {
   const service = Math.max(0, Math.round(Number(serviceCents) || 0));
   const tax = Math.max(0, Math.round(Number(taxCents) || 0));
+  const tip = Math.max(0, Math.round(Number(tipCents) || 0));
   const gross = Math.max(
-    service + tax,
+    service + tax + tip,
     Math.round(Number(grossCents) || 0)
   );
   const surcharge = Math.max(
     0,
-    Math.round(Number(surchargeCents) || 0) || Math.max(0, gross - service - tax)
+    Math.round(Number(surchargeCents) || 0) || Math.max(0, gross - service - tax - tip)
   );
   const items = [
     {
@@ -4588,6 +4646,9 @@ function receiptLineItemsFromAmounts({
       quantity: 1,
       amountCents: surcharge,
     });
+  }
+  if (tip > 0) {
+    items.push({ name: "Tip", quantity: 1, amountCents: tip });
   }
   return items;
 }
@@ -4696,6 +4757,7 @@ exports.getPaymentReceiptDetail = functions
     let serviceCents = parseInt(meta.serviceAmountCents, 10);
     let surchargeCents = parseInt(meta.surchargeCents, 10);
     let taxCents = parseInt(meta.taxCents, 10);
+    const tipCents = Math.max(0, parseInt(meta.tipCents, 10) || 0);
     let grossCents = charge.amount || 0;
 
     if (ledger) {
@@ -4710,17 +4772,19 @@ exports.getPaymentReceiptDetail = functions
         0,
         grossCents -
           (Number.isNaN(surchargeCents) ? 0 : surchargeCents) -
-          taxCents
+          taxCents -
+          tipCents
       );
     }
     if (Number.isNaN(surchargeCents)) {
-      surchargeCents = Math.max(0, grossCents - serviceCents - taxCents);
+      surchargeCents = Math.max(0, grossCents - serviceCents - taxCents - tipCents);
     }
 
     const lineItems = receiptLineItemsFromAmounts({
       serviceCents,
       surchargeCents,
       taxCents,
+      tipCents,
       paymentKind,
       grossCents,
     });
@@ -4764,7 +4828,8 @@ exports.getPaymentReceiptDetail = functions
       totalPaidCents: grossCents,
       serviceCents,
       taxCents,
-      providerReceivedCents: serviceCents,
+      tipCents,
+      providerReceivedCents: serviceCents + tipCents,
       stripeReceiptUrl: charge.receipt_url || null,
     };
   });
@@ -7484,9 +7549,15 @@ exports.getDepositCheckout = onCall(publicWebCallableOptions, async (request) =>
     paymentIntentId: pi.id,
     serviceCents: priced ? priced.serviceCents : 0,
     surchargeCents: priced ? priced.surchargeCents : 0,
+    tipCents: priced ? priced.tipCents || 0 : 0,
     totalCents: paid ? pi.amount : priced ? priced.totalCents : pi.amount,
     rateLabel: priced ? priced.rateLabel : "2.9% + 30¢",
     method: priced ? priced.method : "card",
+    // The pay page offers 15/20/25%/custom/no tip when the shop allows tips on this kind of payment.
+    tipsAllowed: !paid && tipsEnabledForTenant(tenantData) && paymentKindAllowsTip(meta.paymentKind),
+    tipPercents: Array.isArray(tenantData.tipPercents) && tenantData.tipPercents.length === 3
+      ? tenantData.tipPercents.map((n) => Number(n) || 0)
+      : [15, 20, 25],
   };
 });
 
@@ -7561,13 +7632,23 @@ exports.repriceCustomerCheckout = onCall(publicWebCallableOptions, async (reques
   if (method === "klarna" || method === "affirm") {
     throw new HttpsError("invalid-argument", "That payment method cannot be repriced here.");
   }
-  const priced = pricedCustomerCheckoutFromMetadata(meta, method);
+  let pricingMeta = meta;
+  if (data.tipCents != null && paymentKindAllowsTip(meta.paymentKind)) {
+    pricingMeta = {
+      ...meta,
+      tipCents: String(tipsEnabledForTenant(tenantData)
+        ? parseTipCents(data.tipCents, parseInt(meta.serviceAmountCents, 10) || 0)
+        : 0),
+    };
+  }
+  const priced = pricedCustomerCheckoutFromMetadata(pricingMeta, method);
   if (!priced) {
     throw new HttpsError("failed-precondition", "This payment is missing its service amount.");
   }
   const nextMeta = {
     ...meta,
     surchargeCents: String(priced.surchargeCents),
+    tipCents: String(priced.tipCents || 0),
     checkoutMethod: priced.method,
     platformFeeCents: String(priced.platformFeeCents),
   };
@@ -8444,14 +8525,17 @@ exports.createPaymentIntentForTapToPay = functions
     );
     const taxCents = tax.taxCents || 0;
     const priced = computeInPersonCheckoutTotals(serviceAmount, taxCents, "card_present");
-    const totalCents = priced.totalCents;
+    const tipCents = tipsEnabledForTenant(tenantData) ? parseTipCents(data?.tipCents, priced.serviceCents) : 0;
+    const tipFeeCents = tipCardFeeCents(tipCents, "card_present");
+    const totalCents = priced.totalCents + tipCents + tipFeeCents;
     const splitFee = await buildTeamSplitFeeAndMetaForCharge({
       tenant: tenantData,
       tenantId,
       payCtx,
       paymentKind: "service",
       serviceCents: priced.serviceCents,
-      grossCents: totalCents,
+      // Platform fee is on the service total, not the tip.
+      grossCents: priced.totalCents,
     });
     const feeCents = splitFee.applicationFeeCents;
     const attributedMemberUid = (payCtx.attributedMemberUid || uid).toString();
@@ -8467,7 +8551,8 @@ exports.createPaymentIntentForTapToPay = functions
           paymentKind: "service",
           serviceAmountCents: String(priced.serviceCents),
           taxCents: String(priced.taxCents),
-          surchargeCents: String(priced.surchargeCents),
+          surchargeCents: String(priced.surchargeCents + tipFeeCents),
+          tipCents: String(tipCents),
           ...(tax.taxCalculationId ? { taxCalculationId: tax.taxCalculationId } : {}),
           bookingRequestId,
           initiatedByUid: uid,
@@ -8487,7 +8572,8 @@ exports.createPaymentIntentForTapToPay = functions
       studioShareCents: splitFee.studioShareCents,
       serviceCents: priced.serviceCents,
       taxCents: priced.taxCents,
-      surchargeCents: priced.surchargeCents,
+      surchargeCents: priced.surchargeCents + tipFeeCents,
+      tipCents,
       totalCents,
       attributedMemberUid,
       chargeStripeScope: payCtx.scope || "tenant",

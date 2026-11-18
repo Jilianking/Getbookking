@@ -40,6 +40,8 @@ struct CardCheckoutBreakdown: Equatable {
     let platformFeeCents: Int
     let totalCents: Int
     let channel: CardCheckoutChannel
+    /// Tip added on top (no card fee on it; goes to the staff member).
+    var tipCents: Int = 0
 
     var cardProcessingFeeCents: Int {
         max(0, passThroughFeeCents - platformFeeCents)
@@ -115,6 +117,13 @@ enum CardCheckoutPricing {
         return total - stripe - platformFeeCents(totalCents: total)
     }
 
+    /// Card fee on a tip, paid by the client (card rate only; no fixed fee, no platform fee). Mirrors the server.
+    static func tipCardFeeCents(tipCents: Int, channel: CardCheckoutChannel) -> Int {
+        guard tipCents > 0 else { return 0 }
+        let bps = Double(channel.rate.bps)
+        return Int((Double(tipCents) / (1 - bps / 10_000)).rounded(.up)) - tipCents
+    }
+
     static func formatUSD(cents: Int) -> String {
         let formatter = NumberFormatter()
         formatter.numberStyle = .currency
@@ -167,6 +176,13 @@ struct CardCheckoutBreakdownView: View {
                     }
                     Spacer()
                     Text(CardCheckoutPricing.formatUSD(cents: breakdown.passThroughFeeCents))
+                }
+            }
+            if breakdown.tipCents > 0 {
+                HStack {
+                    Text("Tip")
+                    Spacer()
+                    Text(CardCheckoutPricing.formatUSD(cents: breakdown.tipCents))
                 }
             }
             Divider()

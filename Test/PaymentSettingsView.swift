@@ -13,6 +13,133 @@ struct PaymentSettingsView: View {
     #if TAP_TO_PAY_ENABLED
     @State private var showTapToPayEducation = false
     #endif
+    @EnvironmentObject private var sessionStore: TenantSessionStore
+    @State private var tipsOn = true
+    @State private var tipsLoaded = false
+    @State private var tipPercentText: [String] = ["15", "20", "25"]
+    @State private var tipSaveMessage: String?
+    @State private var isSavingTipPercents = false
+
+    private var parsedTipPercents: [Int]? {
+        let nums = tipPercentText.map { Int($0.trimmingCharacters(in: .whitespaces)) ?? 0 }
+        guard nums.count == 3, nums.allSatisfy({ (1...100).contains($0) }) else { return nil }
+        return nums
+    }
+
+    private func saveTipPercents(_ values: [Int]) {
+        guard !isSavingTipPercents else { return }
+        guard let tid = viewModel.tenantId ?? sessionStore.tenantId else {
+            tipSaveMessage = "Couldn't find your shop. Close and reopen Payment settings."
+            return
+        }
+        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+        isSavingTipPercents = true
+        tipSaveMessage = nil
+        Task {
+            do {
+                try await FirebaseService().updateTenant(tenantId: tid, updates: ["tipPercents": values])
+                sessionStore.mergeTenantFields(["tipPercents": values])
+                tipPercentText = values.map(String.init)
+                tipSaveMessage = "Saved"
+            } catch {
+                tipSaveMessage = error.localizedDescription
+            }
+            isSavingTipPercents = false
+        }
+    }
+
+    @ViewBuilder
+    private var tipPercentEditor: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Tip choices")
+                .font(.subheadline.weight(.medium))
+            HStack(spacing: 10) {
+                ForEach(0..<3, id: \.self) { i in
+                    HStack(spacing: 2) {
+                        TextField("", text: $tipPercentText[i])
+                            .keyboardType(.numberPad)
+                            .multilineTextAlignment(.center)
+                            .font(.body.weight(.semibold))
+                        Text("%").foregroundStyle(.secondary)
+                    }
+                    .padding(.vertical, 10)
+                    .padding(.horizontal, 10)
+                    .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(AppDesign.cardBackground))
+                    .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(AppDesign.chipBorder, lineWidth: 1))
+                }
+            }
+            HStack {
+                Button("Save tip choices") {
+                    if let values = parsedTipPercents { saveTipPercents(values) }
+                    else { tipSaveMessage = "Use whole numbers from 1 to 100." }
+                }
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(AppDesign.accentGreen)
+                .disabled(isSavingTipPercents || isDemoMode)
+                Spacer()
+                Button("Reset to 15 / 20 / 25") { saveTipPercents([15, 20, 25]) }
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .disabled(isSavingTipPercents || isDemoMode)
+            }
+            if let msg = tipSaveMessage {
+                Text(msg)
+                    .font(.caption)
+                    .foregroundStyle(msg == "Saved" ? AppDesign.accentGreen : .red)
+            }
+            Text("Clients also get Custom amount and No tip.")
+                .font(.caption)
+                .foregroundStyle(.tertiary)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+    }
+
+    private var tipsSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            AppSectionHeader(title: "Tips")
+            VStack(alignment: .leading, spacing: 0) {
+                Toggle(isOn: $tipsOn) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Ask for tips")
+                            .font(.body.weight(.medium))
+                        Text("Shown on Tap to Pay, manual card payments, and payment links. Tips go 100% to the staff member.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .tint(AppDesign.accentGreen)
+                .disabled(isDemoMode || viewModel.tenantId == nil)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 12)
+                if tipsOn {
+                    Divider().padding(.leading, 14)
+                    tipPercentEditor
+                }
+            }
+            .appCard()
+            .task {
+                tipsOn = ShopTipSettings.enabled(sessionStore.tenant)
+                tipPercentText = ShopTipSettings.percents(sessionStore.tenant).map(String.init)
+                // Read the latest saved values (the in-memory copy can be from earlier in the session).
+                if let tid = viewModel.tenantId ?? sessionStore.tenantId,
+                   let fresh = try? await FirebaseService().fetchTenant(tenantId: tid) {
+                    var latest: [String: Any] = [:]
+                    if let on = fresh["tipsEnabled"] { latest["tipsEnabled"] = on }
+                    if let pcts = fresh["tipPercents"] { latest["tipPercents"] = pcts }
+                    sessionStore.mergeTenantFields(latest)
+                    tipsOn = ShopTipSettings.enabled(fresh)
+                    tipPercentText = ShopTipSettings.percents(fresh).map(String.init)
+                }
+                tipsLoaded = true
+            }
+            .onChange(of: tipsOn) { _, on in
+                guard tipsLoaded, let tid = viewModel.tenantId else { return }
+                sessionStore.mergeTenantFields(["tipsEnabled": on])
+                Task { try? await FirebaseService().updateTenant(tenantId: tid, updates: ["tipsEnabled": on]) }
+            }
+        }
+    }
 
     var body: some View {
         ScrollView {
@@ -28,6 +155,7 @@ struct PaymentSettingsView: View {
                         statementDescriptorSection
                     }
                     if viewModel.isTenantOwner {
+                        tipsSection
                         salesTaxSection
                     }
                     taxReportingSection
@@ -47,6 +175,16 @@ struct PaymentSettingsView: View {
                 }
             }
             .padding(16)
+        }
+        // Swipe down on the page to slide the keyboard away (tip choices, statement descriptor).
+        .scrollDismissesKeyboard(.interactively)
+        .toolbar {
+            ToolbarItemGroup(placement: .keyboard) {
+                Spacer()
+                Button("Done") {
+                    UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+                }
+            }
         }
         .appScreenBackground()
         .navigationTitle("Payment settings")

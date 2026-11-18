@@ -317,6 +317,16 @@ struct PaymentReceiptDetail: Equatable {
                 )
             )
         }
+        if checkout.tipCents > 0 {
+            items.append(
+                PaymentReceiptLineItem(
+                    id: "tip",
+                    name: "Tip",
+                    quantity: 1,
+                    amountCents: checkout.tipCents
+                )
+            )
+        }
         let trimmedNote = (note ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         if !trimmedNote.isEmpty {
             items.append(
@@ -398,6 +408,16 @@ struct PaymentReceiptDetail: Equatable {
                     name: "Processing & service fees",
                     quantity: 1,
                     amountCents: checkout.passThroughFeeCents
+                )
+            )
+        }
+        if checkout.tipCents > 0 {
+            items.append(
+                PaymentReceiptLineItem(
+                    id: "tip",
+                    name: "Tip",
+                    quantity: 1,
+                    amountCents: checkout.tipCents
                 )
             )
         }

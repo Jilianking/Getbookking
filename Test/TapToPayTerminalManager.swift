@@ -49,6 +49,17 @@ final class TapToPayTerminalManager {
     private var activeDiscoveryDelegate: TapToPayDiscoveryDelegate?
     private var activeReaderDelegate: TapToPayReaderDelegateAnnouncer?
     private var connectedReader: Reader?
+    /// The card read in progress, so the checkout screen can cancel it.
+    private var activeCollect: Cancelable?
+    /// Set by Cancel; checked at every step so a tap while the Tap to Pay screen is still opening also stops it.
+    private var cancelRequested = false
+
+    /// Call when a new charge starts.
+    func resetCancel() { cancelRequested = false }
+
+    private func throwIfCanceled() throws {
+        if cancelRequested { throw TapToPayError.message("Payment canceled.") }
+    }
     private var connectedLocationId: String = ""
     private var connectedMerchantDisplayName: String = ""
 
@@ -243,9 +254,12 @@ final class TapToPayTerminalManager {
         ) {
             try await warmUpReaderThrowing(locationId: locationId, merchantDisplayName: resolvedName)
         }
+        try throwIfCanceled()
 
         let paymentIntent = try await Terminal.shared.retrievePaymentIntent(clientSecret: clientSecret)
+        try throwIfCanceled()
         let collectedIntent = try await collectPaymentMethod(paymentIntent: paymentIntent)
+        // Card was read; Cancel can't undo a tap that already went through, so confirm normally.
         _ = try await confirmPaymentIntent(paymentIntent: collectedIntent)
     }
 
@@ -491,9 +505,17 @@ final class TapToPayTerminalManager {
         }
     }
 
+    /// Stops a card read that's waiting for a tap (the payment then fails as canceled; nothing is charged).
+    func cancelActivePayment() {
+        cancelRequested = true
+        activeCollect?.cancel { _ in }
+        activeCollect = nil
+    }
+
     private func collectPaymentMethod(paymentIntent: PaymentIntent) async throws -> PaymentIntent {
         try await withCheckedThrowingContinuation { continuation in
-            Terminal.shared.collectPaymentMethod(paymentIntent) { collectedIntent, error in
+            activeCollect = Terminal.shared.collectPaymentMethod(paymentIntent) { [weak self] collectedIntent, error in
+                self?.activeCollect = nil
                 if let error {
                     continuation.resume(throwing: error)
                 } else if let collectedIntent {
@@ -501,6 +523,9 @@ final class TapToPayTerminalManager {
                 } else {
                     continuation.resume(throwing: TapToPayError.message("Could not read the card."))
                 }
+            }
+            if cancelRequested {
+                activeCollect?.cancel { _ in }
             }
         }
     }

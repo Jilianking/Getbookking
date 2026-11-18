@@ -720,6 +720,32 @@ struct BookingRequestDetailView: View {
     @State private var contactAlreadyExists = false
     @State private var didPresentInitialConfirm = false
     @State private var showCancelConfirm = false
+    @State private var showCancelSheet = false
+    @State private var showEditDetailsSheet = false
+    @State private var showDeleteConfirm = false
+
+    private var shopDisplayName: String {
+        let t = sessionStore.tenant ?? [:]
+        let name = ((t["businessName"] as? String) ?? (t["displayName"] as? String) ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return name.isEmpty ? "us" : name
+    }
+
+    /// Delete for good: only unpaid, non-charter bookings (paid ones are cancelled so the payment record stays).
+    private var canDeletePermanently: Bool {
+        canManageActions
+            && !viewModel.isCharterPlan
+            && (currentRequest.paidCents ?? 0) <= 0
+            && (currentRequest.stripePaymentIntentId ?? "").isEmpty
+            && !(currentRequest.documentId ?? "").isEmpty
+    }
+
+    /// Service + notes can change while the booking is still live.
+    private var canEditDetails: Bool {
+        canManageActions && (BookingRequestStatus.isNew(currentRequest.status)
+            || BookingRequestStatus.isInFlightPending(currentRequest.status)
+            || statusLower == BookingRequestStatus.confirmed)
+    }
 
     private var currentRequest: BookingRequest {
         guard let id = request.documentId,
@@ -849,13 +875,30 @@ struct BookingRequestDetailView: View {
             .toolbar { detailToolbar }
         }
         .navigationViewStyle(.stack)
-        .alert("Cancel booking?", isPresented: $showCancelConfirm) {
-            Button("Keep booking", role: .cancel) {}
-            Button(currentRequest.refundablePaidCents > 0 ? "Cancel and refund" : "Cancel booking", role: .destructive) {
-                Task { await cancelCurrentBooking() }
+        .sheet(isPresented: $showCancelSheet) {
+            CancelAppointmentSheet(
+                request: currentRequest,
+                canText: canSendDepositSmsForRequest,
+                isCharter: viewModel.isCharterPlan,
+                shopName: shopDisplayName,
+                viewModel: viewModel,
+                onDone: { dismiss() }
+            )
+        }
+        .sheet(isPresented: $showEditDetailsSheet) {
+            EditAppointmentDetailsSheet(request: currentRequest, viewModel: viewModel)
+        }
+        .confirmationDialog("Delete this appointment?", isPresented: $showDeleteConfirm, titleVisibility: .visible) {
+            Button("Delete", role: .destructive) {
+                Task {
+                    if await viewModel.deleteBookingPermanently(requestId: currentRequest.documentId ?? "") {
+                        dismiss()
+                    }
+                }
             }
+            Button("Keep it", role: .cancel) {}
         } message: {
-            Text(currentRequest.cancelConfirmMessage)
+            Text("This can't be undone, and the client isn't notified. Use it for mistakes and test bookings.")
         }
     }
 
@@ -888,6 +931,38 @@ struct BookingRequestDetailView: View {
             }
             contactCard
             approvalActionsCard
+            moreActionsCard
+        }
+    }
+
+    /// Edit details / delete — same options as the web calendar.
+    @ViewBuilder
+    private var moreActionsCard: some View {
+        if canEditDetails || canDeletePermanently {
+            VStack(spacing: 10) {
+                if canEditDetails {
+                    Button {
+                        showEditDetailsSheet = true
+                    } label: {
+                        Label(viewModel.isCharterPlan ? "Edit notes" : "Edit service & notes", systemImage: "pencil")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(viewModel.isUpdatingStatus)
+                }
+                if canDeletePermanently {
+                    Button(role: .destructive) {
+                        showDeleteConfirm = true
+                    } label: {
+                        Text("Delete appointment")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderless)
+                    .disabled(viewModel.isUpdatingStatus)
+                }
+            }
+            .padding(16)
+            .appCard()
         }
     }
 
@@ -958,6 +1033,10 @@ struct BookingRequestDetailView: View {
     private var appointmentCard: some View {
         VStack(alignment: .leading, spacing: 12) {
             BookingRequestSectionHeader(title: isCharter ? "Charter schedule" : "Appointment request")
+            ReminderReplyBadge(
+                reply: currentRequest.rescheduleRequestedAt != nil ? "reschedule"
+                    : (currentRequest.clientConfirmedAt != nil ? "confirmed" : nil)
+            )
             if let start = request.departureStart {
                 BookingRequestDetailRow(
                     label: isCharter ? "Trip date" : "Requested date",
@@ -1174,7 +1253,7 @@ struct BookingRequestDetailView: View {
 
                     if canShowCancelAction {
                         Button {
-                            showCancelConfirm = true
+                            showCancelSheet = true
                         } label: {
                             Text("Cancel booking")
                         }

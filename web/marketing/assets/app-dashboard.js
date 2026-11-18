@@ -1098,7 +1098,7 @@
             return '<button type="button" class="app-cal-tw-chip' + (b.status !== "confirmed" ? " is-hold" : "") +
               (serviceColor(b) ? " has-svc" : "") +
               '" style="--member:' + r.color + ";" + svcStyle(b) + '" data-booking-id="' + esc(b.id) + '"><time>' + esc(formatTime(b.start)) +
-              "</time><span>" + esc(b.customerName) + (b.serviceName ? " · " + esc(b.serviceName) : "") + "</span></button>";
+              "</time><span>" + esc(b.customerName) + replyMark(b) + (b.serviceName ? " · " + esc(b.serviceName) : "") + "</span></button>";
           }).join("");
         row += '<div class="app-cal-tw-cell' + (sameDay(d, today) ? " is-today" : "") + '" data-cal-day="' + isoDate(d) +
           '" data-col-day="' + isoDate(d) + '" data-col-uid="' + esc(r.key === "unassigned" ? "" : r.key) + '" data-col-key="' + esc(r.key) + '">' +
@@ -1198,7 +1198,7 @@
             '"' + member + ' data-booking-id="' +
             esc(b.id) +
             '">' +
-            esc(b.customerName) +
+            esc(b.customerName) + replyMark(b) +
             "</span>"
           );
         })

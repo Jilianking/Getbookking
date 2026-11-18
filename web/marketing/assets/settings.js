@@ -1180,7 +1180,42 @@
       closed.appendChild(box);
       closed.appendChild(document.createTextNode(" Closed"));
       line.appendChild(closed);
+      // A break (e.g. lunch) splits the day into two ranges; online booking skips the gap.
+      var second = day.ranges && day.ranges[1];
+      var hasBreak = !!(second && day.ranges[0] && second.openMin > day.ranges[0].closeMin);
+      if (hasBreak) {
+        line.querySelector('[data-close="' + key + '"]').value = minutesToTime(second.closeMin || 1020);
+      }
+      var addBreak = document.createElement("button");
+      addBreak.type = "button";
+      addBreak.className = "set-break-add";
+      addBreak.textContent = "+ Break";
+      line.appendChild(addBreak);
       form.appendChild(line);
+      var breakRow = document.createElement("div");
+      breakRow.className = "set-break" + (hasBreak ? "" : " hidden");
+      breakRow.innerHTML = "<span>Break</span>" +
+        '<input type="time" step="900" data-bstart="' + key + '" value="' + minutesToTime(hasBreak ? day.ranges[0].closeMin : 720) + '" aria-label="' + DAY_NAMES[i] + ' break starts" />' +
+        '<input type="time" step="900" data-bend="' + key + '" value="' + minutesToTime(hasBreak ? second.openMin : 780) + '" aria-label="' + DAY_NAMES[i] + ' break ends" />';
+      breakRow.dataset.breakOn = hasBreak ? "1" : "";
+      breakRow.dataset.breakDay = key;
+      var rmBreak = document.createElement("button");
+      rmBreak.type = "button";
+      rmBreak.className = "set-break-rm";
+      rmBreak.textContent = "Remove";
+      breakRow.appendChild(rmBreak);
+      addBreak.hidden = hasBreak;
+      addBreak.addEventListener("click", function () {
+        breakRow.classList.remove("hidden");
+        breakRow.dataset.breakOn = "1";
+        addBreak.hidden = true;
+      });
+      rmBreak.addEventListener("click", function () {
+        breakRow.classList.add("hidden");
+        breakRow.dataset.breakOn = "";
+        addBreak.hidden = false;
+      });
+      form.appendChild(breakRow);
     });
 
     form.appendChild(toggleRow(
@@ -1254,6 +1289,7 @@
       ev.preventDefault();
       var nextWeekly = {};
       var lines = [];
+      var breakError = "";
       DAY_KEYS.forEach(function (key, i) {
         var closed = form.querySelector('[data-closed="' + key + '"]').checked;
         var openMin = timeToMinutes(form.querySelector('[data-open="' + key + '"]').value);
@@ -1262,10 +1298,27 @@
           nextWeekly[key] = { closed: true, ranges: [] };
           lines.push(DAY_NAMES[i].slice(0, 3) + " Closed");
         } else {
-          nextWeekly[key] = { closed: false, ranges: [{ openMin: openMin, closeMin: closeMin }] };
-          lines.push(DAY_NAMES[i].slice(0, 3) + " " + fmtMin(openMin) + "–" + fmtMin(closeMin));
+          var bRow = form.querySelector('[data-break-day="' + key + '"]');
+          var bOn = bRow && bRow.dataset.breakOn === "1";
+          var bStart = bOn ? timeToMinutes(form.querySelector('[data-bstart="' + key + '"]').value) : 0;
+          var bEnd = bOn ? timeToMinutes(form.querySelector('[data-bend="' + key + '"]').value) : 0;
+          if (bOn && !(bStart > openMin && bEnd > bStart && bEnd < closeMin)) {
+            breakError = breakError || DAY_NAMES[i] + ": the break has to fit inside your open hours.";
+            bOn = false;
+          }
+          if (bOn) {
+            nextWeekly[key] = { closed: false, ranges: [{ openMin: openMin, closeMin: bStart }, { openMin: bEnd, closeMin: closeMin }] };
+            lines.push(DAY_NAMES[i].slice(0, 3) + " " + fmtMin(openMin) + "–" + fmtMin(bStart) + ", " + fmtMin(bEnd) + "–" + fmtMin(closeMin));
+          } else {
+            nextWeekly[key] = { closed: false, ranges: [{ openMin: openMin, closeMin: closeMin }] };
+            lines.push(DAY_NAMES[i].slice(0, 3) + " " + fmtMin(openMin) + "–" + fmtMin(closeMin));
+          }
         }
       });
+      if (breakError) {
+        alert(breakError);
+        return;
+      }
       var show = form.querySelector('input[type="checkbox"]').checked;
       var showBox = form.querySelector(".set-toggle input");
       if (showBox) show = showBox.checked;

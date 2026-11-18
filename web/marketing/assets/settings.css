@@ -182,3 +182,18 @@
 .set-dep-row { display: flex; align-items: center; gap: 10px; }
 .set-dep-row span { flex: 1; font-size: 14px; }
 .set-dep-row input { width: 110px; }
+
+/* Breaks inside a day's hours */
+.set-day { grid-template-columns: 88px 1fr 1fr auto auto; }
+.set-break-add { border: 0; background: none; color: var(--brand-warm, #8b6f47); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; padding: 4px 2px; white-space: nowrap; }
+.set-break-add[hidden] { display: none; }
+.set-break { display: grid; grid-template-columns: 88px 1fr 1fr auto; gap: 8px; align-items: center; margin-top: 4px; padding-left: 0; }
+.set-break.hidden { display: none; }
+.set-break span { font-size: 13px; color: var(--text-secondary, #6b5e4a); padding-left: 14px; }
+.set-break-rm { border: 0; background: none; color: #9b2c2c; font: inherit; font-size: 13px; cursor: pointer; padding: 4px 2px; }
+@media (max-width: 520px) {
+  .set-day { grid-template-columns: 64px 1fr 1fr; }
+  .set-day label, .set-day .set-break-add { grid-column: auto; }
+  .set-break { grid-template-columns: 64px 1fr 1fr; }
+  .set-break-rm { grid-column: 2 / -1; justify-self: start; }
+}

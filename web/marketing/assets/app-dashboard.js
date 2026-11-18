@@ -184,6 +184,10 @@
       customerPhone: String(data.customerPhone || "").trim(),
       notes: String(data.notes || "").trim(),
       serviceName: String(data.serviceName || "").trim(),
+      serviceId: String(data.serviceId || "").trim(),
+      boatId: String(data.boatId || "").trim(),
+      // Any money taken (deposit or full payment): such bookings are cancelled, never deleted.
+      paid: !!(data.stripePaymentIntentId || data.paymentIntentId || data.paidAt || data.depositPaidAt),
       assignedName: String(data.assignedMemberName || "").trim(),
       assignedUid: String(data.assignedMemberUid || "").trim(),
       readAt: toDate(data.readAt),
@@ -1017,7 +1021,8 @@
             return blockHtml(b);
           })
           .join("");
-        return '<div class="app-cal-col">' + blocks + "</div>";
+        return '<div class="app-cal-col" data-col-day="' + isoDate(day) + '" data-col-uid="' + esc(c.uid || "") +
+          '" data-col-key="' + esc(c.key) + '">' + blockedHtmlFor(day) + blocks + "</div>";
       })
       .join("");
     grid.innerHTML = timesHtml() + colHtml;
@@ -1059,7 +1064,9 @@
               '" style="--member:' + r.color + '" data-booking-id="' + esc(b.id) + '"><time>' + esc(formatTime(b.start)) +
               "</time><span>" + esc(b.customerName) + (b.serviceName ? " · " + esc(b.serviceName) : "") + "</span></button>";
           }).join("");
-        row += '<div class="app-cal-tw-cell' + (sameDay(d, today) ? " is-today" : "") + '" data-cal-day="' + isoDate(d) + '">' + chips + "</div>";
+        row += '<div class="app-cal-tw-cell' + (sameDay(d, today) ? " is-today" : "") + '" data-cal-day="' + isoDate(d) +
+          '" data-col-day="' + isoDate(d) + '" data-col-uid="' + esc(r.key === "unassigned" ? "" : r.key) + '" data-col-key="' + esc(r.key) + '">' +
+          blockedChipsFor(d) + chips + "</div>";
       });
       return row;
     }).join("") || '<p class="app-empty">Pick at least one person in the Team menu.</p>';
@@ -1100,7 +1107,7 @@
             return blockHtml(b, extra);
           })
           .join("");
-        return '<div class="app-cal-col">' + blocks + "</div>";
+        return '<div class="app-cal-col" data-col-day="' + isoDate(d) + '">' + blockedHtmlFor(d) + blocks + "</div>";
       })
       .join("");
     grid.innerHTML = timesHtml() + colHtml;
@@ -1165,6 +1172,8 @@
         '<button type="button" class="' +
         cls +
         '" data-cal-day="' +
+        key +
+        '" data-col-day="' +
         key +
         '"><span class="app-cal-mnum">' +
         d.getDate() +
@@ -1296,6 +1305,10 @@
     var tbtn = $("calTeam");
     if (tmenu) tmenu.classList.add("hidden");
     if (tbtn) tbtn.setAttribute("aria-expanded", "false");
+    var nmenu = $("calNewMenu");
+    var nbtn = $("calNew");
+    if (nmenu) nmenu.classList.add("hidden");
+    if (nbtn) nbtn.setAttribute("aria-expanded", "false");
   }
 
   function togglePop(btnId, menuId) {
@@ -1352,6 +1365,9 @@
   }
 
   function setDetailOpen(open, booking) {
+    calState.detailId = open && booking ? booking.id : null;
+    calState.detailBusy = false;
+    showDetailMode("view");
     var sheet = $("calDetailSheet");
     var scrim = $("calDetailScrim");
     if (sheet) sheet.classList.toggle("hidden", !open);
@@ -1380,6 +1396,790 @@
         detailRow("Phone", booking.customerPhone) +
         detailRow("Notes", booking.notes);
     }
+    paintDetailActions(booking);
+  }
+
+  /* ---------- Edit / cancel / delete an appointment ---------- */
+
+  var LIVE_STATUSES = ["new", "pending", "pending_consultation", "pending_deposit", "pending_payment", "confirmed"];
+
+  function mayManageBookings(session) {
+    return !!(session && (session.isOwner || (global.ShopAppAccess && ShopAppAccess.can(session, "approveRequests"))));
+  }
+
+  function detailBooking() {
+    return calState.detailId ? bookingById(calState.detailId) : null;
+  }
+
+  function firstName(name) {
+    var n = String(name || "").trim().split(/\s+/)[0];
+    return n && n !== "Client" ? n : "";
+  }
+
+  function shopLabel(session) {
+    return (session && (session.shopName || (session.tenant && session.tenant.businessName))) || "us";
+  }
+
+  function canTextClient(session, booking) {
+    return !!(session && booking && shopCanSms(session) && e164US(booking.customerPhone));
+  }
+
+  function showDetailMode(mode) {
+    var view = $("calDetailView");
+    var form = $("calEditForm");
+    if (view) view.classList.toggle("hidden", mode === "edit");
+    if (form) form.classList.toggle("hidden", mode !== "edit");
+    var box = $("calConfirmBox");
+    var confirmActions = $("calConfirmActions");
+    var actions = $("calDetailActions");
+    var confirming = mode === "cancel" || mode === "delete";
+    if (box) box.classList.toggle("hidden", !confirming);
+    if (confirmActions) confirmActions.classList.toggle("hidden", !confirming);
+    if (actions) actions.classList.toggle("hidden", confirming);
+    calState.detailMode = mode;
+    ["calDetailError", "calEditError"].forEach(function (id) {
+      var el = $(id);
+      if (el) el.classList.add("hidden");
+    });
+  }
+
+  function paintDetailActions(booking) {
+    var session = calState.session;
+    var may = mayManageBookings(session);
+    var charter = session ? isCharter(session.tenant) : false;
+    var live = booking && LIVE_STATUSES.indexOf(booking.status) !== -1;
+    var edit = $("calDetailEdit");
+    var cancel = $("calDetailCancelAppt");
+    var del = $("calDetailDelete");
+    if (edit) edit.classList.toggle("hidden", !(may && live));
+    if (cancel) cancel.classList.toggle("hidden", !(may && live));
+    // Charter trips hold boat slots on the server, and paid bookings keep their payment record: cancel those instead.
+    if (del) del.classList.toggle("hidden", !(may && booking && !booking.paid && !charter));
+  }
+
+  function detailFail(id, msg) {
+    calState.detailBusy = false;
+    setDetailButtonsDisabled(false);
+    var el = $(id);
+    if (el) {
+      el.textContent = msg;
+      el.classList.remove("hidden");
+    }
+  }
+
+  function setDetailButtonsDisabled(on) {
+    ["calDetailEdit", "calDetailCancelAppt", "calDetailDelete", "calDetailDone", "calDetailClose",
+      "calConfirmBack", "calConfirmGo", "calEditBack", "calEditSave"].forEach(function (id) {
+      var el = $(id);
+      if (el) el.disabled = !!on;
+    });
+  }
+
+  function sendBookingText(booking, body, preview) {
+    var to = e164US(booking.customerPhone);
+    if (!to) return Promise.resolve();
+    return firebase.app().functions(REGION).httpsCallable("sendClientSms")({
+      to: to,
+      body: body,
+      clientName: booking.customerName,
+      threadId: to,
+      threadPreview: preview,
+    });
+  }
+
+  function finishDetailAction() {
+    calState.detailBusy = false;
+    setDetailButtonsDisabled(false);
+    setDetailOpen(false);
+    refreshBookings();
+  }
+
+  function openEditForm() {
+    var booking = detailBooking();
+    var session = calState.session;
+    if (!booking || !session) return;
+    var charter = isCharter(session.tenant);
+    $("calEditServiceLabel").textContent = charter ? "Trip" : "Service";
+    var svc = $("calEditService");
+    var services = calState.services || [];
+    var known = services.some(function (s) { return s.id === booking.serviceId; });
+    var opts = services.map(function (s) {
+      return '<option value="' + esc(s.id) + '"' + (s.id === booking.serviceId ? " selected" : "") + ">" + esc(s.name) + "</option>";
+    });
+    if (!known) {
+      // Keep a service that was removed or renamed since this was booked.
+      opts.unshift('<option value="" selected>' + esc(booking.serviceName || "Current service") + "</option>");
+    }
+    svc.innerHTML = opts.join("");
+    svc.disabled = charter;
+    var start = booking.start || new Date();
+    $("calEditDate").value = isoDate(start);
+    $("calEditTime").value = String(start.getHours()).padStart(2, "0") + ":" + String(start.getMinutes()).padStart(2, "0");
+    var staffRow = $("calEditStaffRow");
+    var staff = $("calEditStaff");
+    if (teamView(session)) {
+      staffRow.classList.remove("hidden");
+      staff.innerHTML = (session.members || []).map(function (m) {
+        var uid = m.uid || "";
+        var label = (m.displayName || m.firstName || "").trim() || "Staff";
+        return '<option value="' + esc(uid) + '"' + (uid === booking.assignedUid ? " selected" : "") + ">" + esc(label) + "</option>";
+      }).join("");
+    } else {
+      staffRow.classList.add("hidden");
+      staff.innerHTML = "";
+    }
+    $("calEditNotes").value = booking.notes || "";
+    var first = firstName(booking.customerName);
+    $("calEditNotifyLabel").textContent = "Text " + (first || "the client") + " the new time";
+    $("calEditNotify").checked = true;
+    syncEditNotify();
+    showDetailMode("edit");
+  }
+
+  function editedStart() {
+    var dateVal = $("calEditDate").value;
+    var timeVal = $("calEditTime").value;
+    if (!dateVal || !timeVal) return null;
+    var parts = timeVal.split(":");
+    var d = new Date(dateVal + "T00:00:00");
+    d.setHours(parseInt(parts[0], 10), parseInt(parts[1], 10), 0, 0);
+    return isNaN(d.getTime()) ? null : d;
+  }
+
+  /** The "text the new time" option only shows when the time actually changes and texting is set up. */
+  function syncEditNotify() {
+    var booking = detailBooking();
+    var row = $("calEditNotifyRow");
+    if (!row || !booking) return;
+    var start = editedStart();
+    var moved = !!(start && booking.start && start.getTime() !== booking.start.getTime());
+    var charter = calState.session ? isCharter(calState.session.tenant) : false;
+    row.classList.toggle("hidden", !(moved && !charter && booking.status === "confirmed" && canTextClient(calState.session, booking)));
+  }
+
+  function saveEdit(ev) {
+    ev.preventDefault();
+    if (calState.detailBusy) return;
+    var booking = detailBooking();
+    var session = calState.session;
+    if (!booking || !session || !calState.col) return;
+    var charter = isCharter(session.tenant);
+    var start = editedStart();
+    if (!start) return detailFail("calEditError", "Pick a date and time.");
+    var serviceId = $("calEditService").value;
+    var service = (calState.services || []).filter(function (s) { return s.id === serviceId; })[0] || null;
+    var staffUid = teamView(session) ? $("calEditStaff").value : booking.assignedUid || session.ownerUid || session.user.uid;
+    var member = memberForUid(session, staffUid);
+    if (!member.uid) return detailFail("calEditError", "Choose a staff member.");
+    var notes = $("calEditNotes").value.trim();
+    var moved = !booking.start || start.getTime() !== booking.start.getTime();
+    var notifyRow = $("calEditNotifyRow");
+    var notify = moved && notifyRow && !notifyRow.classList.contains("hidden") && $("calEditNotify").checked;
+    calState.detailBusy = true;
+    setDetailButtonsDisabled(true);
+    var saveBtn = $("calEditSave");
+    saveBtn.textContent = "Saving…";
+
+    applyBookingChange(booking, { start: start, member: member, service: service, notes: notes }, notify)
+      .then(function (result) {
+        saveBtn.textContent = "Save changes";
+        if (result === "text-failed") {
+          calState.detailBusy = false;
+          setDetailButtonsDisabled(false);
+          showDetailMode("view");
+          detailFail("calDetailError", "Saved, but the text to the client didn't send. You can message them from Messages.");
+          refreshBookings();
+          return;
+        }
+        calState.day = startOfDay(start);
+        finishDetailAction();
+      })
+      .catch(function (e) {
+        saveBtn.textContent = "Save changes";
+        detailFail("calEditError", (e && e.message) || "Could not save the changes.");
+      });
+  }
+
+  /**
+   * Saves a moved / edited appointment (same writes as the iPhone app's reschedule), then optionally
+   * texts the client. Resolves "text-failed" when the change saved but the text didn't send.
+   */
+  function applyBookingChange(booking, change, notify) {
+    var session = calState.session;
+    var charter = isCharter(session.tenant);
+    var start = change.start;
+    var member = change.member;
+    var service = change.service || null;
+    var notes = change.notes != null ? change.notes : booking.notes || "";
+    var duration = service ? service.durationMinutes : booking.durationMinutes;
+    var preferred = formatSlotLabel(start);
+
+    var saved;
+    if (charter) {
+      saved = firebase.app().functions(REGION).httpsCallable("syncCharterBookingSlot")({
+        requestId: booking.id,
+        scheduledDate: isoDate(start),
+        scheduledStartMin: start.getHours() * 60 + start.getMinutes(),
+        preferredTime: preferred,
+        durationMinutes: duration,
+        assignedMemberUid: member.uid,
+        assignedMemberName: member.displayName,
+        assignedMemberEmail: member.email,
+        notes: notes || null,
+        boatId: booking.boatId || null,
+      }).then(function () {
+        return calState.col.doc(booking.id).update({ notes: notes || "" });
+      });
+    } else {
+      var patch = {
+        requestedStartTime: firebase.firestore.Timestamp.fromDate(start),
+        preferredTime: preferred,
+        durationMinutes: duration,
+        assignedMemberUid: member.uid,
+        assignedMemberName: member.displayName,
+        assignedMemberEmail: member.email,
+        notes: notes || "",
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+      };
+      if (service) {
+        patch.serviceId = service.id;
+        patch.serviceSlug = service.slug || "";
+        patch.serviceName = service.name;
+      }
+      saved = calState.col.doc(booking.id).update(patch);
+    }
+
+    return saved.then(function () {
+      if (!notify) return null;
+      var first = firstName(booking.customerName);
+      var svcName = (service && service.name) || booking.serviceName || "appointment";
+      var body = "Hi" + (first ? " " + first : "") + ", your " + svcName + " with " + shopLabel(session) +
+        " has moved to " + formatWhen(start).replace(" · ", " at ") + ". Reply here if that time doesn't work.";
+      return sendBookingText(booking, body, "Rescheduled · " + formatWhen(start)).catch(function () {
+        // The change is saved; only the text failed.
+        return "text-failed";
+      });
+    });
+  }
+
+  /* ---------- Blocked time (shop-wide; online booking skips these) ---------- */
+
+  function minLabel(min) {
+    var d = new Date();
+    d.setHours(Math.floor(min / 60), min % 60, 0, 0);
+    return formatTime(d);
+  }
+
+  function hhmm(min) {
+    return String(Math.floor(min / 60)).padStart(2, "0") + ":" + String(min % 60).padStart(2, "0");
+  }
+
+  function blockedRangesOn(day) {
+    var tenant = (calState.session && calState.session.tenant) || {};
+    var ymd = isoDate(day);
+    var list = Array.isArray(tenant.blockedTimeRanges) ? tenant.blockedTimeRanges : [];
+    return list.filter(function (r) {
+      return r && String(r.date || r.dateYmd || "") === ymd;
+    }).map(function (r) {
+      var a = Number(r.startMin != null ? r.startMin : r.startMinutes) || 0;
+      var b = Number(r.endMin != null ? r.endMin : r.endMinutes) || a + 60;
+      return { id: String(r.id || ""), date: ymd, startMin: a, endMin: b, label: String(r.label || "").trim() };
+    });
+  }
+
+  function isDayBlocked(day) {
+    var tenant = (calState.session && calState.session.tenant) || {};
+    var list = Array.isArray(tenant.blockedDates) ? tenant.blockedDates : [];
+    return list.indexOf(isoDate(day)) !== -1;
+  }
+
+  function dayOffLabel(day) {
+    var tenant = (calState.session && calState.session.tenant) || {};
+    var labels = tenant.blockedDateLabels || {};
+    return String(labels[isoDate(day)] || "").trim();
+  }
+
+  function blockedHtmlFor(day) {
+    var windowStart = HOUR_START * 60;
+    var windowEnd = (HOUR_START + HOUR_COUNT) * 60;
+    var html = "";
+    if (isDayBlocked(day)) {
+      var lbl = dayOffLabel(day);
+      html += '<button type="button" class="app-cal-blocked is-allday" data-block-day="' + isoDate(day) +
+        '" style="top:0;height:' + HOUR_COUNT * HOUR_PX + 'px"><span>' + esc(lbl || "Closed all day") + "</span></button>";
+    }
+    blockedRangesOn(day).forEach(function (r) {
+      if (r.endMin <= windowStart || r.startMin >= windowEnd) return;
+      var top = ((Math.max(r.startMin, windowStart) - windowStart) / 60) * HOUR_PX;
+      var height = Math.max(18, ((Math.min(r.endMin, windowEnd) - Math.max(r.startMin, windowStart)) / 60) * HOUR_PX - 2);
+      html += '<button type="button" class="app-cal-blocked" data-block-id="' + esc(r.id) + '" data-block-date="' + r.date +
+        '" style="top:' + top + "px;height:" + height + 'px"><span>' + esc(r.label || "Blocked") + " · " +
+        esc(minLabel(r.startMin) + "–" + minLabel(r.endMin)) + "</span></button>";
+    });
+    return html;
+  }
+
+  function blockedChipsFor(day) {
+    var html = "";
+    if (isDayBlocked(day)) {
+      html += '<button type="button" class="app-cal-tw-blocked" data-block-day="' + isoDate(day) + '">' +
+        esc(dayOffLabel(day) || "Closed") + "</button>";
+    }
+    blockedRangesOn(day).forEach(function (r) {
+      html += '<button type="button" class="app-cal-tw-blocked" data-block-id="' + esc(r.id) + '" data-block-date="' + r.date + '">' +
+        esc((r.label || "Blocked") + " " + minLabel(r.startMin)) + "</button>";
+    });
+    return html;
+  }
+
+  function setBlockSheetOpen(open) {
+    var sheet = $("calBlockSheet");
+    var scrim = $("calBlockScrim");
+    if (sheet) sheet.classList.toggle("hidden", !open);
+    if (scrim) scrim.classList.toggle("hidden", !open);
+    if (!open) calState.blockEdit = null;
+  }
+
+  function syncBlockAllDay() {
+    var all = $("calBlockAllDay").checked;
+    $("calBlockTimes").classList.toggle("hidden", all);
+    paintBlockOverlap();
+  }
+
+  /** Opens the editor: `edit` is null for a new block, or { kind: "range"|"day", ... } for an existing one. */
+  function openBlockSheet(edit, day) {
+    var session = calState.session;
+    if (!session || !mayManageBookings(session)) return;
+    setDetailOpen(false);
+    setSheetOpen(false);
+    calState.blockEdit = edit || null;
+    var d = day || (edit && edit.date ? new Date(edit.date + "T00:00:00") : calState.day || startOfDay(new Date()));
+    $("calBlockTitle").textContent = edit ? "Blocked time" : "Block time";
+    $("calBlockDate").value = isoDate(d);
+    var allDay = !!(edit && edit.kind === "day");
+    $("calBlockAllDay").checked = allDay;
+    var startMin = edit && edit.kind === "range" ? edit.startMin : 12 * 60;
+    var endMin = edit && edit.kind === "range" ? edit.endMin : 13 * 60;
+    $("calBlockStart").value = hhmm(startMin);
+    $("calBlockEnd").value = hhmm(endMin);
+    $("calBlockLabel").value = (edit && edit.label) || "";
+    $("calBlockDelete").classList.toggle("hidden", !edit);
+    $("calBlockError").classList.add("hidden");
+    $("calBlockSave").disabled = false;
+    $("calBlockDelete").disabled = false;
+    syncBlockAllDay();
+    setBlockSheetOpen(true);
+  }
+
+  function readBlockForm() {
+    var dateVal = $("calBlockDate").value;
+    if (!dateVal) return { error: "Pick a date." };
+    var allDay = $("calBlockAllDay").checked;
+    var label = $("calBlockLabel").value.trim().slice(0, 40);
+    if (allDay) return { date: dateVal, allDay: true, label: label };
+    var a = $("calBlockStart").value;
+    var b = $("calBlockEnd").value;
+    if (!a || !b) return { error: "Pick a start and end time." };
+    var startMin = parseInt(a.split(":")[0], 10) * 60 + parseInt(a.split(":")[1], 10);
+    var endMin = parseInt(b.split(":")[0], 10) * 60 + parseInt(b.split(":")[1], 10);
+    if (endMin <= startMin) return { error: "The end time has to be after the start time." };
+    return { date: dateVal, allDay: false, startMin: startMin, endMin: endMin, label: label };
+  }
+
+  function paintBlockOverlap() {
+    var el = $("calBlockOverlap");
+    if (!el) return;
+    var f = readBlockForm();
+    var session = calState.session;
+    if (f.error || !session) { el.classList.add("hidden"); return; }
+    var day = new Date(f.date + "T00:00:00");
+    var hits = occupyingAll(session).filter(function (b) {
+      if (!sameDay(b.start, day)) return false;
+      if (f.allDay) return true;
+      var s0 = b.start.getHours() * 60 + b.start.getMinutes();
+      return s0 < f.endMin && s0 + b.durationMinutes > f.startMin;
+    });
+    el.textContent = hits.length
+      ? (hits.length === 1 ? "1 appointment is" : hits.length + " appointments are") + " already booked in this time. They stay booked — move or cancel them if needed."
+      : "";
+    el.classList.toggle("hidden", !hits.length);
+  }
+
+  /** Writes the shop's blocked days / ranges (tenant), mirrored to the owner's availability like the iPhone app. */
+  function saveBlockedLists(ranges, days, dayLabels) {
+    var session = calState.session;
+    var db = firebase.firestore();
+    var patch = { blockedTimeRanges: ranges, blockedDates: days, blockedDateLabels: dayLabels };
+    return db.collection("tenants").doc(session.tenantId).update(patch).then(function () {
+      session.tenant = Object.assign({}, session.tenant || {}, patch);
+      var ownerUid = session.ownerUid;
+      if (session.isOwner && session.user && ownerUid && session.user.uid === ownerUid) {
+        return db.collection("users").doc(ownerUid)
+          .set({ availability: { blockedTimeRanges: ranges, blockedDates: days } }, { merge: true })
+          .catch(function () { /* the tenant copy is what booking reads */ });
+      }
+      return null;
+    });
+  }
+
+  function newBlockId() {
+    return "blk_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+  }
+
+  function saveBlock(ev) {
+    ev.preventDefault();
+    if (calState.blockBusy) return;
+    var session = calState.session;
+    if (!session) return;
+    var f = readBlockForm();
+    var err = $("calBlockError");
+    if (f.error) {
+      err.textContent = f.error;
+      err.classList.remove("hidden");
+      return;
+    }
+    var tenant = session.tenant || {};
+    var ranges = (Array.isArray(tenant.blockedTimeRanges) ? tenant.blockedTimeRanges : []).slice();
+    var days = (Array.isArray(tenant.blockedDates) ? tenant.blockedDates : []).slice();
+    var labels = Object.assign({}, tenant.blockedDateLabels || {});
+    var edit = calState.blockEdit;
+    // Remove the version being edited, then add the new one.
+    if (edit && edit.kind === "range") ranges = ranges.filter(function (r) { return String(r.id || "") !== edit.id; });
+    if (edit && edit.kind === "day") {
+      days = days.filter(function (d) { return d !== edit.date; });
+      delete labels[edit.date];
+    }
+    if (f.allDay) {
+      if (days.indexOf(f.date) === -1) days.push(f.date);
+      days.sort();
+      if (f.label) labels[f.date] = f.label;
+    } else {
+      var entry = { id: edit && edit.kind === "range" ? edit.id : newBlockId(), date: f.date, startMin: f.startMin, endMin: f.endMin };
+      if (f.label) entry.label = f.label;
+      ranges.push(entry);
+    }
+    calState.blockBusy = true;
+    $("calBlockSave").disabled = true;
+    $("calBlockDelete").disabled = true;
+    $("calBlockSave").textContent = "Saving…";
+    saveBlockedLists(ranges, days, labels)
+      .then(function () {
+        calState.day = startOfDay(new Date(f.date + "T00:00:00"));
+        setBlockSheetOpen(false);
+        paintCalendar();
+      })
+      .catch(function (e) {
+        err.textContent = (e && e.message) || "Could not save the blocked time.";
+        err.classList.remove("hidden");
+        $("calBlockSave").disabled = false;
+        $("calBlockDelete").disabled = false;
+      })
+      .then(function () {
+        calState.blockBusy = false;
+        $("calBlockSave").textContent = "Save";
+      });
+  }
+
+  function deleteBlock() {
+    var edit = calState.blockEdit;
+    var session = calState.session;
+    if (!edit || !session || calState.blockBusy) return;
+    var tenant = session.tenant || {};
+    var ranges = (Array.isArray(tenant.blockedTimeRanges) ? tenant.blockedTimeRanges : []).filter(function (r) {
+      return !(edit.kind === "range" && String(r.id || "") === edit.id);
+    });
+    var days = (Array.isArray(tenant.blockedDates) ? tenant.blockedDates : []).filter(function (d) {
+      return !(edit.kind === "day" && d === edit.date);
+    });
+    var labels = Object.assign({}, tenant.blockedDateLabels || {});
+    if (edit.kind === "day") delete labels[edit.date];
+    calState.blockBusy = true;
+    $("calBlockSave").disabled = true;
+    $("calBlockDelete").disabled = true;
+    saveBlockedLists(ranges, days, labels)
+      .then(function () {
+        setBlockSheetOpen(false);
+        paintCalendar();
+      })
+      .catch(function (e) {
+        var err = $("calBlockError");
+        err.textContent = (e && e.message) || "Could not delete the blocked time.";
+        err.classList.remove("hidden");
+        $("calBlockSave").disabled = false;
+        $("calBlockDelete").disabled = false;
+      })
+      .then(function () { calState.blockBusy = false; });
+  }
+
+  function openBlockFromEl(el) {
+    var day = el.getAttribute("data-block-day");
+    if (day) {
+      openBlockSheet({ kind: "day", date: day, label: dayOffLabel(new Date(day + "T00:00:00")) });
+      return;
+    }
+    var id = el.getAttribute("data-block-id");
+    var date = el.getAttribute("data-block-date");
+    var hit = blockedRangesOn(new Date(date + "T00:00:00")).filter(function (r) { return r.id === id; })[0];
+    if (hit) openBlockSheet({ kind: "range", id: hit.id, date: hit.date, startMin: hit.startMin, endMin: hit.endMin, label: hit.label });
+  }
+
+  /* ---------- Drag an appointment to move it (mouse / trackpad) ---------- */
+
+  var drag = null;
+
+  function dragTargetAt(x, y) {
+    var el = document.elementFromPoint(x, y);
+    return el ? el.closest("[data-col-day]") : null;
+  }
+
+  function onDragDown(ev) {
+    if (ev.pointerType && ev.pointerType !== "mouse") return;
+    if (ev.button !== 0) return;
+    var el = ev.target.closest(".app-cal-block[data-booking-id], .app-cal-tw-chip[data-booking-id], .app-cal-pill[data-booking-id]");
+    if (!el || !mayManageBookings(calState.session)) return;
+    var booking = bookingById(el.getAttribute("data-booking-id"));
+    if (!booking || !booking.start || LIVE_STATUSES.indexOf(booking.status) === -1) return;
+    var rect = el.getBoundingClientRect();
+    drag = { el: el, booking: booking, x0: ev.clientX, y0: ev.clientY, grabY: ev.clientY - rect.top, active: false, ghost: null, target: null };
+  }
+
+  function onDragMove(ev) {
+    if (!drag) return;
+    if (!drag.active) {
+      if (Math.abs(ev.clientX - drag.x0) + Math.abs(ev.clientY - drag.y0) < 6) return;
+      drag.active = true;
+      drag.el.classList.add("is-dragging");
+      var ghost = drag.el.cloneNode(true);
+      ghost.classList.add("app-cal-ghost");
+      ghost.removeAttribute("data-booking-id");
+      drag.ghost = ghost;
+      var tip = document.createElement("div");
+      tip.className = "app-cal-dragtip";
+      document.body.appendChild(tip);
+      drag.tip = tip;
+      document.body.classList.add("is-cal-dragging");
+    }
+    ev.preventDefault();
+    var col = dragTargetAt(ev.clientX, ev.clientY);
+    drag.target = null;
+    if (drag.hl && drag.hl !== col) drag.hl.classList.remove("is-drop");
+    drag.hl = col && !col.classList.contains("app-cal-col") ? col : null;
+    if (drag.hl) drag.hl.classList.add("is-drop");
+    if (!col) {
+      if (drag.ghost.parentNode) drag.ghost.parentNode.removeChild(drag.ghost);
+      if (drag.tip) drag.tip.style.display = "none";
+      return;
+    }
+    var day = new Date(col.getAttribute("data-col-day") + "T00:00:00");
+    var timed = col.classList.contains("app-cal-col");
+    var startMin;
+    if (timed) {
+      var top = ev.clientY - drag.grabY - col.getBoundingClientRect().top;
+      startMin = HOUR_START * 60 + Math.round(((top / HOUR_PX) * 60) / 15) * 15;
+      var maxStart = (HOUR_START + HOUR_COUNT) * 60 - 15;
+      startMin = Math.max(HOUR_START * 60, Math.min(maxStart, startMin));
+      drag.ghost.style.top = ((startMin - HOUR_START * 60) / 60) * HOUR_PX + "px";
+    } else {
+      // Team week cell: keep the time, change the day / person.
+      startMin = drag.booking.start.getHours() * 60 + drag.booking.start.getMinutes();
+    }
+    var holder = col.querySelector(".app-cal-mbars") || col;
+    if (drag.ghost.parentNode !== holder) holder.appendChild(drag.ghost);
+    var start = new Date(day);
+    start.setHours(Math.floor(startMin / 60), startMin % 60, 0, 0);
+    var hasUid = col.hasAttribute("data-col-uid");
+    drag.target = { start: start, uid: hasUid ? col.getAttribute("data-col-uid") : null, key: col.getAttribute("data-col-key") };
+    if (drag.tip) {
+      // Live label next to the cursor: the exact new time (and day when it changes).
+      var endMin = startMin + (drag.booking.durationMinutes || 60);
+      var end = new Date(day);
+      end.setHours(Math.floor(endMin / 60), endMin % 60, 0, 0);
+      var label = formatTime(start) + " – " + formatTime(end);
+      if (!sameDay(start, drag.booking.start)) {
+        label = start.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" }) + " · " + label;
+      }
+      drag.tip.textContent = label;
+      drag.tip.style.display = "block";
+      var tipW = drag.tip.offsetWidth || 140;
+      var x = ev.clientX + 16;
+      if (x + tipW > window.innerWidth - 8) x = ev.clientX - tipW - 16;
+      drag.tip.style.left = Math.max(8, x) + "px";
+      drag.tip.style.top = Math.max(8, ev.clientY - 14) + "px";
+    }
+  }
+
+  function endDrag() {
+    if (!drag) return;
+    if (drag.ghost && drag.ghost.parentNode) drag.ghost.parentNode.removeChild(drag.ghost);
+    if (drag.tip && drag.tip.parentNode) drag.tip.parentNode.removeChild(drag.tip);
+    if (drag.el) drag.el.classList.remove("is-dragging");
+    if (drag.hl) drag.hl.classList.remove("is-drop");
+    document.body.classList.remove("is-cal-dragging");
+  }
+
+  function onDragUp() {
+    if (!drag) return;
+    var d = drag;
+    endDrag();
+    drag = null;
+    if (!d.active) return;
+    calState.suppressClickUntil = Date.now() + 400;
+    if (!d.target) return;
+    var b = d.booking;
+    var session = calState.session;
+    var newUid = d.target.uid === null ? b.assignedUid : d.target.key === "unassigned" ? "" : d.target.uid;
+    var sameTime = d.target.start.getTime() === b.start.getTime();
+    var samePerson = (newUid || "") === (b.assignedUid || "");
+    if (sameTime && samePerson) return;
+    if (d.target.key === "unassigned" && !samePerson) return; // can't un-assign by dragging
+    openMovePrompt(b, d.target.start, newUid);
+  }
+
+  function openMovePrompt(booking, start, uid) {
+    var session = calState.session;
+    var member = memberForUid(session, uid || booking.assignedUid || session.ownerUid);
+    var moved = start.getTime() !== booking.start.getTime();
+    var personChanged = (uid || "") !== (booking.assignedUid || "");
+    var first = firstName(booking.customerName);
+    var parts = [];
+    if (moved) parts.push("to " + formatWhen(start).replace(" · ", " at "));
+    if (personChanged && teamView(session)) parts.push("with " + member.displayName);
+    $("calMoveText").textContent = "Move " + (first || booking.customerName || "this appointment") + " " + parts.join(" ") + "?";
+    var charter = isCharter(session.tenant);
+    var canNotify = moved && !charter && booking.status === "confirmed" && canTextClient(session, booking);
+    $("calMoveNotifyRow").classList.toggle("hidden", !canNotify);
+    $("calMoveNotifyLabel").textContent = "Text " + (first || "the client") + " the new time";
+    $("calMoveNotify").checked = true;
+    $("calMoveError").classList.add("hidden");
+    $("calMoveGo").disabled = false;
+    $("calMoveUndo").disabled = false;
+    $("calMoveGo").textContent = "Move";
+    calState.move = { booking: booking, start: start, member: member, notify: canNotify };
+    $("calMove").classList.remove("hidden");
+  }
+
+  function closeMovePrompt() {
+    if (calState.moveBusy) return;
+    calState.move = null;
+    $("calMove").classList.add("hidden");
+  }
+
+  function confirmMove() {
+    var m = calState.move;
+    if (!m || calState.moveBusy) return;
+    calState.moveBusy = true;
+    $("calMoveGo").disabled = true;
+    $("calMoveUndo").disabled = true;
+    $("calMoveGo").textContent = "Moving…";
+    var notify = m.notify && $("calMoveNotify").checked;
+    applyBookingChange(m.booking, { start: m.start, member: m.member }, notify)
+      .then(function (result) {
+        calState.moveBusy = false;
+        if (result === "text-failed") {
+          var err = $("calMoveError");
+          err.textContent = "Moved, but the text to the client didn't send. You can message them from Messages.";
+          err.classList.remove("hidden");
+          $("calMoveUndo").disabled = false;
+          $("calMoveUndo").textContent = "Close";
+          $("calMoveGo").classList.add("hidden");
+          refreshBookings();
+          return;
+        }
+        closeMovePrompt();
+        refreshBookings();
+      })
+      .catch(function (e) {
+        calState.moveBusy = false;
+        var err = $("calMoveError");
+        err.textContent = (e && e.message) || "Could not move the appointment.";
+        err.classList.remove("hidden");
+        $("calMoveGo").disabled = false;
+        $("calMoveUndo").disabled = false;
+        $("calMoveGo").textContent = "Move";
+      });
+  }
+
+  function askConfirm(kind) {
+    var booking = detailBooking();
+    var session = calState.session;
+    if (!booking || !session) return;
+    var charter = isCharter(session.tenant);
+    var when = booking.start ? formatWhen(booking.start).replace(" · ", " at ") : "";
+    var what = (booking.serviceName || "appointment") + (when ? " on " + when : "");
+    var text = $("calConfirmText");
+    var row = $("calConfirmNotifyRow");
+    var go = $("calConfirmGo");
+    var first = firstName(booking.customerName) || "the client";
+    if (kind === "cancel") {
+      text.textContent = "Cancel " + (booking.customerName || "this client") + "'s " + what + "? It stays in their history as Cancelled." +
+        (booking.paid ? " Any deposit or payment is refunded under your cancellation settings." : "") +
+        (charter ? " The client gets your usual cancellation text." : "");
+      var showNotify = !charter && canTextClient(session, booking);
+      row.classList.toggle("hidden", !showNotify);
+      $("calConfirmNotifyLabel").textContent = "Text " + first + " that it's cancelled";
+      $("calConfirmNotifyHint").textContent = "Sent from your shop's texting number.";
+      $("calConfirmNotify").checked = booking.status === "confirmed";
+      go.textContent = "Cancel appointment";
+    } else {
+      text.textContent = "Delete " + (booking.customerName || "this client") + "'s " + what + " for good? This can't be undone, and the client isn't notified. Use this for mistakes and test bookings.";
+      row.classList.add("hidden");
+      go.textContent = "Delete";
+    }
+    showDetailMode(kind);
+  }
+
+  function runConfirm() {
+    if (calState.detailBusy) return;
+    var booking = detailBooking();
+    var session = calState.session;
+    if (!booking || !session || !calState.col) return;
+    var kind = calState.detailMode;
+    var go = $("calConfirmGo");
+    calState.detailBusy = true;
+    setDetailButtonsDisabled(true);
+    if (kind === "delete") {
+      go.textContent = "Deleting…";
+      calState.col.doc(booking.id).delete()
+        .then(finishDetailAction)
+        .catch(function (e) {
+          go.textContent = "Delete";
+          detailFail("calDetailError", (e && e.message) || "Could not delete the appointment.");
+        });
+      return;
+    }
+    var row = $("calConfirmNotifyRow");
+    var notify = row && !row.classList.contains("hidden") && $("calConfirmNotify").checked;
+    go.textContent = "Cancelling…";
+    firebase.app().functions(REGION).httpsCallable("updateBookingRequestStatus")({
+      requestId: booking.id,
+      status: "cancelled",
+    })
+      .then(function () {
+        if (!notify) return null;
+        var first = firstName(booking.customerName);
+        var when = booking.start ? " on " + formatWhen(booking.start).replace(" · ", " at ") : "";
+        var body = "Hi" + (first ? " " + first : "") + ", your " + (booking.serviceName || "appointment") + " with " +
+          shopLabel(session) + when + " has been cancelled. Reply here if you'd like to rebook.";
+        return sendBookingText(booking, body, "Cancelled" + when).catch(function () {
+          return "text-failed";
+        });
+      })
+      .then(function (result) {
+        go.textContent = "Cancel appointment";
+        if (result === "text-failed") {
+          calState.detailBusy = false;
+          setDetailButtonsDisabled(false);
+          showDetailMode("view");
+          detailFail("calDetailError", "Cancelled, but the text to the client didn't send. You can message them from Messages.");
+          refreshBookings();
+          return;
+        }
+        finishDetailAction();
+      })
+      .catch(function (e) {
+        go.textContent = "Cancel appointment";
+        detailFail("calDetailError", (e && e.message) || "Could not cancel the appointment.");
+      });
   }
 
   function openBookingDetail(id) {
@@ -1391,6 +2191,18 @@
   }
 
   function onCalendarClick(ev) {
+    if (calState.suppressClickUntil && Date.now() < calState.suppressClickUntil) {
+      ev.preventDefault();
+      ev.stopPropagation();
+      return true;
+    }
+    var blockEl = ev.target.closest("[data-block-id], [data-block-day]");
+    if (blockEl && blockEl.closest("#calGrid")) {
+      ev.preventDefault();
+      ev.stopPropagation();
+      if (mayManageBookings(calState.session)) openBlockFromEl(blockEl);
+      return true;
+    }
     var hit = ev.target.closest("[data-booking-id]");
     if (hit) {
       ev.preventDefault();
@@ -1819,23 +2631,94 @@
     document.addEventListener("keydown", function (ev) {
       if (ev.key === "Escape") {
         closePops();
+        if (calState.detailBusy || calState.blockBusy || calState.moveBusy) return;
         setSheetOpen(false);
         setDetailOpen(false);
+        setBlockSheetOpen(false);
+        if (drag) { endDrag(); drag = null; }
+        closeMovePrompt();
       }
     });
     var neu = $("calNew");
+    var newMenu = $("calNewMenu");
     if (neu) {
-      neu.addEventListener("click", function () {
-        openNewSheet();
+      neu.addEventListener("click", function (ev) {
+        ev.stopPropagation();
+        // Only people who can manage bookings get "Block time".
+        if (!mayManageBookings(calState.session)) {
+          openNewSheet();
+          return;
+        }
+        togglePop("calNew", "calNewMenu");
       });
     }
+    if (newMenu) {
+      newMenu.addEventListener("click", function (ev) {
+        var item = ev.target.closest("[data-new-kind]");
+        if (!item) return;
+        closePops();
+        if (item.getAttribute("data-new-kind") === "block") openBlockSheet(null, calState.day);
+        else openNewSheet();
+      });
+    }
+    var blockForm = $("calBlockForm");
+    if (blockForm) blockForm.addEventListener("submit", saveBlock);
+    ["calBlockClose", "calBlockCancel", "calBlockScrim"].forEach(function (id) {
+      var el = $(id);
+      if (el) el.addEventListener("click", function () { if (!calState.blockBusy) setBlockSheetOpen(false); });
+    });
+    var blockDel = $("calBlockDelete");
+    if (blockDel) blockDel.addEventListener("click", deleteBlock);
+    var blockAll = $("calBlockAllDay");
+    if (blockAll) blockAll.addEventListener("change", syncBlockAllDay);
+    ["calBlockDate", "calBlockStart", "calBlockEnd"].forEach(function (id) {
+      var el = $(id);
+      if (el) el.addEventListener("change", paintBlockOverlap);
+    });
+    var moveGo = $("calMoveGo");
+    if (moveGo) moveGo.addEventListener("click", confirmMove);
+    var moveUndo = $("calMoveUndo");
+    if (moveUndo) moveUndo.addEventListener("click", function () {
+      $("calMoveUndo").textContent = "Undo";
+      $("calMoveGo").classList.remove("hidden");
+      closeMovePrompt();
+    });
+    var dragGrid = $("calGrid");
+    if (dragGrid) dragGrid.addEventListener("pointerdown", onDragDown);
+    document.addEventListener("pointermove", onDragMove);
+    document.addEventListener("pointerup", onDragUp);
+    document.addEventListener("pointercancel", function () { endDrag(); drag = null; });
     ["calSheetClose", "calSheetCancel", "calSheetScrim"].forEach(function (id) {
       var el = $(id);
       if (el) el.addEventListener("click", function () { setSheetOpen(false); });
     });
     ["calDetailClose", "calDetailDone", "calDetailScrim"].forEach(function (id) {
       var el = $(id);
-      if (el) el.addEventListener("click", function () { setDetailOpen(false); });
+      if (el) el.addEventListener("click", function () {
+        if (calState.detailBusy) return;
+        setDetailOpen(false);
+      });
+    });
+    var editBtn = $("calDetailEdit");
+    if (editBtn) editBtn.addEventListener("click", openEditForm);
+    var cancelBtn = $("calDetailCancelAppt");
+    if (cancelBtn) cancelBtn.addEventListener("click", function () { askConfirm("cancel"); });
+    var delBtn = $("calDetailDelete");
+    if (delBtn) delBtn.addEventListener("click", function () { askConfirm("delete"); });
+    var confirmBack = $("calConfirmBack");
+    if (confirmBack) confirmBack.addEventListener("click", function () { showDetailMode("view"); });
+    var confirmGo = $("calConfirmGo");
+    if (confirmGo) confirmGo.addEventListener("click", runConfirm);
+    var editBack = $("calEditBack");
+    if (editBack) editBack.addEventListener("click", function () { if (!calState.detailBusy) showDetailMode("view"); });
+    var editForm = $("calEditForm");
+    if (editForm) editForm.addEventListener("submit", saveEdit);
+    ["calEditDate", "calEditTime"].forEach(function (id) {
+      var el = $(id);
+      if (el) {
+        el.addEventListener("change", syncEditNotify);
+        el.addEventListener("input", syncEditNotify);
+      }
     });
     var form = $("calNewForm");
     if (form) form.addEventListener("submit", saveAppointment);

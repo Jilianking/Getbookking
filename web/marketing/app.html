@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap" rel="stylesheet" />
   <base href="/" />
-  <link rel="stylesheet" href="/assets/app.css?v=81" />
+  <link rel="stylesheet" href="/assets/app.css?v=83" />
 </head>
 <body>
   <div id="gateLoading" class="app-gate">
@@ -806,7 +806,7 @@
               <button type="button" class="app-icon-btn" id="payMoreBtn" aria-label="Payment settings" aria-haspopup="true" aria-expanded="false">⋯</button>
               <div class="app-pay-menu hidden" id="payMoreMenu" role="menu">
                 <button type="button" role="menuitem" id="payDescriptorBtn">Payment descriptor</button>
-                <button type="button" role="menuitem" class="hidden" id="payTaxBtn">Tax settings</button>
+                <button type="button" role="menuitem" class="hidden" id="payTaxBtn">Tax &amp; tips</button>
               </div>
             </div>
           </div>
@@ -936,6 +936,19 @@
             <span>Amount</span>
             <span class="app-take-amount-row"><b aria-hidden="true">$</b><input id="payTakeAmt" type="text" inputmode="decimal" placeholder="0.00" autocomplete="off" aria-label="Amount in dollars" /></span>
           </label>
+          <div class="app-field hidden" id="payTakeTipRow">
+            <label for="payTakeTip">Tip</label>
+            <div class="app-take-tip">
+              <select id="payTakeTip" aria-label="Tip">
+                <option value="0">No tip</option>
+                <option value="15">15%</option>
+                <option value="20">20%</option>
+                <option value="25">25%</option>
+                <option value="custom">Custom…</option>
+              </select>
+              <input id="payTakeTipCustom" class="hidden" type="text" inputmode="decimal" placeholder="$0.00" aria-label="Custom tip in dollars" />
+            </div>
+          </div>
           <div class="app-field-row">
             <div class="app-field">
               <label for="payTakeFor">What it's for</label>
@@ -997,7 +1010,7 @@
       <button type="button" class="app-sheet-scrim hidden" id="payTaxScrim" aria-label="Close tax settings"></button>
       <div class="app-sheet hidden" id="payTaxSheet" role="dialog" aria-labelledby="payTaxTitle">
         <div class="app-sheet-top">
-          <h2 id="payTaxTitle">Tax settings</h2>
+          <h2 id="payTaxTitle">Tax &amp; tips</h2>
           <button type="button" class="app-icon-btn" id="payTaxClose" aria-label="Close">×</button>
         </div>
         <div class="app-tax-list">
@@ -1009,6 +1022,23 @@
             <span><strong>In-person sales tax</strong><em>Manual payment and Tap to Pay. Shown on checkout and receipts.</em></span>
             <input type="checkbox" id="payTaxInPerson" />
           </label>
+          <label class="app-tax-row">
+            <span><strong>Ask for tips</strong><em>15%, 20%, 25%, custom, or no tip on Tap to Pay, manual card payments, and payment links. Tips go 100% to the staff member.</em></span>
+            <input type="checkbox" id="payTipsOn" />
+          </label>
+          <div class="app-tip-pcts" id="payTipPcts">
+            <span class="app-tip-pcts-label">Tip choices</span>
+            <div class="app-tip-pcts-row">
+              <label><input type="text" inputmode="numeric" maxlength="3" id="payTipPct0" aria-label="First tip percent" />%</label>
+              <label><input type="text" inputmode="numeric" maxlength="3" id="payTipPct1" aria-label="Second tip percent" />%</label>
+              <label><input type="text" inputmode="numeric" maxlength="3" id="payTipPct2" aria-label="Third tip percent" />%</label>
+            </div>
+            <div class="app-tip-pcts-actions">
+              <button type="button" class="app-btn app-btn--ghost app-btn--small" id="payTipPctSave">Save tip choices</button>
+              <button type="button" class="app-tip-reset" id="payTipPctReset">Reset to 15 / 20 / 25</button>
+            </div>
+            <em class="app-hint">Clients also get Custom amount and No tip.</em>
+          </div>
           <p class="app-hint hidden" id="payTaxMsg"></p>
         </div>
       </div>
@@ -1160,7 +1190,7 @@
   <script src="/assets/app-profile.js?v=1"></script>
   <script src="/assets/app-messages.js?v=9"></script>
   <script src="/assets/app-insights.js?v=3"></script>
-  <script src="/assets/app-payments.js?v=13"></script>
+  <script src="/assets/app-payments.js?v=15"></script>
   <script src="/assets/app-payouts.js?v=2"></script>
   <script src="/assets/app-clients.js?v=5"></script>
   <script src="/assets/app-shop.js?v=5"></script>

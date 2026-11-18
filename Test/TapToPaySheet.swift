@@ -33,6 +33,57 @@ struct TapToPaySheet: View {
     @State private var lastPaymentIntentId: String?
     @State private var lastCheckout: CardCheckoutBreakdown?
     @State private var lastPaidAt = Date()
+    /// Which charge is waiting on the client's tip choice.
+    @State private var tipTarget: TipTarget?
+    /// Tip chosen for the charge in progress (shown on the processing card and on any receipt, paid or not).
+    @State private var pendingTipCents = 0
+    @State private var payTask: Task<Void, Never>?
+    @State private var userCanceledPayment = false
+
+    /// Fees + total including a tip (and the card fee on it, which the client pays) — mirrors the server.
+    private func breakdown(_ base: CardCheckoutBreakdown, tip: Int) -> CardCheckoutBreakdown {
+        guard tip > 0 else { return base }
+        let tipFee = CardCheckoutPricing.tipCardFeeCents(tipCents: tip, channel: base.channel)
+        return CardCheckoutBreakdown(
+            serviceCents: base.serviceCents,
+            taxCents: base.taxCents,
+            passThroughFeeCents: base.passThroughFeeCents + tipFee,
+            platformFeeCents: base.platformFeeCents,
+            totalCents: base.totalCents + tip + tipFee,
+            channel: base.channel,
+            tipCents: tip
+        )
+    }
+
+    /// Cancel on the processing screen: stop the card read and go back to the tip screen.
+    private func cancelProcessing() {
+        userCanceledPayment = true
+        TapToPayTerminalManager.shared.cancelActivePayment()
+        payTask?.cancel()
+        payTask = nil
+        phase = .entry
+        tipTarget = tipsOn ? .tapToPay : nil
+    }
+
+    private enum TipTarget: String, Identifiable {
+        case tapToPay, manual
+        var id: String { rawValue }
+    }
+
+    private var tipsOn: Bool { ShopTipSettings.enabled(sessionStore.tenant) }
+
+    /// Ask for a tip first (when tips are on), then charge.
+    private func startCharge(_ target: TipTarget) {
+        if tipsOn {
+            tipTarget = target
+        } else {
+            if target == .tapToPay {
+                payTask = Task { await pay(tipCents: 0) }
+            } else {
+                Task { await openManualCheckout(tipCents: 0) }
+            }
+        }
+    }
 
     private var serviceAmountCents: Int { amountCentsInput }
 
@@ -147,6 +198,32 @@ struct TapToPaySheet: View {
             .sheet(isPresented: $showTapToPayReceiptSheet) {
                 tapToPayReceiptSheet
             }
+            .fullScreenCover(item: $tipTarget) { target in
+                let preview = target == .tapToPay
+                    ? checkout
+                    : viewModel.checkoutBreakdown(serviceCents: serviceAmountCents, channel: .online)
+                TipPickerSheet(
+                    serviceCents: serviceAmountCents,
+                    baseTotalCents: preview.totalCents,
+                    feeCents: preview.passThroughFeeCents,
+                    taxCents: preview.taxCents,
+                    channel: target == .tapToPay ? .tapToPay : .online,
+                    percents: ShopTipSettings.percents(sessionStore.tenant),
+                    onChoose: { tip in
+                        tipTarget = nil
+                        Task {
+                            // Let the cover close before the card reader / payment sheet opens.
+                            try? await Task.sleep(nanoseconds: 350_000_000)
+                            if target == .tapToPay {
+                                payTask = Task { await pay(tipCents: tip) }
+                            } else {
+                                await openManualCheckout(tipCents: tip)
+                            }
+                        }
+                    },
+                    onCancel: { tipTarget = nil }
+                )
+            }
             .onChange(of: amountCentsInput) { _, _ in
                 Task { await viewModel.refreshInPersonTaxPreview(serviceCents: serviceAmountCents) }
             }
@@ -180,7 +257,7 @@ struct TapToPaySheet: View {
                     onTryAgain: { manualCheckoutError = nil },
                     onManualPayment: {
                         showTapToPayReceiptSheet = false
-                        Task { await openManualCheckout() }
+                        startCharge(.manual)
                     },
                     manualPaymentInProgress: viewModel.isCreatingManualCheckoutLink
                 )
@@ -244,7 +321,7 @@ struct TapToPaySheet: View {
             .padding(.bottom, 16)
 
             Button {
-                Task { await pay() }
+                startCharge(.tapToPay)
             } label: {
                 Text(chargeButtonTitle)
                     .font(.headline.weight(.semibold))
@@ -313,19 +390,20 @@ struct TapToPaySheet: View {
         }
     }
 
+    /// Tap to Pay only: the crown rises into place (like a sheet pulling up), "Processing…" under it.
     private var processingContent: some View {
-        VStack(spacing: 16) {
-            ProgressView()
-                .scaleEffect(1.2)
-            Text("Processing…")
-                .font(.headline)
-            Text(readerSession.statusMessage ?? "Hold the customer's card near the top of your iPhone.")
-                .font(.caption)
-                .foregroundStyle(AppDesign.textSecondary)
-                .multilineTextAlignment(.center)
-        }
-        .padding(.top, 48)
-        .padding(.horizontal, 20)
+        TapToPayProcessingView(
+            amountText: processingAmountText,
+            statusText: readerSession.statusMessage ?? "Hold the customer's card near the top of your iPhone.",
+            breakdown: lastCheckout ?? breakdown(checkout, tip: pendingTipCents),
+            onCancel: { cancelProcessing() }
+        )
+    }
+
+    private var processingAmountText: String? {
+        guard serviceAmountCents > 0 else { return nil }
+        let shown = lastCheckout ?? breakdown(checkout, tip: pendingTipCents)
+        return CardCheckoutPricing.formatUSD(cents: shown.totalCents)
     }
 
     private func presentOnScreenReceipt(paymentMethodLabel: String = "Tap to Pay on iPhone") {
@@ -428,7 +506,12 @@ struct TapToPaySheet: View {
         amountCentsInput /= 10
     }
 
-    private func pay() async {
+    private func pay(tipCents: Int = 0) async {
+        userCanceledPayment = false
+        pendingTipCents = tipCents
+        // Until the server answers, show (and keep for any receipt) the estimate with the tip.
+        lastCheckout = breakdown(checkout, tip: tipCents)
+        lastPaymentIntentId = nil
         phase = .processing
         do {
             guard !locationId.isEmpty else {
@@ -436,8 +519,12 @@ struct TapToPaySheet: View {
             }
             let intent = try await viewModel.createPaymentIntentForTapToPay(
                 serviceAmountCents: serviceAmountCents,
-                bookingRequestId: linkedBookingRequestId
+                bookingRequestId: linkedBookingRequestId,
+                tipCents: tipCents
             )
+            lastCheckout = intent.checkout
+            lastPaymentIntentId = intent.paymentIntentId
+            if userCanceledPayment { return }
             try await TapToPayTerminalManager.shared.processPayment(
                 clientSecret: intent.clientSecret,
                 locationId: locationId,
@@ -454,6 +541,8 @@ struct TapToPaySheet: View {
             phase = .approved(amountCents: totalCents)
             presentOnScreenReceipt()
         } catch {
+            // Cancel on our screen: no "not completed" receipt, just back to the tip screen.
+            if userCanceledPayment { return }
             let text = TapToPayErrorMapper.userMessage(for: error)
             manualCheckoutError = nil
             phase = .entry
@@ -464,7 +553,7 @@ struct TapToPaySheet: View {
         }
     }
 
-    private func openManualCheckout() async {
+    private func openManualCheckout(tipCents: Int = 0) async {
         manualCheckoutError = nil
         guard serviceAmountCents >= 50 else {
             manualCheckoutError = "Enter an amount of at least $0.50."
@@ -472,7 +561,8 @@ struct TapToPaySheet: View {
         }
         let result = await viewModel.chargeManualCheckoutInApp(
             serviceAmountCents: serviceAmountCents,
-            bookingRequestId: linkedBookingRequestId
+            bookingRequestId: linkedBookingRequestId,
+            tipCents: tipCents
         )
         switch result {
         case .success(let intent):
@@ -484,9 +574,9 @@ struct TapToPaySheet: View {
         case .canceled:
             break
         case .failed(let message):
-            lastCheckout = viewModel.checkoutBreakdown(
-                serviceCents: serviceAmountCents,
-                channel: .online
+            lastCheckout = breakdown(
+                viewModel.checkoutBreakdown(serviceCents: serviceAmountCents, channel: .online),
+                tip: tipCents
             )
             presentManualPaymentNotice(detailMessage: message)
         }
@@ -595,3 +685,85 @@ private struct TapToPayNoteEditorSheet: View {
 }
 
 #endif
+
+
+/// Branded processing screen for Tap to Pay: the bronze crown slides up and settles, then a soft glow.
+private struct TapToPayProcessingView: View {
+    let amountText: String?
+    let statusText: String
+    let breakdown: CardCheckoutBreakdown
+    let onCancel: () -> Void
+    @State private var risen = false
+    @State private var glow = false
+    @State private var cardUp = false
+
+    private func row(_ label: String, _ cents: Int, bold: Bool = false) -> some View {
+        HStack {
+            Text(label)
+            Spacer()
+            Text(CardCheckoutPricing.formatUSD(cents: cents))
+        }
+        .font(bold ? .subheadline.weight(.bold) : .subheadline)
+        .foregroundStyle(bold ? AppDesign.textPrimary : AppDesign.textSecondary)
+    }
+
+    /// Slides up from the bottom with the same spring as the crown.
+    private var breakdownCard: some View {
+        VStack(spacing: 8) {
+            row("Service", breakdown.serviceCents)
+            if breakdown.taxCents > 0 { row("Sales tax", breakdown.taxCents) }
+            if breakdown.passThroughFeeCents > 0 { row("Fees", breakdown.passThroughFeeCents) }
+            if breakdown.tipCents > 0 { row("Tip", breakdown.tipCents) }
+            Divider()
+            row("Total", breakdown.totalCents, bold: true)
+        }
+        .padding(16)
+        .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(AppDesign.cardBackground))
+        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(AppDesign.chipBorder, lineWidth: 1))
+        .offset(y: cardUp ? 0 : 320)
+        .opacity(cardUp ? 1 : 0)
+    }
+
+    var body: some View {
+        VStack(spacing: 16) {
+            Spacer(minLength: 0)
+            Image("BookkingCrownMark")
+                .resizable()
+                .scaledToFit()
+                .frame(width: 120, height: 120)
+                .shadow(color: AppDesign.brandWarm.opacity(glow ? 0.35 : 0.08), radius: glow ? 18 : 6)
+                .offset(y: risen ? 0 : 220)
+                .opacity(risen ? 1 : 0)
+            Text("Processing…")
+                .font(.title3.weight(.semibold))
+                .opacity(risen ? 1 : 0)
+            if let amountText {
+                Text(amountText)
+                    .font(.title2.weight(.bold))
+                    .opacity(risen ? 1 : 0)
+            }
+            Text(statusText)
+                .font(.caption)
+                .foregroundStyle(AppDesign.textSecondary)
+                .multilineTextAlignment(.center)
+                .opacity(risen ? 1 : 0)
+            ProgressView()
+                .opacity(risen ? 1 : 0)
+            Spacer(minLength: 0)
+            breakdownCard
+            Button("Cancel", action: onCancel)
+                .font(.subheadline)
+                .foregroundStyle(AppDesign.textSecondary)
+                .padding(.top, 4)
+                .padding(.bottom, 8)
+                .opacity(cardUp ? 1 : 0)
+        }
+        .padding(.horizontal, 20)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .onAppear {
+            withAnimation(.spring(response: 0.55, dampingFraction: 0.82)) { risen = true }
+            withAnimation(.spring(response: 0.6, dampingFraction: 0.85).delay(0.15)) { cardUp = true }
+            withAnimation(.easeInOut(duration: 1.2).repeatForever(autoreverses: true).delay(0.6)) { glow = true }
+        }
+    }
+}

@@ -385,6 +385,13 @@ final class TenantSessionStore: ObservableObject {
         syncUnreadRequestsCount()
     }
 
+    /// Keeps the in-memory shop settings in step after a settings save (the tenant is loaded once per session).
+    func mergeTenantFields(_ updates: [String: Any]) {
+        var next = tenant ?? [:]
+        for (k, v) in updates { next[k] = v }
+        tenant = next
+    }
+
     func markAppTourCompleted() {
         guard var current = profile else { return }
         current.appTourPending = false

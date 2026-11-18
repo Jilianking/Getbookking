@@ -1253,10 +1253,25 @@
     $("payTakeAmt").focus();
   }
 
+  /** Tip in cents from the Tip picker (percent of the amount, or a custom dollar amount). */
+  function takeTipCents(serviceCents) {
+    var row = $("payTakeTipRow");
+    if (!row || row.classList.contains("hidden")) return 0;
+    var v = $("payTakeTip").value;
+    if (v === "custom") {
+      var d = parseFloat(String($("payTakeTipCustom").value || "").replace(/[$,\s]/g, ""));
+      return isFinite(d) && d > 0 ? Math.round(d * 100) : 0;
+    }
+    var pct = parseInt(v, 10) || 0;
+    return pct > 0 ? Math.round(serviceCents * pct / 100) : 0;
+  }
+
   function takeValues() {
     var amt = parseFloat(String($("payTakeAmt").value || "").replace(/[$,\s]/g, ""));
+    var cents = isFinite(amt) ? Math.round(amt * 100) : 0;
     return {
-      cents: isFinite(amt) ? Math.round(amt * 100) : 0,
+      cents: cents,
+      tipCents: takeTipCents(cents),
       what: $("payTakeFor").value.trim(),
       name: $("payTakeName").value.trim(),
       phone: $("payTakePhone").value.trim(),
@@ -1322,6 +1337,7 @@
       row("Amount", d.serviceCents) +
       (d.taxCents ? row("Sales tax", d.taxCents) : "") +
       (d.surchargeCents ? row("Card fee", d.surchargeCents) : "") +
+      (d.tipCents ? row("Tip", d.tipCents) : "") +
       '<div class="is-total"><span>Total</span><span>' + money2(d.totalCents) + "</span></div></div>";
   }
 
@@ -1332,7 +1348,7 @@
     if (v.cents < 50) return takeErr("Enter an amount of at least $0.50.");
     takeErr("");
     takeBusy(true, ["payTakeContinue", "Loading…"]);
-    call("createPaymentIntentForManualCheckout", { serviceAmountCents: v.cents, paymentKind: "payment" })
+    call("createPaymentIntentForManualCheckout", { serviceAmountCents: v.cents, paymentKind: "payment", tipCents: v.tipCents })
       .then(function (res) {
         var d = (res && res.data) || {};
         if (!d.clientSecret || !d.publishableKey) throw new Error("Couldn't start the card payment.");
@@ -1354,7 +1370,7 @@
             });
           }
           take.intent = d;
-          take.intentKey = String(v.cents);
+          take.intentKey = String(v.cents) + "|" + String(v.tipCents);
           $("payTakeSummary").innerHTML = summaryHtml(d);
           setHidden("payTakeSummary", false);
           setHidden("payTakeCardBox", false);
@@ -1373,7 +1389,7 @@
   function chargeCard() {
     if (take.busy || !take.intent || !take.card) return;
     var v = takeValues();
-    if (String(v.cents) !== take.intentKey) {
+    if (String(v.cents) + "|" + String(v.tipCents) !== take.intentKey) {
       clearIntent();
       return takeErr("The amount changed. Tap Continue to card again.");
     }
@@ -1516,6 +1532,17 @@
     $("payTakeText").addEventListener("click", function () { sendLink("text"); });
     // A new amount needs fresh totals.
     $("payTakeAmt").addEventListener("input", function () { if (take.intent) clearIntent(); });
+    // Tip picker: shown when the shop asks for tips (on unless turned off in Payment settings).
+    var tipRow = $("payTakeTipRow");
+    if (tipRow) {
+      var tenant = (state.session && state.session.tenant) || {};
+      tipRow.classList.toggle("hidden", tenant.tipsEnabled === false);
+      $("payTakeTip").addEventListener("change", function () {
+        $("payTakeTipCustom").classList.toggle("hidden", $("payTakeTip").value !== "custom");
+        if (take.intent) clearIntent();
+      });
+      $("payTakeTipCustom").addEventListener("input", function () { if (take.intent) clearIntent(); });
+    }
     $("payTakeAmt").addEventListener("keydown", function (ev) {
       if (ev.key === "Enter" && take.tab === "card") (take.intent ? chargeCard : continueToCard)();
     });
@@ -1532,6 +1559,43 @@
     setHidden("payTaxScrim", !open);
     setHidden("payTaxSheet", !open);
     if (open) closeMore();
+  }
+
+  /** Owner's three tip percentages (default 15 / 20 / 25), used everywhere clients pick a tip. */
+  function tipPercentsOf(t) {
+    var raw = (t && t.tipPercents) || [];
+    var nums = raw.map(function (n) { return parseInt(n, 10) || 0; }).filter(function (n) { return n > 0 && n <= 100; });
+    return nums.length === 3 ? nums : [15, 20, 25];
+  }
+
+  function paintTipPercents(t) {
+    var p = tipPercentsOf(t);
+    [0, 1, 2].forEach(function (i) { var el = $("payTipPct" + i); if (el) el.value = String(p[i]); });
+    var box = $("payTipPcts");
+    if (box) box.classList.toggle("hidden", t && t.tipsEnabled === false);
+    var sel = $("payTakeTip");
+    if (sel) {
+      var opts = sel.querySelectorAll("option");
+      [1, 2, 3].forEach(function (i) {
+        if (opts[i]) { opts[i].value = String(p[i - 1]); opts[i].textContent = p[i - 1] + "%"; }
+      });
+    }
+  }
+
+  function saveTipPercents(values) {
+    var s = state.session;
+    if (!s || !s.tenantId) return;
+    var msg = $("payTaxMsg");
+    firebase.firestore().collection("tenants").doc(s.tenantId).update({ tipPercents: values }).then(function () {
+      if (s.tenant) s.tenant.tipPercents = values;
+      paintTipPercents(Object.assign({}, s.tenant || {}, { tipPercents: values }));
+      msg.textContent = "Saved";
+      msg.classList.remove("hidden");
+      setTimeout(function () { msg.classList.add("hidden"); }, 1500);
+    }).catch(function (err) {
+      msg.textContent = errMessage(err);
+      msg.classList.remove("hidden");
+    });
   }
 
   function loadTax() {
@@ -1551,7 +1615,18 @@
       document.addEventListener("keydown", function (ev) {
         if (ev.key === "Escape" && !$("payTaxSheet").classList.contains("hidden")) setTaxOpen(false);
       });
-      [["payTaxOnline", "shopTaxEnabled"], ["payTaxInPerson", "inPersonTaxEnabled"]].forEach(function (pair) {
+      $("payTipPctSave").addEventListener("click", function () {
+        var vals = [0, 1, 2].map(function (i) { return parseInt(($("payTipPct" + i) || {}).value, 10) || 0; });
+        if (vals.some(function (n) { return n < 1 || n > 100; })) {
+          var m = $("payTaxMsg");
+          m.textContent = "Use whole numbers from 1 to 100.";
+          m.classList.remove("hidden");
+          return;
+        }
+        saveTipPercents(vals);
+      });
+      $("payTipPctReset").addEventListener("click", function () { saveTipPercents([15, 20, 25]); });
+      [["payTaxOnline", "shopTaxEnabled"], ["payTaxInPerson", "inPersonTaxEnabled"], ["payTipsOn", "tipsEnabled"]].forEach(function (pair) {
         var box = $(pair[0]);
         box.addEventListener("change", function () {
           var patch = {};
@@ -1559,6 +1634,13 @@
           box.disabled = true;
           var msg = $("payTaxMsg");
           ref.update(patch).then(function () {
+            if (pair[1] === "tipsEnabled") {
+              if (state.session && state.session.tenant) state.session.tenant.tipsEnabled = box.checked;
+              var tipRow = $("payTakeTipRow");
+              if (tipRow) tipRow.classList.toggle("hidden", !box.checked);
+              var pctBox = $("payTipPcts");
+              if (pctBox) pctBox.classList.toggle("hidden", !box.checked);
+            }
             msg.textContent = "Saved";
             msg.classList.remove("hidden");
             setTimeout(function () { msg.classList.add("hidden"); }, 1500);
@@ -1574,6 +1656,10 @@
       var t = snap.data() || {};
       $("payTaxOnline").checked = t.shopTaxEnabled === true;
       $("payTaxInPerson").checked = t.inPersonTaxEnabled === true;
+      $("payTipsOn").checked = t.tipsEnabled !== false;
+      paintTipPercents(t);
+      var tipRow = $("payTakeTipRow");
+      if (tipRow) tipRow.classList.toggle("hidden", t.tipsEnabled === false);
     }).catch(function () {});
   }
 

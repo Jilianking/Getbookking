@@ -1654,7 +1654,8 @@ class PaymentsViewModel: ObservableObject {
     /// Stripe Payment Sheet for in-app card entry when Tap to Pay fails or manual payment is chosen.
     func createManualCheckoutPaymentIntent(
         serviceAmountCents: Int,
-        bookingRequestId: String? = nil
+        bookingRequestId: String? = nil,
+        tipCents: Int = 0
     ) async throws -> ManualCheckoutPaymentIntent {
         guard serviceAmountCents >= 50 else {
             throw NSError(
@@ -1669,6 +1670,7 @@ class PaymentsViewModel: ObservableObject {
             "serviceAmountCents": serviceAmountCents,
             "paymentKind": "service",
         ]
+        if tipCents > 0 { payload["tipCents"] = tipCents }
         if let bookingRequestId, !bookingRequestId.isEmpty {
             payload["bookingRequestId"] = bookingRequestId
         }
@@ -1703,7 +1705,8 @@ class PaymentsViewModel: ObservableObject {
             passThroughFeeCents: passThrough,
             platformFeeCents: platformFee,
             totalCents: total,
-            channel: .online
+            channel: .online,
+            tipCents: max(0, data?["tipCents"] as? Int ?? 0)
         )
         return ManualCheckoutPaymentIntent(
             clientSecret: clientSecret,
@@ -1748,7 +1751,8 @@ class PaymentsViewModel: ObservableObject {
             passThroughFeeCents: passThrough,
             platformFeeCents: platformFee > 0 ? platformFee : CardCheckoutPricing.platformFeeCents(totalCents: total),
             totalCents: total,
-            channel: .online
+            channel: .online,
+            tipCents: checkoutCents(data?["tipCents"])
         )
         return InAppCheckoutPrice(method: method, checkout: checkout)
     }
@@ -1764,12 +1768,14 @@ class PaymentsViewModel: ObservableObject {
     @MainActor
     func chargeManualCheckoutInApp(
         serviceAmountCents: Int,
-        bookingRequestId: String? = nil
+        bookingRequestId: String? = nil,
+        tipCents: Int = 0
     ) async -> ManualCheckoutChargeOutcome {
         do {
             let intent = try await createManualCheckoutPaymentIntent(
                 serviceAmountCents: serviceAmountCents,
-                bookingRequestId: bookingRequestId
+                bookingRequestId: bookingRequestId,
+                tipCents: tipCents
             )
             let sheetResult = await ManualPaymentSheetPresenter.present(
                 clientSecret: intent.clientSecret,
@@ -2013,7 +2019,8 @@ class PaymentsViewModel: ObservableObject {
     /// Creates a Stripe PaymentIntent for Tap to Pay (fees grossed up server-side).
     func createPaymentIntentForTapToPay(
         serviceAmountCents: Int,
-        bookingRequestId: String? = nil
+        bookingRequestId: String? = nil,
+        tipCents: Int = 0
     ) async throws -> TapToPayPaymentIntent {
         guard serviceAmountCents >= 50 else {
             throw NSError(
@@ -2023,6 +2030,7 @@ class PaymentsViewModel: ObservableObject {
             )
         }
         var payload: [String: Any] = ["serviceAmountCents": serviceAmountCents]
+        if tipCents > 0 { payload["tipCents"] = tipCents }
         if let bookingRequestId, !bookingRequestId.isEmpty {
             payload["bookingRequestId"] = bookingRequestId
         }
@@ -2049,7 +2057,8 @@ class PaymentsViewModel: ObservableObject {
             passThroughFeeCents: passThrough,
             platformFeeCents: platformFee,
             totalCents: total,
-            channel: .tapToPay
+            channel: .tapToPay,
+            tipCents: max(0, data?["tipCents"] as? Int ?? 0)
         )
         return TapToPayPaymentIntent(
             clientSecret: clientSecret,

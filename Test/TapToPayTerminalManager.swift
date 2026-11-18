@@ -49,6 +49,8 @@ final class TapToPayTerminalManager {
     private var activeDiscoveryDelegate: TapToPayDiscoveryDelegate?
     private var activeReaderDelegate: TapToPayReaderDelegateAnnouncer?
     private var connectedReader: Reader?
+    /// The card read in progress, so the checkout screen can cancel it.
+    private var activeCollect: Cancelable?
     private var connectedLocationId: String = ""
     private var connectedMerchantDisplayName: String = ""
 
@@ -491,9 +493,16 @@ final class TapToPayTerminalManager {
         }
     }
 
+    /// Stops a card read that's waiting for a tap (the payment then fails as canceled; nothing is charged).
+    func cancelActivePayment() {
+        activeCollect?.cancel { _ in }
+        activeCollect = nil
+    }
+
     private func collectPaymentMethod(paymentIntent: PaymentIntent) async throws -> PaymentIntent {
         try await withCheckedThrowingContinuation { continuation in
-            Terminal.shared.collectPaymentMethod(paymentIntent) { collectedIntent, error in
+            activeCollect = Terminal.shared.collectPaymentMethod(paymentIntent) { [weak self] collectedIntent, error in
+                self?.activeCollect = nil
                 if let error {
                     continuation.resume(throwing: error)
                 } else if let collectedIntent {

@@ -393,10 +393,9 @@ struct SettingsView: View {
 
     /// Domains aren't for sale yet; the row shows only for a shop that already has one
     /// or has been let in early.
+    /// Every owner can search, buy, or transfer a domain (the TestFlight-era hide is gone).
     private var showsDomainRow: Bool {
-        guard let tenant = sessionStore.tenant else { return false }
-        if let domain = tenant["customDomain"] as? String, !domain.isEmpty { return true }
-        return tenant["domainPurchaseBlockExempt"] as? Bool == true
+        sessionStore.tenant != nil && viewModel.isTenantOwner
     }
 
     private var paymentsSetupStatus: (label: String, color: Color) {

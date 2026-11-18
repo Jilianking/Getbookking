@@ -763,10 +763,12 @@
     return String(h) + ":00";
   }
 
+  /** Next clean 15-minute mark (6:33 → 6:45; 6:45:00 stays), same as the iPhone app. */
   function nowTimeValue() {
     var d = new Date();
-    var m = Math.floor(d.getMinutes() / 5) * 5;
-    d.setMinutes(m, 0, 0);
+    var exact = d.getSeconds() === 0 && d.getMilliseconds() === 0 && d.getMinutes() % 15 === 0;
+    d.setSeconds(0, 0);
+    if (!exact) d.setMinutes(Math.floor(d.getMinutes() / 15) * 15 + 15);
     return (
       String(d.getHours()).padStart(2, "0") +
       ":" +
@@ -790,6 +792,28 @@
       now.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
   }
 
+  /* One color per service — same palette and pick as the iPhone app (ServiceColors.swift). */
+  var SERVICE_COLORS = ["#C0644A", "#6F8F5E", "#5B7DA6", "#8A5A8C", "#C49A2C", "#3F8C88", "#C2607A", "#8B6F47", "#5E5BA6", "#8C8A3E"];
+
+  function serviceColor(b) {
+    var id = String((b && b.serviceId) || "").trim();
+    var key = id || String((b && b.serviceName) || "").trim().toLowerCase();
+    if (!key) return "";
+    var hash = 0x811c9dc5;
+    for (var i = 0; i < key.length; i++) {
+      var cp = key.codePointAt(i);
+      if (cp > 0xffff) i++;
+      hash ^= cp;
+      hash = Math.imul(hash, 0x01000193) >>> 0;
+    }
+    return SERVICE_COLORS[(hash >>> 0) % SERVICE_COLORS.length];
+  }
+
+  function svcStyle(b) {
+    var c = serviceColor(b);
+    return c ? "--svc:" + c + ";" : "";
+  }
+
   function dashBlockHtml(b, extra) {
     var hold = b.status !== "confirmed";
     var startMin = b.start.getHours() * 60 + b.start.getMinutes();
@@ -805,9 +829,10 @@
     return (
       '<button type="button" class="app-dash-block' +
       (hold ? " is-hold" : "") +
+      (serviceColor(b) ? " has-svc" : "") +
       '" data-booking-id="' +
       esc(b.id) +
-      '" style="top:' +
+      '" style="' + svcStyle(b) + 'top:' +
       top +
       "px;height:" +
       height +
@@ -976,9 +1001,10 @@
       '<button type="button" class="app-cal-block' +
       (member ? " has-member" : "") +
       (hold ? " is-hold" : "") +
+      (serviceColor(b) ? " has-svc" : "") +
       '" data-booking-id="' +
       esc(b.id) +
-      '" style="' + member + "top:" +
+      '" style="' + member + svcStyle(b) + "top:" +
       top +
       "px;height:" +
       height +
@@ -1061,7 +1087,8 @@
           .sort(function (a, b) { return a.start - b.start; })
           .map(function (b) {
             return '<button type="button" class="app-cal-tw-chip' + (b.status !== "confirmed" ? " is-hold" : "") +
-              '" style="--member:' + r.color + '" data-booking-id="' + esc(b.id) + '"><time>' + esc(formatTime(b.start)) +
+              (serviceColor(b) ? " has-svc" : "") +
+              '" style="--member:' + r.color + ";" + svcStyle(b) + '" data-booking-id="' + esc(b.id) + '"><time>' + esc(formatTime(b.start)) +
               "</time><span>" + esc(b.customerName) + (b.serviceName ? " · " + esc(b.serviceName) : "") + "</span></button>";
           }).join("");
         row += '<div class="app-cal-tw-cell' + (sameDay(d, today) ? " is-today" : "") + '" data-cal-day="' + isoDate(d) +
@@ -1152,10 +1179,12 @@
       var bars = events
         .slice(0, 3)
         .map(function (b) {
-          var member = teamView(session) ? ' style="--member:' + teamColor(session, teamKey(b)) + '"' : "";
+          var memberColor = teamView(session) ? "--member:" + teamColor(session, teamKey(b)) + ";" : "";
+          var member = memberColor || svcStyle(b) ? ' style="' + memberColor + svcStyle(b) + '"' : "";
           return (
             '<span class="app-cal-pill' +
-            (member ? " has-member" : "") +
+            (memberColor ? " has-member" : "") +
+            (serviceColor(b) ? " has-svc" : "") +
             (b.status !== "confirmed" ? " is-hold" : "") +
             '"' + member + ' data-booking-id="' +
             esc(b.id) +
@@ -2277,7 +2306,9 @@
         ? "New charter"
         : "New booking";
     $("calNewDate").value = isoDate(calState.walkIn ? new Date() : day);
-    $("calNewTime").value = calState.walkIn ? nowTimeValue() : "10:00";
+    // Today (or a walk-in): the next 15-minute mark. Another day: 10:00.
+    var isToday = sameDay(calState.day || new Date(), new Date());
+    $("calNewTime").value = calState.walkIn || isToday ? nowTimeValue() : "10:00";
     $("calNewName").value = "";
     $("calNewEmail").value = "";
     $("calNewPhone").value = "";

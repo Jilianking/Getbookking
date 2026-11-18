@@ -87,6 +87,12 @@ struct EffectiveTeamAccess: Equatable {
         return false
     }
 
+    /// Block time / days off on the schedule: the owner, or a manager allowed to approve requests (same rule as the web).
+    var canManageBlockedTime: Bool {
+        if isOwner { return true }
+        return accessRole == .manager && permissions.approveRejectRequests
+    }
+
     var canViewAllBookings: Bool {
         // Owner access toggle (tenant.managerPermissions.viewAllBookings).
         if isOwner { return permissions.viewAllBookings }

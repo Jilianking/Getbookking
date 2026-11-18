@@ -31,6 +31,8 @@ struct StaffScheduleClientAppointmentSheet: View {
     @State private var notes = ""
     @State private var sendDepositLinkViaText = true
     @State private var depositAmountText: String
+    /// Locks the main button from the first tap until the whole save (booking, texts, deposit link) finishes.
+    @State private var isSubmitting = false
 
     init(
         client: Client? = nil,
@@ -60,7 +62,8 @@ struct StaffScheduleClientAppointmentSheet: View {
             _customerPhone = State(initialValue: "")
         }
 
-        let seed = Date()
+        // Start on the next clean 15-minute mark (6:33 → 6:45, 6:45 stays), same as the website.
+        let seed = Self.nextQuarterHour(after: Date())
         let calendar = Calendar.current
         _confirmedDate = State(initialValue: calendar.startOfDay(for: seed))
         _confirmedTime = State(initialValue: seed)
@@ -80,6 +83,18 @@ struct StaffScheduleClientAppointmentSheet: View {
     }
 
     private var isWalkIn: Bool { client == nil }
+
+    /// Rounds up to the next quarter hour; rolls into the next day near midnight.
+    static func nextQuarterHour(after date: Date, calendar: Calendar = .current) -> Date {
+        let parts = calendar.dateComponents([.year, .month, .day, .hour, .minute], from: date)
+        guard let floored = calendar.date(from: parts) else { return date }
+        let minute = parts.minute ?? 0
+        let remainder = minute % 15
+        let atMark = remainder == 0 && floored == date
+        if atMark { return floored }
+        let add = remainder == 0 ? 15 : 15 - remainder
+        return calendar.date(byAdding: .minute, value: add, to: floored) ?? date
+    }
 
     private var roster: [TenantTeamMember] {
         viewModel.teamFilterRoster
@@ -145,7 +160,7 @@ struct StaffScheduleClientAppointmentSheet: View {
     }
 
     private var isSaving: Bool {
-        viewModel.isUpdatingStatus
+        viewModel.isUpdatingStatus || isSubmitting
     }
 
     private var hasValidCustomer: Bool {
@@ -264,7 +279,12 @@ struct StaffScheduleClientAppointmentSheet: View {
                     }
 
                     Button {
-                        Task { await save() }
+                        guard !isSubmitting else { return }
+                        isSubmitting = true
+                        Task {
+                            await save()
+                            isSubmitting = false
+                        }
                     } label: {
                         Group {
                             if isSaving {
@@ -286,9 +306,11 @@ struct StaffScheduleClientAppointmentSheet: View {
                 ? (viewModel.isCharterPlan ? "New charter" : "New booking")
                 : (viewModel.isCharterPlan ? "Schedule charter" : "Schedule appointment"))
             .navigationBarTitleDisplayMode(.inline)
+            .interactiveDismissDisabled(isSubmitting)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
+                        .disabled(isSubmitting)
                 }
             }
             .task {

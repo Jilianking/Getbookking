@@ -125,15 +125,20 @@ struct BlockedTimeRange: Identifiable, Equatable {
     var dateYmd: String
     var startMinutes: Int
     var endMinutes: Int
+    /// Optional label set on the calendar ("Lunch", "Time off"). Kept on save so the web and app agree.
+    var label: String?
 
     init(
         id: String = UUID().uuidString,
         dateYmd: String,
         startMinutes: Int,
-        endMinutes: Int
+        endMinutes: Int,
+        label: String? = nil
     ) {
         self.id = id
         self.dateYmd = dateYmd
+        let trimmed = label?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        self.label = trimmed.isEmpty ? nil : String(trimmed.prefix(40))
         self.startMinutes = max(0, min(startMinutes, 24 * 60 - 1))
         self.endMinutes = max(0, min(endMinutes, 24 * 60))
         if self.endMinutes <= self.startMinutes {
@@ -148,12 +153,14 @@ struct BlockedTimeRange: Identifiable, Equatable {
     }
 
     func firestoreMap() -> [String: Any] {
-        [
+        var map: [String: Any] = [
             "id": id,
             "date": dateYmd,
             "startMin": startMinutes,
             "endMin": endMinutes,
         ]
+        if let label, !label.isEmpty { map["label"] = label }
+        return map
     }
 
     static func fromFirestore(_ any: Any?) -> BlockedTimeRange? {
@@ -174,7 +181,7 @@ struct BlockedTimeRange: Identifiable, Equatable {
             return start + 60
         }()
         let id = (m["id"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? UUID().uuidString
-        return BlockedTimeRange(id: id, dateYmd: date, startMinutes: start, endMinutes: end)
+        return BlockedTimeRange(id: id, dateYmd: date, startMinutes: start, endMinutes: end, label: m["label"] as? String)
     }
 
     static func parseList(_ raw: Any?) -> [BlockedTimeRange] {

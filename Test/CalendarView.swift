@@ -18,6 +18,9 @@ struct CalendarView: View {
     @State private var showingNewBookingSheet = false
     @State private var showingLegacyBookingForm = false
     @State private var selectedBookingRequest: BookingRequest?
+    @StateObject private var blockedTime = ShopBlockedTimeStore()
+    /// nil = closed; `.new` = add a block; `.edit` = tap an existing one.
+    @State private var blockSheet: BlockSheetTarget?
     var drawerState: DrawerState
     let sectionTitle: String
 
@@ -35,21 +38,49 @@ struct CalendarView: View {
         sessionStore.tenantId != nil
     }
 
+    private var canBlockTime: Bool {
+        !authViewModel.isDemoMode && sessionStore.tenantId != nil && authViewModel.teamAccess.canManageBlockedTime
+    }
+
+    private var selectedDayBlocks: [ScheduleBlock] {
+        blockedTime.blocks(on: selectedDate)
+    }
+
     var body: some View {
         NavigationView {
             ScrollView {
                 VStack(spacing: 0) {
                     AppScreenTitle(title: sectionTitle)
-                    Button(action: { openNewBookingSheet() }) {
-                        HStack {
-                            Image(systemName: "plus")
-                            Text("New Booking")
+                    HStack(spacing: 10) {
+                        Button(action: { openNewBookingSheet() }) {
+                            HStack {
+                                Image(systemName: "plus")
+                                Text("New Booking")
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 14)
+                            .background(AppDesign.brandDark)
+                            .foregroundColor(.white)
+                            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                         }
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 14)
-                        .background(AppDesign.brandDark)
-                        .foregroundColor(.white)
-                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        if canBlockTime {
+                            Button { blockSheet = .new(selectedDate) } label: {
+                                HStack(spacing: 6) {
+                                    Image(systemName: "nosign")
+                                    Text("Block time")
+                                }
+                                .padding(.horizontal, 14)
+                                .padding(.vertical, 14)
+                                .foregroundStyle(AppDesign.textPrimary)
+                                .background(AppDesign.cardBackground)
+                                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                        .stroke(AppDesign.chipBorder, lineWidth: 1)
+                                )
+                            }
+                            .buttonStyle(.plain)
+                        }
                     }
                     .padding(.horizontal, 16)
                     .padding(.top, 8)
@@ -102,7 +133,9 @@ struct CalendarView: View {
                             canOpenEvent: { viewModel.bookingRequest(for: $0) != nil },
                             onEventTap: { event in
                                 Task { await openBookingDetail(for: event) }
-                            }
+                            },
+                            blocks: selectedDayBlocks,
+                            onBlockTap: canBlockTime ? { block in blockSheet = .edit(block) } : nil
                         )
                     }
                 }
@@ -126,6 +159,7 @@ struct CalendarView: View {
                 }
             }
             .task {
+                blockedTime.start(tenantId: sessionStore.tenantId, ownerUid: sessionStore.ownerUid)
                 requestsViewModel.sessionStore = sessionStore
                 await viewModel.loadEvents(
                     forMonthAround: displayedMonth,
@@ -152,6 +186,14 @@ struct CalendarView: View {
                 ) ?? newDate
                 if !Calendar.current.isDate(displayedMonth, equalTo: monthStart, toGranularity: .month) {
                     displayedMonth = monthStart
+                }
+            }
+            .sheet(item: $blockSheet) { target in
+                switch target {
+                case .new(let day):
+                    BlockTimeSheet(store: blockedTime, editing: nil, initialDate: day)
+                case .edit(let block):
+                    BlockTimeSheet(store: blockedTime, editing: block, initialDate: selectedDate)
                 }
             }
             .sheet(isPresented: $showingNewBookingSheet) {
@@ -264,6 +306,19 @@ struct CalendarView: View {
                 .font(.headline)
                 .padding(.horizontal)
 
+            if !selectedDayBlocks.isEmpty {
+                VStack(spacing: 8) {
+                    ForEach(selectedDayBlocks) { block in
+                        Button { if canBlockTime { blockSheet = .edit(block) } } label: {
+                            ScheduleBlockRow(block: block)
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(!canBlockTime)
+                    }
+                }
+                .padding(.horizontal, 16)
+            }
+
             if viewModel.isLoading && viewModel.events.isEmpty {
                 ProgressView()
                     .frame(maxWidth: .infinity)
@@ -306,12 +361,26 @@ struct CalendarView: View {
     }
 }
 
+enum BlockSheetTarget: Identifiable {
+    case new(Date)
+    case edit(ScheduleBlock)
+    var id: String {
+        switch self {
+        case .new(let d): return "new-\(d.timeIntervalSince1970)"
+        case .edit(let b): return "edit-\(b.id)"
+        }
+    }
+}
+
 struct EventRow: View {
     let event: Event
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
+                Circle()
+                    .fill(ServiceColors.color(for: event))
+                    .frame(width: 10, height: 10)
                 Text(event.title)
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(AppDesign.textPrimary)

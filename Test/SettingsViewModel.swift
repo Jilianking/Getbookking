@@ -398,14 +398,14 @@ class SettingsViewModel: ObservableObject, BusinessHoursEditing {
                     } else if !p.availability.onlineSlotsConfigured {
                         onlineBookableWeekly = businessHoursWeekly
                     }
-                    // Prefer tenant-level blocks when owner mirrored them for /book.
+                    // The shop (tenant) copy is what online booking reads, and the web calendar edits it,
+                    // so it wins whenever it's there. The personal copy is only a fallback.
                     if let tenant = loadedTenant {
-                        if let dates = tenant["blockedDates"] as? [String], !dates.isEmpty, blockedDates.isEmpty {
+                        if let dates = tenant["blockedDates"] as? [String] {
                             blockedDates = Set(dates)
                         }
-                        let tenantBlocks = BlockedTimeRange.parseList(tenant["blockedTimeRanges"])
-                        if blockedTimeRanges.isEmpty, !tenantBlocks.isEmpty {
-                            blockedTimeRanges = tenantBlocks
+                        if tenant["blockedTimeRanges"] != nil {
+                            blockedTimeRanges = BlockedTimeRange.parseList(tenant["blockedTimeRanges"])
                         }
                     }
                 } else {

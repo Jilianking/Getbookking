@@ -146,7 +146,7 @@ class CalendarViewModel: ObservableObject {
             clientId: booking.customerId ?? booking.id,
             clientName: client.isEmpty ? "Client" : client,
             notes: booking.notes,
-            color: nil,
+            color: ServiceColors.hex(serviceId: booking.serviceId, serviceName: booking.serviceName),
             documents: nil
         )
     }

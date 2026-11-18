@@ -3990,6 +3990,8 @@ private struct EditTenantServiceSheet: View {
     @State private var serviceImageUrl = ""
     @State private var imagePickerItem: PhotosPickerItem?
     @State private var imageCropItem: SingleImageCropSheetItem?
+    @State private var showRemoveConfirm = false
+    @State private var isRemoving = false
 
     private var isCharter: Bool { viewModel.subscriptionPlan.isCharterPlan }
 
@@ -4098,6 +4100,41 @@ private struct EditTenantServiceSheet: View {
                         }
                     )
                 }
+                Section {
+                    Button(role: .destructive) {
+                        showRemoveConfirm = true
+                    } label: {
+                        HStack {
+                            Spacer()
+                            if isRemoving {
+                                ProgressView()
+                            } else {
+                                Text(isCharter ? "Remove trip" : "Remove service")
+                            }
+                            Spacer()
+                        }
+                    }
+                    .disabled(isRemoving || viewModel.isSavingBladeServices)
+                }
+            }
+            .confirmationDialog(
+                isCharter ? "Remove trip" : "Remove service",
+                isPresented: $showRemoveConfirm,
+                titleVisibility: .visible
+            ) {
+                Button("Remove", role: .destructive) {
+                    guard !isRemoving else { return }
+                    isRemoving = true
+                    Task {
+                        await viewModel.deleteService(service)
+                        isRemoving = false
+                        if viewModel.errorMessage == nil { onDismiss() }
+                    }
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                // Same wording as the website builder. Past bookings keep their service name.
+                Text("\(service.name.isEmpty ? "This service" : service.name) will come off the booking form.")
             }
             .sheet(item: $imageCropItem, onDismiss: { imageCropItem = nil }) { item in
                 UploadImagePreparationSheet(

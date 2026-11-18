@@ -3642,3 +3642,12 @@ body.is-cal-dragging, body.is-cal-dragging * { cursor: grabbing !important; user
 .app-client-note-btn.is-danger { color: #9b2c2c; }
 .app-client-note.is-editing textarea { width: 100%; box-sizing: border-box; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--paper); font: inherit; font-size: 14px; resize: vertical; }
 .app-client-note-acts { display: flex; justify-content: flex-end; gap: 6px; margin-top: 6px; }
+
+/* Service colors (same palette as the iPhone app). Team views keep the staff color as the left stripe. */
+.app-cal-block.has-svc, .app-dash-block.has-svc { background: color-mix(in srgb, var(--svc) 16%, var(--card)); }
+.app-cal-block.has-svc:not(.has-member), .app-dash-block.has-svc { border-left: 3px solid var(--svc); }
+.app-cal-block.has-svc.is-hold, .app-dash-block.has-svc.is-hold { background: color-mix(in srgb, var(--svc) 7%, var(--paper)); border-style: dashed; border-color: color-mix(in srgb, var(--svc) 55%, transparent); }
+.app-cal-pill.has-svc { background: color-mix(in srgb, var(--svc) 20%, var(--card)); }
+.app-cal-pill.has-svc:not(.has-member) { box-shadow: inset 3px 0 0 var(--svc); padding-left: 8px; }
+.app-cal-pill.has-svc.is-hold { background: color-mix(in srgb, var(--svc) 9%, var(--paper)); }
+.app-cal-tw-chip.has-svc { background: color-mix(in srgb, var(--svc) 15%, var(--card)); }

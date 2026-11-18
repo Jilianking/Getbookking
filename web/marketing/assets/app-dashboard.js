@@ -956,6 +956,7 @@
         if ($("calNewName")) $("calNewName").value = c.name || "";
         if ($("calNewEmail")) $("calNewEmail").value = c.email || "";
         if ($("calNewPhone")) $("calNewPhone").value = c.phone || "";
+        paintNewTextRow();
       }
     });
   }
@@ -1360,6 +1361,9 @@
     if (scrim) scrim.classList.toggle("hidden", !open);
     if (open) {
       fillNewForm();
+      if ($("calNewText")) $("calNewText").checked = true;
+      if ($("calNewTextRow")) delete $("calNewTextRow").dataset.touched;
+      paintNewTextRow();
       var name = $("calNewName");
       if (name) name.focus();
     }
@@ -2242,6 +2246,31 @@
     return false;
   }
 
+  /** Shows "Text … a confirmation" only when the shop can text and the phone number is complete. */
+  function paintNewTextRow() {
+    var row = $("calNewTextRow");
+    if (!row) return;
+    var session = calState.session;
+    var digits = last10Digits(($("calNewPhone") || {}).value || "");
+    var canSms = !!(session && shopCanSms(session));
+    var ready = canSms && digits.length >= 10;
+    // Always shown so owners know it exists; it only turns on once a text can actually go out.
+    row.classList.remove("hidden");
+    var box = $("calNewText");
+    box.disabled = !ready;
+    if (!ready) box.checked = false;
+    else if (!row.dataset.touched) box.checked = true;
+    row.classList.toggle("is-disabled", !ready);
+    var first = String(($("calNewName") || {}).value || "").trim().split(/\s+/)[0];
+    $("calNewTextLabel").textContent = "Text " + (first || "the client") + " a confirmation";
+    var hint = row.querySelector("em");
+    if (hint) {
+      hint.textContent = !canSms
+        ? "Set up your texting number in Settings → Messaging to text clients."
+        : digits.length < 10 ? "Add the client's phone number to text them." : "Sent from your shop's texting number.";
+    }
+  }
+
   function fillNewForm() {
     var session = calState.session;
     if (!session) return;
@@ -2428,6 +2457,8 @@
     if (!member.uid) return fail("Choose a staff member.");
     var boatId = charter ? $("calNewBoat").value : "";
     if (charter && !boatId) return fail("Add a boat in Business settings before scheduling.");
+    var textRow = $("calNewTextRow");
+    var skipConfirmationSms = !!(textRow && !$("calNewText").disabled && !$("calNewText").checked);
     var deposit = depositUiState(session);
     if (deposit.blocks) {
       return fail("Enter at least $0.50 to send a payment link.");
@@ -2476,6 +2507,7 @@
           serviceName: service.name,
           notes: notes || null,
           boatId: boatId,
+          skipConfirmationSms: skipConfirmationSms || undefined,
         })
         .then(function (res) {
           return res && res.data && res.data.requestId;
@@ -2497,6 +2529,11 @@
           durationMinutes: service.durationMinutes,
           createdAt: firebase.firestore.FieldValue.serverTimestamp(),
           notes: notes || "",
+          // "Text the client a confirmation" unchecked: the server skips the confirmation text.
+          skipConfirmationSms: skipConfirmationSms,
+          // Booked by the shop: no "new booking" alert for whoever made it, and it isn't unread.
+          createdByUid: (session.user && session.user.uid) || "",
+          readAt: firebase.firestore.FieldValue.serverTimestamp(),
         })
         .then(function (ref) {
           return ref
@@ -2761,8 +2798,13 @@
           phoneEl.value = formatted;
         }
         paintDepositUi();
+        paintNewTextRow();
       });
     }
+    var nameEl = $("calNewName");
+    if (nameEl) nameEl.addEventListener("input", paintNewTextRow);
+    var textBox = $("calNewText");
+    if (textBox) textBox.addEventListener("change", function () { $("calNewTextRow").dataset.touched = "1"; });
     var depositAmtEl = $("calNewDepositAmt");
     if (depositAmtEl) {
       depositAmtEl.addEventListener("input", paintDepositUi);

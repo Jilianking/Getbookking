@@ -480,7 +480,8 @@ class RequestsViewModel: ObservableObject {
         scheduledStart: Date,
         notes: String?,
         durationMinutes: Int? = nil,
-        boatId: String? = nil
+        boatId: String? = nil,
+        skipConfirmationSms: Bool = false
     ) async -> String? {
         if let store = sessionStore, store.isDemoSession {
             await MainActor.run {
@@ -515,7 +516,9 @@ class RequestsViewModel: ObservableObject {
                     durationMinutes: durationMinutes,
                     boatId: boatId
                 )
-                let requestId = try await firebaseService.syncCharterBookingSlot(payload)
+                var charterPayload = payload
+                if skipConfirmationSms { charterPayload["skipConfirmationSms"] = true }
+                let requestId = try await firebaseService.syncCharterBookingSlot(charterPayload)
                 await reloadAfterMutation()
                 await MainActor.run { isUpdatingStatus = false }
                 return requestId
@@ -531,7 +534,8 @@ class RequestsViewModel: ObservableObject {
                 preferredTime: preferred,
                 requestedStartTime: scheduledStart,
                 notes: notes,
-                formResponses: nil
+                formResponses: nil,
+                skipConfirmationSms: skipConfirmationSms
             )
             await confirmBookingAppointment(
                 requestId: requestId,

@@ -30,6 +30,8 @@ struct StaffScheduleClientAppointmentSheet: View {
     @State private var selectedBoatId: String?
     @State private var notes = ""
     @State private var sendDepositLinkViaText = true
+    /// "Text the client a confirmation" — on by default; off books it without a text.
+    @State private var sendConfirmationText = true
     @State private var depositAmountText: String
     /// Locks the main button from the first tap until the whole save (booking, texts, deposit link) finishes.
     @State private var isSubmitting = false
@@ -133,6 +135,19 @@ struct StaffScheduleClientAppointmentSheet: View {
             email: email,
             phone: PhoneFormatting.normalizedForStorage(customerPhone)
         )
+    }
+
+    private var confirmationToggleTitle: String {
+        let first = (resolvedClientForSave?.name ?? customerName)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .split(separator: " ").first.map(String.init) ?? ""
+        return first.isEmpty ? "Text the client a confirmation" : "Text \(first) a confirmation"
+    }
+
+    private var confirmationToggleHint: String {
+        if !studioCanSendSms { return "Set up your texting number in Settings → Messaging to text clients." }
+        if !canSendDepositSms { return "Add the client's phone number to text them." }
+        return "Sent from your shop's texting number."
     }
 
     private var canSendDepositSms: Bool {
@@ -249,6 +264,22 @@ struct StaffScheduleClientAppointmentSheet: View {
 
                         TextField("Notes (optional)", text: $notes, axis: .vertical)
                             .lineLimit(2...4)
+
+                        // Always shown so owners know it exists; it only turns on once texting can actually go out.
+                        Toggle(isOn: Binding(
+                            get: { canSendDepositSms && sendConfirmationText },
+                            set: { sendConfirmationText = $0 }
+                        )) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(confirmationToggleTitle)
+                                    .font(.subheadline.weight(.medium))
+                                Text(confirmationToggleHint)
+                                    .font(.caption)
+                                    .foregroundStyle(AppDesign.textSecondary)
+                            }
+                        }
+                        .tint(AppDesign.brandWarm)
+                        .disabled(!canSendDepositSms)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(16)
@@ -407,7 +438,8 @@ struct StaffScheduleClientAppointmentSheet: View {
             scheduledStart: start,
             notes: trimmedNotes.isEmpty ? nil : trimmedNotes,
             durationMinutes: service.durationMinutes,
-            boatId: viewModel.isCharterPlan ? selectedBoatId : nil
+            boatId: viewModel.isCharterPlan ? selectedBoatId : nil,
+            skipConfirmationSms: canSendDepositSms && !sendConfirmationText
         )
         if requestId != nil,
            willSendDeposit,

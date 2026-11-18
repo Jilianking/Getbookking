@@ -6528,6 +6528,7 @@ exports.syncCharterBookingSlot = functions.https.onCall(async (data, context) =>
   delete bookingData.id;
   bookingData.tenantId = ctx.tenantId;
   bookingData.source = existing.source || "admin_app";
+  if (!existing.createdByUid && !existing.source) bookingData.createdByUid = context.auth.uid;
   bookingData.scheduledDate = scheduledDate;
   bookingData.scheduledStartMin = startMin;
   bookingData.durationMinutes = dur;
@@ -6556,6 +6557,7 @@ exports.syncCharterBookingSlot = functions.https.onCall(async (data, context) =>
     const notes = String(data.notes).trim();
     if (notes) bookingData.notes = notes.slice(0, 4000);
   }
+  if (data && data.skipConfirmationSms === true) bookingData.skipConfirmationSms = true;
   if (data && data.partySize != null && Number.isFinite(Number(data.partySize))) {
     bookingData.partySize = Number(data.partySize);
   }
@@ -8964,11 +8966,19 @@ exports.onTenantBookingRequestCreated = functions
 
     const { title, body } = bookingRequestAlertCopy(data);
 
-    const recipientUids = await resolveBookingAlertRecipientUids(
+    // The shop booked this itself (app, website calendar, walk-in): don't alert the person who made it.
+    // Others (e.g. the assigned artist) still hear about it. Older app versions don't send createdByUid,
+    // so for those staff-made bookings nobody is alerted.
+    const staffMade = source === "admin_app" || source === "admin_web" || source === "walk_in";
+    const createdByUid = (data.createdByUid || "").toString().trim();
+    let recipientUids = await resolveBookingAlertRecipientUids(
       tenantId,
       data,
       "onNewBooking"
     );
+    if (staffMade) {
+      recipientUids = createdByUid ? recipientUids.filter((uid) => uid !== createdByUid) : [];
+    }
     const tokens = await collectDeviceTokensForUids(recipientUids);
     await sendBookingAlertPush({
       tokens,
@@ -16570,6 +16580,8 @@ async function loadCharterItineraryStepsForSms(tenantId, booking) {
 async function sendBookingClientStatusSms(tenantId, requestId, booking, status) {
   const next = (status || "").toString().toLowerCase();
   if ((booking.source || "").toString().toLowerCase() === "seed") return null;
+  // "Text the client a confirmation" was unchecked when the owner booked it.
+  if (booking.skipConfirmationSms === true && (next === "confirmed" || next === "new")) return null;
 
   const tenantSnap = await db.collection("tenants").doc(tenantId).get();
   if (!tenantSnap.exists) return null;

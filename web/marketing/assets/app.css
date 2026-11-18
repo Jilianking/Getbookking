@@ -3651,3 +3651,4 @@ body.is-cal-dragging, body.is-cal-dragging * { cursor: grabbing !important; user
 .app-cal-pill.has-svc:not(.has-member) { box-shadow: inset 3px 0 0 var(--svc); padding-left: 8px; }
 .app-cal-pill.has-svc.is-hold { background: color-mix(in srgb, var(--svc) 9%, var(--paper)); }
 .app-cal-tw-chip.has-svc { background: color-mix(in srgb, var(--svc) 15%, var(--card)); }
+.app-shop-visible.is-disabled { opacity: 0.6; }

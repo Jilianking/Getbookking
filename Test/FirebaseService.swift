@@ -569,7 +569,7 @@ class FirebaseService: ObservableObject {
         )
     }
 
-    func createTenantBookingRequest(tenantId: String, customerName: String, customerEmail: String, customerPhone: String?, serviceId: String?, serviceSlug: String?, serviceName: String?, preferredTime: String?, requestedStartTime: Date?, notes: String?, formResponses: [String: Any]?) async throws -> String {
+    func createTenantBookingRequest(tenantId: String, customerName: String, customerEmail: String, customerPhone: String?, serviceId: String?, serviceSlug: String?, serviceName: String?, preferredTime: String?, requestedStartTime: Date?, notes: String?, formResponses: [String: Any]?, skipConfirmationSms: Bool = false) async throws -> String {
         var data: [String: Any] = [
             "status": "NEW",
             "source": "admin_app",
@@ -587,6 +587,9 @@ class FirebaseService: ObservableObject {
         if let pt = preferredTime, !pt.isEmpty { data["preferredTime"] = pt }
         if let start = requestedStartTime { data["requestedStartTime"] = Timestamp(date: start) }
         if let n = notes, !n.isEmpty { data["notes"] = n }
+        if skipConfirmationSms { data["skipConfirmationSms"] = true }
+        // Lets the server skip the "new booking" alert for whoever booked it themselves.
+        if let uid = Auth.auth().currentUser?.uid { data["createdByUid"] = uid }
         if var fr = formResponses {
             if let p = fr["phone"] as? String, let norm = PhoneFormatting.normalizedForStorage(p) {
                 fr["phone"] = norm

@@ -29,6 +29,7 @@ struct ContentView: View {
             } else if authViewModel.isAuthenticated && !authViewModel.isCreatingAccount {
                 AdminTabView()
                     .environmentObject(authViewModel)
+                    .task { await MetaTracking.requestTrackingIfNeeded(isDemoMode: authViewModel.isDemoMode) }
             } else {
                 LoginView()
                     .environmentObject(authViewModel)

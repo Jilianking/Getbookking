@@ -15,6 +15,7 @@
 		35C0ED272F1B100000BB5E8B /* StripeTerminal in Frameworks */ = {isa = PBXBuildFile; productRef = 35C0ED262F1B100000BB5E8B /* StripeTerminal */; };
 		35C0ED292F1B200000BB5E8B /* FirebaseMessaging in Frameworks */ = {isa = PBXBuildFile; productRef = 35C0ED282F1B200000BB5E8B /* FirebaseMessaging */; };
 		35C0ED2C2F1B300000BB5E8B /* StripePaymentSheet in Frameworks */ = {isa = PBXBuildFile; productRef = 35C0ED2B2F1B300000BB5E8B /* StripePaymentSheet */; };
+		35C0ED2F2F1B400000BB5E8B /* FacebookCore in Frameworks */ = {isa = PBXBuildFile; productRef = 35C0ED2E2F1B400000BB5E8B /* FacebookCore */; };
 		35CDF9152FFF2C9C001FE834 /* Secrets.plist in Resources */ = {isa = PBXBuildFile; fileRef = 35CDF9142FFF2C9C001FE834 /* Secrets.plist */; };
 		35E26D89306D4EDD00CBF439 /* StoreKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 35E26D88306D4EDD00CBF439 /* StoreKit.framework */; };
 /* End PBXBuildFile section */
@@ -76,6 +77,7 @@
 				35C0ED272F1B100000BB5E8B /* StripeTerminal in Frameworks */,
 				35C0ED292F1B200000BB5E8B /* FirebaseMessaging in Frameworks */,
 				35C0ED2C2F1B300000BB5E8B /* StripePaymentSheet in Frameworks */,
+				35C0ED2F2F1B400000BB5E8B /* FacebookCore in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -154,6 +156,7 @@
 				35C0ED262F1B100000BB5E8B /* StripeTerminal */,
 				35C0ED282F1B200000BB5E8B /* FirebaseMessaging */,
 				35C0ED2B2F1B300000BB5E8B /* StripePaymentSheet */,
+				35C0ED2E2F1B400000BB5E8B /* FacebookCore */,
 			);
 			productName = Test;
 			productReference = 35C0ECA62F16A57500BB5E8B /* Test.app */;
@@ -241,6 +244,7 @@
 				35C0ED182F1ACC7000BB5E8B /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */,
 				35C0ED252F1B100000BB5E8B /* XCRemoteSwiftPackageReference "stripe-terminal-ios" */,
 				35C0ED2A2F1B300000BB5E8B /* XCRemoteSwiftPackageReference "stripe-ios" */,
+				35C0ED2D2F1B400000BB5E8B /* XCRemoteSwiftPackageReference "facebook-ios-sdk" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 35C0ECA72F16A57500BB5E8B /* Products */;
@@ -453,6 +457,7 @@
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Location is required to accept in-person Tap to Pay payments.";
 				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "Save message photos, booking reference photos, and generated logos to your photo library.";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Choose photos for your website, profile, gallery, and shop products.";
+				INFOPLIST_KEY_NSUserTrackingUsageDescription = "Lets us measure which of our Facebook and Instagram ads bring new businesses to Get Bookking. The app works the same either way.";
 				INFOPLIST_KEY_UIAppFonts = "TenorSans-Regular.ttf";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
@@ -511,6 +516,7 @@
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Location is required to accept in-person Tap to Pay payments.";
 				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "Save message photos, booking reference photos, and generated logos to your photo library.";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Choose photos for your website, profile, gallery, and shop products.";
+				INFOPLIST_KEY_NSUserTrackingUsageDescription = "Lets us measure which of our Facebook and Instagram ads bring new businesses to Get Bookking. The app works the same either way.";
 				INFOPLIST_KEY_UIAppFonts = "TenorSans-Regular.ttf";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
@@ -715,6 +721,14 @@
 				minimumVersion = 24.0.0;
 			};
 		};
+		35C0ED2D2F1B400000BB5E8B /* XCRemoteSwiftPackageReference "facebook-ios-sdk" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/facebook/facebook-ios-sdk";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 18.0.0;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -757,6 +771,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 35C0ED2A2F1B300000BB5E8B /* XCRemoteSwiftPackageReference "stripe-ios" */;
 			productName = StripePaymentSheet;
+		};
+		35C0ED2E2F1B400000BB5E8B /* FacebookCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 35C0ED2D2F1B400000BB5E8B /* XCRemoteSwiftPackageReference "facebook-ios-sdk" */;
+			productName = FacebookCore;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

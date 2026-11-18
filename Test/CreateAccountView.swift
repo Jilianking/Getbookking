@@ -696,6 +696,7 @@ struct CreateAccountView: View {
             await authViewModel.refreshTeamAccess()
             authViewModel.isCreatingAccount = false
             authViewModel.markSignupFinished()
+            MetaTracking.logCompleteRegistration(plan: plan.rawValue)
             dismiss()
         } catch {
             let code = AuthErrorCode(rawValue: (error as NSError).code)

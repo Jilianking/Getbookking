@@ -38,10 +38,10 @@ enum SubscriptionPlan: String, CaseIterable {
 
     var monthlyPriceLabel: String {
         switch self {
-        case .solo: return "$39/mo"
-        case .studio: return "$79/mo"
-        case .shop: return "$149/mo"
-        case .charter: return "$24/mo"
+        case .solo: return "$39.99/mo"
+        case .studio: return "$79.99/mo"
+        case .shop: return "$149.99/mo"
+        case .charter: return "$24.99/mo"
         }
     }
 

@@ -117,6 +117,21 @@ enum CardCheckoutPricing {
         return total - stripe - platformFeeCents(totalCents: total)
     }
 
+    /// The breakdown with a tip added: tip on top, plus the card fee on the tip (paid by the client).
+    static func withTip(_ base: CardCheckoutBreakdown, tipCents tip: Int) -> CardCheckoutBreakdown {
+        guard tip > 0 else { return base }
+        let tipFee = tipCardFeeCents(tipCents: tip, channel: base.channel)
+        return CardCheckoutBreakdown(
+            serviceCents: base.serviceCents,
+            taxCents: base.taxCents,
+            passThroughFeeCents: base.passThroughFeeCents + tipFee,
+            platformFeeCents: base.platformFeeCents,
+            totalCents: base.totalCents + tip + tipFee,
+            channel: base.channel,
+            tipCents: tip
+        )
+    }
+
     /// Card fee on a tip, paid by the client (card rate only; no fixed fee, no platform fee). Mirrors the server.
     static func tipCardFeeCents(tipCents: Int, channel: CardCheckoutChannel) -> Int {
         guard tipCents > 0 else { return 0 }

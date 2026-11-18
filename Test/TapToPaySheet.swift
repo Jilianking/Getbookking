@@ -508,6 +508,7 @@ struct TapToPaySheet: View {
 
     private func pay(tipCents: Int = 0) async {
         userCanceledPayment = false
+        TapToPayTerminalManager.shared.resetCancel()
         pendingTipCents = tipCents
         // Until the server answers, show (and keep for any receipt) the estimate with the tip.
         lastCheckout = breakdown(checkout, tip: tipCents)
@@ -684,7 +685,6 @@ private struct TapToPayNoteEditorSheet: View {
     }
 }
 
-#endif
 
 
 /// Branded processing screen for Tap to Pay: the bronze crown slides up and settles, then a soft glow.
@@ -767,3 +767,5 @@ private struct TapToPayProcessingView: View {
         }
     }
 }
+
+#endif

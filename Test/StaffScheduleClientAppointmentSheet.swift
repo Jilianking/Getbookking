@@ -30,7 +30,11 @@ struct StaffScheduleClientAppointmentSheet: View {
     @State private var selectedBoatId: String?
     @State private var notes = ""
     @State private var sendDepositLinkViaText = true
+    /// "Text the client a confirmation" — on by default; off books it without a text.
+    @State private var sendConfirmationText = true
     @State private var depositAmountText: String
+    /// Locks the main button from the first tap until the whole save (booking, texts, deposit link) finishes.
+    @State private var isSubmitting = false
 
     init(
         client: Client? = nil,
@@ -60,7 +64,8 @@ struct StaffScheduleClientAppointmentSheet: View {
             _customerPhone = State(initialValue: "")
         }
 
-        let seed = Date()
+        // Start on the next clean 15-minute mark (6:33 → 6:45, 6:45 stays), same as the website.
+        let seed = Self.nextQuarterHour(after: Date())
         let calendar = Calendar.current
         _confirmedDate = State(initialValue: calendar.startOfDay(for: seed))
         _confirmedTime = State(initialValue: seed)
@@ -80,6 +85,18 @@ struct StaffScheduleClientAppointmentSheet: View {
     }
 
     private var isWalkIn: Bool { client == nil }
+
+    /// Rounds up to the next quarter hour; rolls into the next day near midnight.
+    static func nextQuarterHour(after date: Date, calendar: Calendar = .current) -> Date {
+        let parts = calendar.dateComponents([.year, .month, .day, .hour, .minute], from: date)
+        guard let floored = calendar.date(from: parts) else { return date }
+        let minute = parts.minute ?? 0
+        let remainder = minute % 15
+        let atMark = remainder == 0 && floored == date
+        if atMark { return floored }
+        let add = remainder == 0 ? 15 : 15 - remainder
+        return calendar.date(byAdding: .minute, value: add, to: floored) ?? date
+    }
 
     private var roster: [TenantTeamMember] {
         viewModel.teamFilterRoster
@@ -120,6 +137,19 @@ struct StaffScheduleClientAppointmentSheet: View {
         )
     }
 
+    private var confirmationToggleTitle: String {
+        let first = (resolvedClientForSave?.name ?? customerName)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .split(separator: " ").first.map(String.init) ?? ""
+        return first.isEmpty ? "Text the client a confirmation" : "Text \(first) a confirmation"
+    }
+
+    private var confirmationToggleHint: String {
+        if !studioCanSendSms { return "Set up your texting number in Settings → Messaging to text clients." }
+        if !canSendDepositSms { return "Add the client's phone number to text them." }
+        return "Sent from your shop's texting number."
+    }
+
     private var canSendDepositSms: Bool {
         guard studioCanSendSms else { return false }
         let phone = client?.phone ?? PhoneFormatting.normalizedForStorage(customerPhone)
@@ -145,7 +175,7 @@ struct StaffScheduleClientAppointmentSheet: View {
     }
 
     private var isSaving: Bool {
-        viewModel.isUpdatingStatus
+        viewModel.isUpdatingStatus || isSubmitting
     }
 
     private var hasValidCustomer: Bool {
@@ -234,6 +264,22 @@ struct StaffScheduleClientAppointmentSheet: View {
 
                         TextField("Notes (optional)", text: $notes, axis: .vertical)
                             .lineLimit(2...4)
+
+                        // Always shown so owners know it exists; it only turns on once texting can actually go out.
+                        Toggle(isOn: Binding(
+                            get: { canSendDepositSms && sendConfirmationText },
+                            set: { sendConfirmationText = $0 }
+                        )) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(confirmationToggleTitle)
+                                    .font(.subheadline.weight(.medium))
+                                Text(confirmationToggleHint)
+                                    .font(.caption)
+                                    .foregroundStyle(AppDesign.textSecondary)
+                            }
+                        }
+                        .tint(AppDesign.brandWarm)
+                        .disabled(!canSendDepositSms)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(16)
@@ -264,7 +310,12 @@ struct StaffScheduleClientAppointmentSheet: View {
                     }
 
                     Button {
-                        Task { await save() }
+                        guard !isSubmitting else { return }
+                        isSubmitting = true
+                        Task {
+                            await save()
+                            isSubmitting = false
+                        }
                     } label: {
                         Group {
                             if isSaving {
@@ -286,9 +337,11 @@ struct StaffScheduleClientAppointmentSheet: View {
                 ? (viewModel.isCharterPlan ? "New charter" : "New booking")
                 : (viewModel.isCharterPlan ? "Schedule charter" : "Schedule appointment"))
             .navigationBarTitleDisplayMode(.inline)
+            .interactiveDismissDisabled(isSubmitting)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
+                        .disabled(isSubmitting)
                 }
             }
             .task {
@@ -385,7 +438,8 @@ struct StaffScheduleClientAppointmentSheet: View {
             scheduledStart: start,
             notes: trimmedNotes.isEmpty ? nil : trimmedNotes,
             durationMinutes: service.durationMinutes,
-            boatId: viewModel.isCharterPlan ? selectedBoatId : nil
+            boatId: viewModel.isCharterPlan ? selectedBoatId : nil,
+            skipConfirmationSms: canSendDepositSms && !sendConfirmationText
         )
         if requestId != nil,
            willSendDeposit,

@@ -146,8 +146,9 @@ class CalendarViewModel: ObservableObject {
             clientId: booking.customerId ?? booking.id,
             clientName: client.isEmpty ? "Client" : client,
             notes: booking.notes,
-            color: nil,
-            documents: nil
+            color: ServiceColors.hex(serviceId: booking.serviceId, serviceName: booking.serviceName),
+            documents: nil,
+            reminderReply: booking.rescheduleRequestedAt != nil ? "reschedule" : (booking.clientConfirmedAt != nil ? "confirmed" : nil)
         )
     }
 

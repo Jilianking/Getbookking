@@ -197,3 +197,7 @@
   .set-break { grid-template-columns: 64px 1fr 1fr; }
   .set-break-rm { grid-column: 2 / -1; justify-self: start; }
 }
+
+/* Appointment reminders */
+.set-subhead { margin: 18px 0 2px; font-size: 13px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--text-secondary, #6b5e4a); }
+.set-hint { margin: 0 0 6px; font-size: 13px; color: var(--text-tertiary, #9a8a7a); line-height: 1.45; }

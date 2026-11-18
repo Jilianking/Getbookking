@@ -393,10 +393,9 @@ struct SettingsView: View {
 
     /// Domains aren't for sale yet; the row shows only for a shop that already has one
     /// or has been let in early.
+    /// Every owner can search, buy, or transfer a domain (the TestFlight-era hide is gone).
     private var showsDomainRow: Bool {
-        guard let tenant = sessionStore.tenant else { return false }
-        if let domain = tenant["customDomain"] as? String, !domain.isEmpty { return true }
-        return tenant["domainPurchaseBlockExempt"] as? Bool == true
+        sessionStore.tenant != nil && viewModel.isTenantOwner
     }
 
     private var paymentsSetupStatus: (label: String, color: Color) {
@@ -579,6 +578,40 @@ struct PersonalSchedulingSettingsView: View {
                         Task { await viewModel.saveBusinessHours() }
                     }
             }
+
+            Section(
+                header: Text("Appointment reminders"),
+                footer: Text(
+                    viewModel.shopTextingActive
+                        ? "Texts confirmed clients from your shop's number. They can reply C to confirm or R to reschedule."
+                        : "Set up your texting number in Messaging to send reminders."
+                )
+                .font(.caption2)
+            ) {
+                Toggle(isOn: $viewModel.remindDayBefore) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Day before")
+                        Text("Sent between 10 AM and 9 PM the day before.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .onChange(of: viewModel.remindDayBefore) { _, _ in
+                    Task { await viewModel.saveReminderSettings() }
+                }
+                Toggle(isOn: $viewModel.remindTwoHours) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("2 hours before")
+                        Text("Sent about 2 hours before the appointment.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .onChange(of: viewModel.remindTwoHours) { _, _ in
+                    Task { await viewModel.saveReminderSettings() }
+                }
+            }
+            .disabled(viewModel.tenantId == nil || viewModel.isLoading || !authViewModel.teamAccess.isOwner)
 
             Section(
                 footer: Text(schedulingSettingsFooter)

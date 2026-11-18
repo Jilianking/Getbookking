@@ -7,10 +7,10 @@
   global.dataLayer = global.dataLayer || [];
 
   var PLAN_ITEMS = {
-    solo: { item_id: "solo", item_name: "Solo", price: 39 },
-    studio: { item_id: "studio", item_name: "Studio", price: 79 },
-    shop: { item_id: "shop", item_name: "Shop", price: 149 },
-    charter: { item_id: "charter", item_name: "Charter", price: 24 },
+    solo: { item_id: "solo", item_name: "Solo", price: 39.99 },
+    studio: { item_id: "studio", item_name: "Studio", price: 79.99 },
+    shop: { item_id: "shop", item_name: "Shop", price: 149.99 },
+    charter: { item_id: "charter", item_name: "Charter", price: 24.99 },
   };
 
   var SITELINK_PAGES = {

@@ -26,6 +26,10 @@ class SettingsViewModel: ObservableObject, BusinessHoursEditing {
     @Published var businessHoursWeekly: BusinessHoursWeekly = .defaultOfficeHours
     @Published var businessHoursExceptions: [BusinessHoursException] = []
     @Published var showBusinessHoursOnPage: Bool = true
+    /// Automatic reminder texts (tenant.appointmentReminders). Off until the owner turns them on.
+    @Published var remindDayBefore = false
+    @Published var remindTwoHours = false
+    @Published var shopTextingActive = false
     @Published var daysOpen: Set<Int> = [1, 2, 3, 4, 5]
     @Published var timeZoneId: String = TimeZone.current.identifier
     @Published var blockedDates: Set<String> = []
@@ -159,6 +163,10 @@ class SettingsViewModel: ObservableObject, BusinessHoursEditing {
             businessHours = DesignViewModel.businessHoursDisplayString(weekly: businessHoursWeekly, exceptions: businessHoursExceptions)
         }
         showBusinessHoursOnPage = tenant["showBusinessHoursOnPage"] as? Bool ?? true
+        let reminders = tenant["appointmentReminders"] as? [String: Any] ?? [:]
+        remindDayBefore = reminders["dayBefore"] as? Bool ?? false
+        remindTwoHours = reminders["twoHours"] as? Bool ?? false
+        shopTextingActive = (tenant["smsStatus"] as? String) == "active"
         daysOpen = Set(ProviderAvailability.daysOpen(from: businessHoursWeekly))
     }
 
@@ -201,6 +209,17 @@ class SettingsViewModel: ObservableObject, BusinessHoursEditing {
         businessHoursWeekly = w
         syncBusinessHoursStringFromWeekly()
         daysOpen = Set(ProviderAvailability.daysOpen(from: businessHoursWeekly))
+    }
+
+    func saveReminderSettings() async {
+        guard let tid = tenantId else { return }
+        do {
+            try await firebaseService.updateTenant(tenantId: tid, updates: [
+                "appointmentReminders": ["dayBefore": remindDayBefore, "twoHours": remindTwoHours]
+            ])
+        } catch {
+            await MainActor.run { errorMessage = error.localizedDescription }
+        }
     }
 
     func saveBusinessHours() async {
@@ -398,14 +417,14 @@ class SettingsViewModel: ObservableObject, BusinessHoursEditing {
                     } else if !p.availability.onlineSlotsConfigured {
                         onlineBookableWeekly = businessHoursWeekly
                     }
-                    // Prefer tenant-level blocks when owner mirrored them for /book.
+                    // The shop (tenant) copy is what online booking reads, and the web calendar edits it,
+                    // so it wins whenever it's there. The personal copy is only a fallback.
                     if let tenant = loadedTenant {
-                        if let dates = tenant["blockedDates"] as? [String], !dates.isEmpty, blockedDates.isEmpty {
+                        if let dates = tenant["blockedDates"] as? [String] {
                             blockedDates = Set(dates)
                         }
-                        let tenantBlocks = BlockedTimeRange.parseList(tenant["blockedTimeRanges"])
-                        if blockedTimeRanges.isEmpty, !tenantBlocks.isEmpty {
-                            blockedTimeRanges = tenantBlocks
+                        if tenant["blockedTimeRanges"] != nil {
+                            blockedTimeRanges = BlockedTimeRange.parseList(tenant["blockedTimeRanges"])
                         }
                     }
                 } else {

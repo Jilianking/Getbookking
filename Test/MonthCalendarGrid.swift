@@ -61,10 +61,14 @@ struct MonthCalendarGrid: View {
 
     private var legend: some View {
         HStack(spacing: 6) {
-            RoundedRectangle(cornerRadius: 2, style: .continuous)
-                .fill(AppDesign.accentGreen)
-                .frame(width: 18, height: 4)
-            Text("Confirmed")
+            HStack(spacing: 2) {
+                ForEach(ServiceColors.palette.prefix(3), id: \.self) { hex in
+                    RoundedRectangle(cornerRadius: 2, style: .continuous)
+                        .fill(Color(hex: hex))
+                        .frame(width: 8, height: 4)
+                }
+            }
+            Text("Colors show the service")
                 .font(.caption)
                 .foregroundStyle(AppDesign.textSecondary)
             Spacer()
@@ -125,9 +129,9 @@ struct MonthCalendarGrid: View {
                     }
 
                 VStack(spacing: 2) {
-                    ForEach(events.prefix(maxVisibleBars)) { _ in
+                    ForEach(events.prefix(maxVisibleBars)) { event in
                         RoundedRectangle(cornerRadius: 2, style: .continuous)
-                            .fill(AppDesign.accentGreen)
+                            .fill(ServiceColors.color(for: event))
                             .frame(height: 3)
                     }
                     if events.count > maxVisibleBars {

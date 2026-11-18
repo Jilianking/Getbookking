@@ -102,6 +102,7 @@ const marketingOriginParam = defineString("MARKETING_ORIGIN", { default: "https:
 
 admin.initializeApp();
 const db = admin.firestore();
+const reminders = require("./reminders");
 
 /** US display (xxx) xxx-xxxx; matches iOS `PhoneFormatting` / web booking submit. */
 function normalizeCustomerPhone(raw) {
@@ -6528,6 +6529,7 @@ exports.syncCharterBookingSlot = functions.https.onCall(async (data, context) =>
   delete bookingData.id;
   bookingData.tenantId = ctx.tenantId;
   bookingData.source = existing.source || "admin_app";
+  if (!existing.createdByUid && !existing.source) bookingData.createdByUid = context.auth.uid;
   bookingData.scheduledDate = scheduledDate;
   bookingData.scheduledStartMin = startMin;
   bookingData.durationMinutes = dur;
@@ -6556,6 +6558,10 @@ exports.syncCharterBookingSlot = functions.https.onCall(async (data, context) =>
     const notes = String(data.notes).trim();
     if (notes) bookingData.notes = notes.slice(0, 4000);
   }
+  if (data && data.skipConfirmationSms === true) bookingData.skipConfirmationSms = true;
+  const charterMoved = !!(requestId && existing.requestedStartTime && bookingData.requestedStartTime &&
+    existing.requestedStartTime.toMillis &&
+    existing.requestedStartTime.toMillis() !== bookingData.requestedStartTime.toMillis());
   if (data && data.partySize != null && Number.isFinite(Number(data.partySize))) {
     bookingData.partySize = Number(data.partySize);
   }
@@ -6577,6 +6583,13 @@ exports.syncCharterBookingSlot = functions.https.onCall(async (data, context) =>
     boatFilterId: ((data && (data.boatId || data.boat)) || "").toString().trim(),
     bookingRef,
   });
+  if (charterMoved) {
+    // Moved: the old reminder reply (C / R) no longer applies.
+    await bookingRef.set({
+      clientConfirmedAt: admin.firestore.FieldValue.delete(),
+      rescheduleRequestedAt: admin.firestore.FieldValue.delete(),
+    }, { merge: true }).catch(() => {});
+  }
 
   return {
     ok: true,
@@ -8964,11 +8977,19 @@ exports.onTenantBookingRequestCreated = functions
 
     const { title, body } = bookingRequestAlertCopy(data);
 
-    const recipientUids = await resolveBookingAlertRecipientUids(
+    // The shop booked this itself (app, website calendar, walk-in): don't alert the person who made it.
+    // Others (e.g. the assigned artist) still hear about it. Older app versions don't send createdByUid,
+    // so for those staff-made bookings nobody is alerted.
+    const staffMade = source === "admin_app" || source === "admin_web" || source === "walk_in";
+    const createdByUid = (data.createdByUid || "").toString().trim();
+    let recipientUids = await resolveBookingAlertRecipientUids(
       tenantId,
       data,
       "onNewBooking"
     );
+    if (staffMade) {
+      recipientUids = createdByUid ? recipientUids.filter((uid) => uid !== createdByUid) : [];
+    }
     const tokens = await collectDeviceTokensForUids(recipientUids);
     await sendBookingAlertPush({
       tokens,
@@ -8984,6 +9005,29 @@ exports.onTenantBookingRequestCreated = functions
     if (status === "confirmed" || status === "declined" || status === "new") {
       await sendBookingClientStatusSms(tenantId, requestId, data, status);
     }
+    return null;
+  });
+
+/** Push to the shop when a client replies R to a reminder. */
+async function notifyRescheduleRequest(tenantId, booking, requestId, when) {
+  const recipientUids = await resolveBookingAlertRecipientUids(tenantId, booking, "onNewBooking");
+  const tokens = await collectDeviceTokensForUids(recipientUids);
+  const name = String(booking.customerName || "A client").trim() || "A client";
+  const svc = String(booking.serviceName || "appointment").trim() || "appointment";
+  await sendBookingAlertPush({
+    tokens,
+    title: "Wants to reschedule",
+    body: `${name} asked to reschedule their ${svc} on ${when}.`,
+    data: { type: "booking_request", tenantId: String(tenantId), requestId: String(requestId) },
+  });
+}
+
+/** Every 15 minutes: send due appointment reminders (day before / 2 hours before) for shops that turned them on. */
+exports.sendAppointmentReminders = functions
+  .runWith({ secrets: [sms.twilioAccountSid, sms.twilioAuthToken], timeoutSeconds: 300 })
+  .pubsub.schedule("every 15 minutes")
+  .onRun(async () => {
+    await reminders.runReminderSweep({ sms });
     return null;
   });
 
@@ -16570,6 +16614,8 @@ async function loadCharterItineraryStepsForSms(tenantId, booking) {
 async function sendBookingClientStatusSms(tenantId, requestId, booking, status) {
   const next = (status || "").toString().toLowerCase();
   if ((booking.source || "").toString().toLowerCase() === "seed") return null;
+  // "Text the client a confirmation" was unchecked when the owner booked it.
+  if (booking.skipConfirmationSms === true && (next === "confirmed" || next === "new")) return null;
 
   const tenantSnap = await db.collection("tenants").doc(tenantId).get();
   if (!tenantSnap.exists) return null;
@@ -16824,6 +16870,47 @@ exports.twilioInboundSms = functions
           )
         );
       return;
+    }
+
+    // "C" / "R" answering an appointment reminder: mark the booking and reply. Anything else carries on below.
+    try {
+      const reminderReply = await reminders.handleReminderReply(
+        { sms, notifyOwner: notifyRescheduleRequest },
+        { tenantId, tenant: tenantData || {}, from, upperBody: body }
+      );
+      if (reminderReply) {
+        const replyThreadId = sms.lineScopedThreadId({
+          linePhone: to,
+          clientPhone: from,
+          lineScope: smsLineScope,
+          memberUid: assignedMemberUid,
+        });
+        try {
+          await sms.recordInboundTenantSms(tenantId, {
+            from,
+            to,
+            body: rawBody,
+            mediaUrls: [],
+            threadId: replyThreadId,
+            assignedMemberUid,
+            smsLineScope,
+          });
+          await sms.recordSystemOutboundSms(tenantId, {
+            from: to,
+            to: from,
+            body: reminderReply.reply,
+            threadId: replyThreadId,
+            assignedMemberUid,
+            smsLineScope,
+          });
+        } catch (e) {
+          console.warn("twilioInboundSms: reminder reply log", e.message || e);
+        }
+        res.type("text/xml").send(sms.twimlMessage(reminderReply.reply));
+        return;
+      }
+    } catch (e) {
+      console.warn("twilioInboundSms: reminder reply", e.message || e);
     }
 
     const inboundThreadId = sms.lineScopedThreadId({

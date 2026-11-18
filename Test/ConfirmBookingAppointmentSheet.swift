@@ -24,6 +24,8 @@ struct ConfirmBookingAppointmentSheet: View {
     @State private var selectedBoatId: String?
     @State private var sendDepositLinkViaText = true
     @State private var depositAmountText: String
+    /// Locks the main button from the first tap until the whole save (booking, texts, deposit link) finishes.
+    @State private var isSubmitting = false
 
     init(
         request: BookingRequest,
@@ -150,7 +152,7 @@ struct ConfirmBookingAppointmentSheet: View {
     }
 
     private var isSaving: Bool {
-        isReschedule ? viewModel.isUpdatingAssignment : viewModel.isUpdatingStatus
+        isSubmitting || (isReschedule ? viewModel.isUpdatingAssignment : viewModel.isUpdatingStatus)
     }
 
     private var depositSendBlocksSubmit: Bool {
@@ -276,7 +278,12 @@ struct ConfirmBookingAppointmentSheet: View {
                     }
 
                     Button {
-                        Task { await save() }
+                        guard !isSubmitting else { return }
+                        isSubmitting = true
+                        Task {
+                            await save()
+                            isSubmitting = false
+                        }
                     } label: {
                         Group {
                             if isSaving {
@@ -300,9 +307,11 @@ struct ConfirmBookingAppointmentSheet: View {
                     : (viewModel.isCharterPlan ? "Confirm Charter" : "Confirm Appointment")
             )
             .navigationBarTitleDisplayMode(.inline)
+            .interactiveDismissDisabled(isSubmitting)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
+                        .disabled(isSubmitting)
                 }
             }
             .onAppear {

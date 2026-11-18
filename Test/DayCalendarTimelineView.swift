@@ -12,6 +12,8 @@ struct DayCalendarTimelineView: View {
     let isLoading: Bool
     let canOpenEvent: (Event) -> Bool
     let onEventTap: (Event) -> Void
+    var blocks: [ScheduleBlock] = []
+    var onBlockTap: ((ScheduleBlock) -> Void)? = nil
 
     private let calendar = Calendar.current
     private let startHour = 8
@@ -27,7 +29,7 @@ struct DayCalendarTimelineView: View {
                 ProgressView()
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 32)
-            } else if events.isEmpty {
+            } else if events.isEmpty && blocks.isEmpty {
                 Text("No appointments on this day.")
                     .font(.subheadline)
                     .foregroundStyle(AppDesign.textSecondary)
@@ -70,6 +72,10 @@ struct DayCalendarTimelineView: View {
 
                     if calendar.isDateInToday(selectedDate), let nowY = currentTimeOffset {
                         nowIndicator(y: nowY)
+                    }
+
+                    ForEach(blocks) { block in
+                        blockedArea(for: block, totalHeight: totalHeight)
                     }
 
                     ForEach(events) { event in
@@ -141,6 +147,40 @@ struct DayCalendarTimelineView: View {
         }
     }
 
+    /// Striped area for blocked time / a day off (behind appointments).
+    @ViewBuilder
+    private func blockedArea(for block: ScheduleBlock, totalHeight: CGFloat) -> some View {
+        let windowStart = startHour * 60
+        let windowEnd = endHour * 60
+        let s = max(block.startMinutes, windowStart)
+        let e = min(block.endMinutes, windowEnd)
+        if e > s {
+            let y = CGFloat(s - windowStart) / 60 * hourHeight
+            let h = max(CGFloat(e - s) / 60 * hourHeight - 2, 22)
+            Button { onBlockTap?(block) } label: {
+                Text(block.kind == .allDay ? block.title : "\(block.title) · \(block.timeLine)")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(AppDesign.textSecondary)
+                    .lineLimit(1)
+                    .padding(.horizontal, 8)
+                    .padding(.top, 5)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                    .background(ScheduleBlockStripes())
+                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .stroke(AppDesign.textSecondary.opacity(0.35), style: StrokeStyle(lineWidth: 1, dash: [4, 3]))
+                    )
+            }
+            .buttonStyle(.plain)
+            .disabled(onBlockTap == nil)
+            .frame(height: h, alignment: .top)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.leading, 4)
+            .offset(y: y)
+        }
+    }
+
     private func offset(for date: Date) -> CGFloat {
         let components = calendar.dateComponents([.hour, .minute], from: date)
         let hour = CGFloat(components.hour ?? startHour)
@@ -171,8 +211,10 @@ struct DayCalendarTimelineView: View {
 private struct DayTimelineEventCard: View {
     let event: Event
 
+    /// Each service has its own color (same as the web calendar). Pending holds show it faded.
     private var accent: Color {
-        event.status == .pending ? AppDesign.statusPending : AppDesign.calendarAppointmentAccent
+        let base = ServiceColors.color(for: event)
+        return event.status == .pending ? base.opacity(0.55) : base
     }
 
     private var initials: String {
@@ -216,6 +258,7 @@ private struct DayTimelineEventCard: View {
                             Text(timeRange)
                                 .font(.caption)
                                 .foregroundStyle(AppDesign.textSecondary)
+                            ReminderReplyBadge(reply: event.reminderReply)
                         }
                         Spacer(minLength: 8)
                         AppStatusPill(text: event.status.calendarLabel, soft: true)
@@ -227,7 +270,7 @@ private struct DayTimelineEventCard: View {
         }
         .background(
             RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .fill(AppDesign.calendarAppointmentFill)
+                .fill(ServiceColors.color(for: event).opacity(0.12))
         )
         .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
     }

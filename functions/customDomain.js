@@ -91,7 +91,7 @@ const FALLBACK_TRANSFER_USD = { com: 13.98, net: 14.98, org: 13.98, co: 11.98 };
  * TestFlight: block domain buy/transfer (live Namecheap charges real money).
  * Set false before App Store launch when domain sales go live.
  */
-const BLOCK_DOMAIN_PURCHASING_DURING_TESTFLIGHT = true;
+const BLOCK_DOMAIN_PURCHASING_DURING_TESTFLIGHT = false;
 const TESTFLIGHT_DOMAIN_PURCHASE_BLOCK_MESSAGE = "Unavailable.";
 
 /**

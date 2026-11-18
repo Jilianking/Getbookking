@@ -188,6 +188,8 @@
       boatId: String(data.boatId || "").trim(),
       // Any money taken (deposit or full payment): such bookings are cancelled, never deleted.
       paid: !!(data.stripePaymentIntentId || data.paymentIntentId || data.paidAt || data.depositPaidAt),
+      // Reply to a reminder text: "confirmed" (C) or "reschedule" (R).
+      reminderReply: data.rescheduleRequestedAt ? "reschedule" : data.clientConfirmedAt ? "confirmed" : "",
       assignedName: String(data.assignedMemberName || "").trim(),
       assignedUid: String(data.assignedMemberUid || "").trim(),
       readAt: toDate(data.readAt),
@@ -763,10 +765,12 @@
     return String(h) + ":00";
   }
 
+  /** Next clean 15-minute mark (6:33 → 6:45; 6:45:00 stays), same as the iPhone app. */
   function nowTimeValue() {
     var d = new Date();
-    var m = Math.floor(d.getMinutes() / 5) * 5;
-    d.setMinutes(m, 0, 0);
+    var exact = d.getSeconds() === 0 && d.getMilliseconds() === 0 && d.getMinutes() % 15 === 0;
+    d.setSeconds(0, 0);
+    if (!exact) d.setMinutes(Math.floor(d.getMinutes() / 15) * 15 + 15);
     return (
       String(d.getHours()).padStart(2, "0") +
       ":" +
@@ -790,6 +794,28 @@
       now.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
   }
 
+  /* One color per service — same palette and pick as the iPhone app (ServiceColors.swift). */
+  var SERVICE_COLORS = ["#C0644A", "#6F8F5E", "#5B7DA6", "#8A5A8C", "#C49A2C", "#3F8C88", "#C2607A", "#8B6F47", "#5E5BA6", "#8C8A3E"];
+
+  function serviceColor(b) {
+    var id = String((b && b.serviceId) || "").trim();
+    var key = id || String((b && b.serviceName) || "").trim().toLowerCase();
+    if (!key) return "";
+    var hash = 0x811c9dc5;
+    for (var i = 0; i < key.length; i++) {
+      var cp = key.codePointAt(i);
+      if (cp > 0xffff) i++;
+      hash ^= cp;
+      hash = Math.imul(hash, 0x01000193) >>> 0;
+    }
+    return SERVICE_COLORS[(hash >>> 0) % SERVICE_COLORS.length];
+  }
+
+  function svcStyle(b) {
+    var c = serviceColor(b);
+    return c ? "--svc:" + c + ";" : "";
+  }
+
   function dashBlockHtml(b, extra) {
     var hold = b.status !== "confirmed";
     var startMin = b.start.getHours() * 60 + b.start.getMinutes();
@@ -805,9 +831,10 @@
     return (
       '<button type="button" class="app-dash-block' +
       (hold ? " is-hold" : "") +
+      (serviceColor(b) ? " has-svc" : "") +
       '" data-booking-id="' +
       esc(b.id) +
-      '" style="top:' +
+      '" style="' + svcStyle(b) + 'top:' +
       top +
       "px;height:" +
       height +
@@ -931,6 +958,7 @@
         if ($("calNewName")) $("calNewName").value = c.name || "";
         if ($("calNewEmail")) $("calNewEmail").value = c.email || "";
         if ($("calNewPhone")) $("calNewPhone").value = c.phone || "";
+        paintNewTextRow();
       }
     });
   }
@@ -976,19 +1004,26 @@
       '<button type="button" class="app-cal-block' +
       (member ? " has-member" : "") +
       (hold ? " is-hold" : "") +
+      (serviceColor(b) ? " has-svc" : "") +
       '" data-booking-id="' +
       esc(b.id) +
-      '" style="' + member + "top:" +
+      '" style="' + member + svcStyle(b) + "top:" +
       top +
       "px;height:" +
       height +
       'px">' +
       "<strong>" +
-      esc(b.customerName) +
+      esc(b.customerName) + replyMark(b) +
       "</strong><span>" +
       esc(sub) +
       "</span></button>"
     );
+  }
+
+  function replyMark(b) {
+    if (b.reminderReply === "confirmed") return ' <i class="app-cal-reply is-ok" title="Client confirmed">✓</i>';
+    if (b.reminderReply === "reschedule") return ' <i class="app-cal-reply is-resched" title="Wants to reschedule">↻</i>';
+    return "";
   }
 
   function timesHtml() {
@@ -1061,8 +1096,9 @@
           .sort(function (a, b) { return a.start - b.start; })
           .map(function (b) {
             return '<button type="button" class="app-cal-tw-chip' + (b.status !== "confirmed" ? " is-hold" : "") +
-              '" style="--member:' + r.color + '" data-booking-id="' + esc(b.id) + '"><time>' + esc(formatTime(b.start)) +
-              "</time><span>" + esc(b.customerName) + (b.serviceName ? " · " + esc(b.serviceName) : "") + "</span></button>";
+              (serviceColor(b) ? " has-svc" : "") +
+              '" style="--member:' + r.color + ";" + svcStyle(b) + '" data-booking-id="' + esc(b.id) + '"><time>' + esc(formatTime(b.start)) +
+              "</time><span>" + esc(b.customerName) + replyMark(b) + (b.serviceName ? " · " + esc(b.serviceName) : "") + "</span></button>";
           }).join("");
         row += '<div class="app-cal-tw-cell' + (sameDay(d, today) ? " is-today" : "") + '" data-cal-day="' + isoDate(d) +
           '" data-col-day="' + isoDate(d) + '" data-col-uid="' + esc(r.key === "unassigned" ? "" : r.key) + '" data-col-key="' + esc(r.key) + '">' +
@@ -1152,15 +1188,17 @@
       var bars = events
         .slice(0, 3)
         .map(function (b) {
-          var member = teamView(session) ? ' style="--member:' + teamColor(session, teamKey(b)) + '"' : "";
+          var memberColor = teamView(session) ? "--member:" + teamColor(session, teamKey(b)) + ";" : "";
+          var member = memberColor || svcStyle(b) ? ' style="' + memberColor + svcStyle(b) + '"' : "";
           return (
             '<span class="app-cal-pill' +
-            (member ? " has-member" : "") +
+            (memberColor ? " has-member" : "") +
+            (serviceColor(b) ? " has-svc" : "") +
             (b.status !== "confirmed" ? " is-hold" : "") +
             '"' + member + ' data-booking-id="' +
             esc(b.id) +
             '">' +
-            esc(b.customerName) +
+            esc(b.customerName) + replyMark(b) +
             "</span>"
           );
         })
@@ -1331,6 +1369,9 @@
     if (scrim) scrim.classList.toggle("hidden", !open);
     if (open) {
       fillNewForm();
+      if ($("calNewText")) $("calNewText").checked = true;
+      if ($("calNewTextRow")) delete $("calNewTextRow").dataset.touched;
+      paintNewTextRow();
       var name = $("calNewName");
       if (name) name.focus();
     }
@@ -1394,7 +1435,9 @@
         detailRow("Staff", booking.assignedName) +
         detailRow("Email", booking.customerEmail) +
         detailRow("Phone", booking.customerPhone) +
-        detailRow("Notes", booking.notes);
+        detailRow("Notes", booking.notes) +
+        detailRow("Client reply", booking.reminderReply === "confirmed" ? "Confirmed ✓ (replied C)" :
+          booking.reminderReply === "reschedule" ? "Wants to reschedule (replied R)" : "");
     }
     paintDetailActions(booking);
   }
@@ -1641,6 +1684,11 @@
         notes: notes || "",
         updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
       };
+      if (!booking.start || start.getTime() !== booking.start.getTime()) {
+        // New time: the old C / R answer no longer applies, and the next reminder is for the new time.
+        patch.clientConfirmedAt = firebase.firestore.FieldValue.delete();
+        patch.rescheduleRequestedAt = firebase.firestore.FieldValue.delete();
+      }
       if (service) {
         patch.serviceId = service.id;
         patch.serviceSlug = service.slug || "";
@@ -2213,6 +2261,31 @@
     return false;
   }
 
+  /** Shows "Text … a confirmation" only when the shop can text and the phone number is complete. */
+  function paintNewTextRow() {
+    var row = $("calNewTextRow");
+    if (!row) return;
+    var session = calState.session;
+    var digits = last10Digits(($("calNewPhone") || {}).value || "");
+    var canSms = !!(session && shopCanSms(session));
+    var ready = canSms && digits.length >= 10;
+    // Always shown so owners know it exists; it only turns on once a text can actually go out.
+    row.classList.remove("hidden");
+    var box = $("calNewText");
+    box.disabled = !ready;
+    if (!ready) box.checked = false;
+    else if (!row.dataset.touched) box.checked = true;
+    row.classList.toggle("is-disabled", !ready);
+    var first = String(($("calNewName") || {}).value || "").trim().split(/\s+/)[0];
+    $("calNewTextLabel").textContent = "Text " + (first || "the client") + " a confirmation";
+    var hint = row.querySelector("em");
+    if (hint) {
+      hint.textContent = !canSms
+        ? "Set up your texting number in Settings → Messaging to text clients."
+        : digits.length < 10 ? "Add the client's phone number to text them." : "Sent from your shop's texting number.";
+    }
+  }
+
   function fillNewForm() {
     var session = calState.session;
     if (!session) return;
@@ -2277,7 +2350,9 @@
         ? "New charter"
         : "New booking";
     $("calNewDate").value = isoDate(calState.walkIn ? new Date() : day);
-    $("calNewTime").value = calState.walkIn ? nowTimeValue() : "10:00";
+    // Today (or a walk-in): the next 15-minute mark. Another day: 10:00.
+    var isToday = sameDay(calState.day || new Date(), new Date());
+    $("calNewTime").value = calState.walkIn || isToday ? nowTimeValue() : "10:00";
     $("calNewName").value = "";
     $("calNewEmail").value = "";
     $("calNewPhone").value = "";
@@ -2397,6 +2472,8 @@
     if (!member.uid) return fail("Choose a staff member.");
     var boatId = charter ? $("calNewBoat").value : "";
     if (charter && !boatId) return fail("Add a boat in Business settings before scheduling.");
+    var textRow = $("calNewTextRow");
+    var skipConfirmationSms = !!(textRow && !$("calNewText").disabled && !$("calNewText").checked);
     var deposit = depositUiState(session);
     if (deposit.blocks) {
       return fail("Enter at least $0.50 to send a payment link.");
@@ -2445,6 +2522,7 @@
           serviceName: service.name,
           notes: notes || null,
           boatId: boatId,
+          skipConfirmationSms: skipConfirmationSms || undefined,
         })
         .then(function (res) {
           return res && res.data && res.data.requestId;
@@ -2466,6 +2544,11 @@
           durationMinutes: service.durationMinutes,
           createdAt: firebase.firestore.FieldValue.serverTimestamp(),
           notes: notes || "",
+          // "Text the client a confirmation" unchecked: the server skips the confirmation text.
+          skipConfirmationSms: skipConfirmationSms,
+          // Booked by the shop: no "new booking" alert for whoever made it, and it isn't unread.
+          createdByUid: (session.user && session.user.uid) || "",
+          readAt: firebase.firestore.FieldValue.serverTimestamp(),
         })
         .then(function (ref) {
           return ref
@@ -2730,8 +2813,13 @@
           phoneEl.value = formatted;
         }
         paintDepositUi();
+        paintNewTextRow();
       });
     }
+    var nameEl = $("calNewName");
+    if (nameEl) nameEl.addEventListener("input", paintNewTextRow);
+    var textBox = $("calNewText");
+    if (textBox) textBox.addEventListener("change", function () { $("calNewTextRow").dataset.touched = "1"; });
     var depositAmtEl = $("calNewDepositAmt");
     if (depositAmtEl) {
       depositAmtEl.addEventListener("input", paintDepositUi);

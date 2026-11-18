@@ -15,6 +15,8 @@ struct AssignBookingScheduleSheet: View {
     @State private var selectedDay: Date
     @State private var selectedMemberUid: String?
     @State private var selectedSlotStart: Date?
+    /// Locks the main button from the first tap until the whole save (booking, texts, deposit link) finishes.
+    @State private var isSubmitting = false
 
     init(request: BookingRequest, viewModel: RequestsViewModel, showsStaffPicker: Bool = true) {
         self.request = request
@@ -96,9 +98,11 @@ struct AssignBookingScheduleSheet: View {
             .appScreenBackground()
             .navigationTitle(assignTitle)
             .navigationBarTitleDisplayMode(.inline)
+            .interactiveDismissDisabled(isSubmitting)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
+                        .disabled(isSubmitting)
                 }
             }
             .onChange(of: selectedDay) { _, _ in
@@ -293,10 +297,15 @@ struct AssignBookingScheduleSheet: View {
                     .multilineTextAlignment(.center)
             }
             Button {
-                Task { await saveAssignment() }
+                guard !isSubmitting else { return }
+                isSubmitting = true
+                Task {
+                    await saveAssignment()
+                    isSubmitting = false
+                }
             } label: {
                 Group {
-                    if viewModel.isUpdatingAssignment {
+                    if viewModel.isUpdatingAssignment || isSubmitting {
                         ProgressView()
                             .tint(.white)
                     } else {
@@ -307,7 +316,7 @@ struct AssignBookingScheduleSheet: View {
                 .padding(.vertical, 14)
             }
             .buttonStyle(.borderedProminent)
-            .disabled(!canSave || viewModel.isUpdatingAssignment)
+            .disabled(!canSave || viewModel.isUpdatingAssignment || isSubmitting)
         }
     }
 

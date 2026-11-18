@@ -218,13 +218,27 @@
       '<div class="app-client-note-new"><textarea id="clientNoteInput" rows="2" placeholder="Prefers a low fade, allergic to…"></textarea>' +
       '<button type="button" class="app-btn app-btn--ghost app-btn--small" id="clientNoteAdd">Add note</button></div>' +
       (notes.length ? notes.map(function (n) {
-        return '<div class="app-client-note"><p>' + esc(n.body).replace(/\n/g, "<br>") + "</p><span>" + esc([noteDate(n), n.authorName].filter(Boolean).join(" · ")) + "</span></div>";
+        var id = esc(n.id || "");
+        if (state.editingNoteId && state.editingNoteId === n.id) {
+          return '<div class="app-client-note is-editing" data-note-id="' + id + '">' +
+            '<textarea id="clientNoteEdit" rows="3" aria-label="Edit note">' + esc(n.body) + "</textarea>" +
+            '<div class="app-client-note-acts">' +
+            '<button type="button" class="app-btn app-btn--ghost app-btn--small" data-note-act="cancel">Cancel</button>' +
+            '<button type="button" class="app-btn app-btn--primary app-btn--small" data-note-act="save">Save</button></div></div>';
+        }
+        var edited = n.updatedAt && n.createdAt ? " · edited" : "";
+        return '<div class="app-client-note" data-note-id="' + id + '"><p>' + esc(n.body).replace(/\n/g, "<br>") + "</p>" +
+          '<div class="app-client-note-foot"><span>' + esc([noteDate(n), n.authorName].filter(Boolean).join(" · ") + edited) + "</span>" +
+          '<span class="app-client-note-tools">' +
+          '<button type="button" class="app-client-note-btn" data-note-act="edit">Edit</button>' +
+          '<button type="button" class="app-client-note-btn is-danger" data-note-act="delete">Delete</button></span></div></div>';
       }).join("") : '<p class="app-hint">No notes yet.</p>') +
       '<p class="app-sheet-error hidden" id="clientDetailError"></p>';
   }
 
   function setProfileOpen(id) {
     state.openId = id || "";
+    state.editingNoteId = "";
     ["clientDetailSheet", "clientDetailScrim"].forEach(function (x) {
       var el = $(x);
       if (el) el.classList.toggle("hidden", !id);
@@ -273,6 +287,66 @@
       }).catch(function (e) {
         profileError((e && e.message) || "Couldn't save the note.");
       });
+  }
+
+  /** Saves the full note list; an older single `notes` field is folded in and cleared so it can't come back. */
+  function saveNoteList(c, next) {
+    if (state.noteBusy) return Promise.resolve();
+    state.noteBusy = true;
+    var patch = { noteEntries: next, updatedAt: firebase.firestore.FieldValue.serverTimestamp() };
+    if (String(c.notes || "").trim()) patch.notes = "";
+    return customerRef(c).set(patch, { merge: true })
+      .then(function () {
+        c.noteEntries = next;
+        if (patch.notes === "") c.notes = "";
+        state.editingNoteId = "";
+        paintProfile();
+      })
+      .catch(function (e) {
+        profileError((e && e.message) || "Couldn't save the note.");
+      })
+      .then(function () { state.noteBusy = false; });
+  }
+
+  function currentNoteEntries(c) {
+    var list = c.noteEntries.slice();
+    if (!list.length && String(c.notes || "").trim()) {
+      list = [{ id: "legacy", body: c.notes, createdAt: firebase.firestore.Timestamp.now() }];
+    }
+    return list;
+  }
+
+  function onNoteAction(btn) {
+    var c = byId(state.openId);
+    if (!c) return;
+    var wrap = btn.closest("[data-note-id]");
+    var id = wrap ? wrap.getAttribute("data-note-id") : "";
+    var act = btn.getAttribute("data-note-act");
+    if (act === "edit") {
+      state.editingNoteId = id;
+      paintProfile();
+      var box = $("clientNoteEdit");
+      if (box) { box.focus(); box.setSelectionRange(box.value.length, box.value.length); }
+      return;
+    }
+    if (act === "cancel") {
+      state.editingNoteId = "";
+      paintProfile();
+      return;
+    }
+    var list = currentNoteEntries(c);
+    if (act === "save") {
+      var text = String(($("clientNoteEdit") || {}).value || "").trim();
+      if (!text) return profileError("A note can't be empty. Use Delete to remove it.");
+      saveNoteList(c, list.map(function (n) {
+        return n.id === id ? Object.assign({}, n, { body: text, updatedAt: firebase.firestore.Timestamp.now() }) : n;
+      }));
+      return;
+    }
+    if (act === "delete") {
+      if (!global.confirm("Delete this note? This can't be undone.")) return;
+      saveNoteList(c, list.filter(function (n) { return n.id !== id; }));
+    }
   }
 
   function toggleVip() {
@@ -391,9 +465,16 @@
     });
     $("clientDetailVip").addEventListener("click", toggleVip);
     $("clientDetailBook").addEventListener("click", bookAgain);
-    $("clientDetailBody").addEventListener("click", function (ev) {
-      if (ev.target.closest("#clientNoteAdd")) addNote();
-    });
+    var detailBody = $("clientDetailBody");
+    if (!detailBody.dataset.wired) {
+      // Wire once: this runs on every load, and a second listener would add each note twice.
+      detailBody.dataset.wired = "1";
+      detailBody.addEventListener("click", function (ev) {
+        if (ev.target.closest("#clientNoteAdd")) { addNote(); return; }
+        var act = ev.target.closest("[data-note-act]");
+        if (act) onNoteAction(act);
+      });
+    }
     if (state.wired) return;
     state.wired = true;
     $("clientAddBtn").addEventListener("click", function () {

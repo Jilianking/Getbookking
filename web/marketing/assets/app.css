@@ -3495,3 +3495,150 @@ button.app-product-add { font: inherit; cursor: pointer; }
 /* iPhone: Website builder opens the app */
 .app-open-app-actions { display: flex; flex-direction: column; gap: 8px; margin-top: 16px; }
 .app-open-app-actions .app-btn { justify-content: center; text-align: center; text-decoration: none; }
+
+/* Calendar appointment: edit / cancel / delete */
+.app-cal-detail-actions { flex-wrap: wrap; }
+.app-cal-detail-actions .app-cal-delete { margin-right: auto; color: #9B2C2C; border-color: transparent; }
+.app-cal-detail-actions .app-cal-delete:hover:not(:disabled) { background: rgba(155, 44, 44, 0.08); color: #822323; }
+.app-cal-confirm { margin-top: 12px; padding: 12px 14px; border-radius: 10px; background: rgba(155, 44, 44, 0.06); border: 1px solid rgba(155, 44, 44, 0.18); }
+.app-cal-confirm p { margin: 0 0 8px; font-size: 14px; line-height: 1.45; }
+.app-cal-confirm p:last-child { margin-bottom: 0; }
+.app-cal-confirm .app-shop-visible { margin-top: 4px; }
+#calEditForm .app-shop-visible { margin: 4px 0 8px; }
+@media (max-width: 560px) {
+  .app-cal-detail-actions .app-btn { flex: 1 1 auto; }
+  .app-cal-detail-actions .app-cal-delete { flex: 0 0 auto; }
+}
+
+/* Leaner appointment sheet + keep the rail arrow behind open popups */
+body:has(.app-sheet:not(.hidden)) .app-rail-toggle { visibility: hidden; }
+#calDetailSheet { padding: 18px 18px 16px; width: min(400px, calc(100vw - 24px)); }
+#calDetailSheet .app-sheet-top h2 { font-size: 20px; }
+#calEditForm { display: grid; gap: 10px; margin-top: 4px; }
+#calEditForm .app-field { margin: 0; }
+#calEditForm .app-field label { font-size: 12px; margin-bottom: 4px; }
+#calEditForm .app-field input,
+#calEditForm .app-field select,
+#calEditForm .app-field textarea { padding: 8px 10px; font-size: 14px; border-radius: 8px; min-width: 0; }
+#calEditForm .app-field-row { grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 8px; }
+#calEditForm .app-field-row .app-field { min-width: 0; }
+#calEditForm textarea { min-height: 52px; }
+#calEditForm .app-sheet-actions { margin-top: 2px; }
+#calEditForm .app-sheet-actions .app-btn,
+#calDetailSheet .app-sheet-actions .app-btn { padding: 8px 14px; font-size: 14px; }
+
+/* + New ▾ menu (right-aligned) */
+.app-pop--right { left: auto; right: 0; }
+
+/* Blocked time on the calendar */
+.app-cal-blocked {
+  position: absolute;
+  left: 2px;
+  right: 2px;
+  z-index: 0;
+  box-sizing: border-box;
+  border: 1px dashed color-mix(in srgb, var(--muted, #9a8a7a) 60%, transparent);
+  border-radius: 8px;
+  background: repeating-linear-gradient(135deg, rgba(154, 138, 122, 0.12) 0 6px, rgba(154, 138, 122, 0.04) 6px 12px);
+  color: var(--muted, #6b5e4a);
+  font: inherit;
+  font-size: 11.5px;
+  text-align: left;
+  padding: 4px 8px;
+  cursor: pointer;
+  overflow: hidden;
+}
+.app-cal-blocked span { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 600; }
+.app-cal-blocked.is-allday { display: flex; align-items: flex-start; justify-content: center; padding-top: 10px; }
+.app-cal-blocked:hover { border-style: solid; }
+.app-cal-col .app-cal-block { z-index: 1; }
+.app-cal-tw-blocked {
+  display: block;
+  width: 100%;
+  margin: 0 0 4px;
+  padding: 3px 6px;
+  border: 1px dashed rgba(154, 138, 122, 0.6);
+  border-radius: 6px;
+  background: repeating-linear-gradient(135deg, rgba(154, 138, 122, 0.12) 0 6px, rgba(154, 138, 122, 0.04) 6px 12px);
+  color: var(--muted, #6b5e4a);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Drag to move */
+@media (hover: hover) and (pointer: fine) {
+  .app-cal-block[data-booking-id], .app-cal-tw-chip[data-booking-id] { cursor: grab; }
+}
+body.is-cal-dragging, body.is-cal-dragging * { cursor: grabbing !important; user-select: none; }
+.app-cal-block.is-dragging, .app-cal-tw-chip.is-dragging { opacity: 0.35; }
+.app-cal-ghost { pointer-events: none; opacity: 0.9; box-shadow: 0 8px 22px rgba(44, 32, 24, 0.22); outline: 2px solid var(--brand-warm, #8b6f47); z-index: 5 !important; }
+.app-cal-tw-cell .app-cal-ghost { position: relative; }
+
+/* Move confirmation */
+.app-cal-move {
+  position: fixed;
+  z-index: 45;
+  left: 50%;
+  bottom: 24px;
+  transform: translateX(-50%);
+  width: min(380px, calc(100vw - 24px));
+  box-sizing: border-box;
+  padding: 14px 16px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  box-shadow: 0 18px 44px rgba(44, 32, 24, 0.2);
+}
+.app-cal-move p { margin: 0 0 10px; font-size: 14px; font-weight: 600; line-height: 1.4; }
+.app-cal-move-notify { display: flex; align-items: center; gap: 8px; margin: 0 0 10px; font-size: 13px; }
+.app-cal-move-notify input { width: 16px; height: 16px; accent-color: var(--ink); }
+.app-cal-move .app-sheet-error { margin: 0 0 10px; }
+.app-cal-move-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.app-cal-move-actions .app-btn { padding: 8px 14px; font-size: 14px; }
+
+/* Block time sheet */
+#calBlockSheet { padding: 18px 18px 16px; width: min(400px, calc(100vw - 24px)); }
+#calBlockForm { display: grid; gap: 10px; }
+#calBlockForm .app-field { margin: 0; }
+#calBlockForm .app-field label { font-size: 12px; margin-bottom: 4px; }
+#calBlockForm .app-field input { padding: 8px 10px; border-radius: 8px; min-width: 0; }
+#calBlockForm .app-field-row { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; }
+#calBlockForm .app-hint { margin: 0; }
+#calBlockForm .app-sheet-actions .app-btn { padding: 8px 14px; font-size: 14px; }
+@media (hover: hover) and (pointer: fine) {
+  .app-cal-pill[data-booking-id] { cursor: grab; }
+}
+.app-cal-pill.is-dragging { opacity: 0.35; }
+.app-cal-mbars .app-cal-ghost { position: relative; }
+.app-cal-mcell.is-drop, [data-col-day].is-drop { outline: 2px dashed var(--brand-warm, #8b6f47); outline-offset: -2px; }
+.app-cal-dragtip {
+  position: fixed;
+  z-index: 60;
+  display: none;
+  pointer-events: none;
+  padding: 5px 9px;
+  border-radius: 8px;
+  background: var(--ink, #2c2018);
+  color: var(--cream, #f5edd8);
+  font-size: 12.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  box-shadow: 0 6px 16px rgba(44, 32, 24, 0.25);
+}
+
+/* Client notes: edit / delete */
+.app-client-note-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 4px; }
+.app-client-note-foot > span:first-child { font-size: 12px; color: var(--muted, #9a8a7a); }
+.app-client-note-tools { display: inline-flex; gap: 2px; opacity: 0.75; }
+.app-client-note:hover .app-client-note-tools, .app-client-note-tools:focus-within { opacity: 1; }
+.app-client-note-btn { border: 0; background: none; padding: 2px 6px; border-radius: 6px; font: inherit; font-size: 12px; font-weight: 600; color: var(--warm, #8b6f47); cursor: pointer; }
+.app-client-note-btn:hover { background: color-mix(in srgb, var(--cream) 60%, transparent); }
+.app-client-note-btn.is-danger { color: #9b2c2c; }
+.app-client-note.is-editing textarea { width: 100%; box-sizing: border-box; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--paper); font: inherit; font-size: 14px; resize: vertical; }
+.app-client-note-acts { display: flex; justify-content: flex-end; gap: 6px; margin-top: 6px; }

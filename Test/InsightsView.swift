@@ -292,13 +292,25 @@ struct InsightsView: View {
                     .padding(.horizontal, 16)
                     HStack(alignment: .top, spacing: 10) {
                         InsightsCard(title: "Booked ahead") {
-                            Picker("Show", selection: $aheadMode) {
-                                Text("All").tag(0)
-                                Text("Deposits").tag(1)
-                                Text("Services").tag(2)
+                            Menu {
+                                Picker("Show", selection: $aheadMode) {
+                                    Text("Deposits + services").tag(0)
+                                    Text("Deposits only").tag(1)
+                                    Text("Services only").tag(2)
+                                }
+                            } label: {
+                                HStack(spacing: 4) {
+                                    Text(aheadMode == 1 ? "Deposits only" : aheadMode == 2 ? "Services only" : "Deposits + services")
+                                        .font(.caption.weight(.semibold))
+                                        .lineLimit(1)
+                                        .minimumScaleFactor(0.85)
+                                    Image(systemName: "chevron.down").font(.system(size: 8, weight: .bold))
+                                }
+                                .foregroundStyle(AppDesign.textPrimary)
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 6)
+                                .background(Capsule().fill(AppDesign.chipBorder.opacity(0.45)))
                             }
-                            .pickerStyle(.segmented)
-                            .controlSize(.mini)
                             let v7 = aheadMode == 1 ? s.upcoming7Deposits : aheadMode == 2 ? max(0, s.upcoming7Value - s.upcoming7Deposits) : s.upcoming7Value
                             let v30 = aheadMode == 1 ? s.upcoming30Deposits : aheadMode == 2 ? max(0, s.upcoming30Value - s.upcoming30Deposits) : s.upcoming30Value
                             Text(usd(v7)).font(.title3.weight(.bold))

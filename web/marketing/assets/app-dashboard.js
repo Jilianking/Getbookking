@@ -190,6 +190,8 @@
       paid: !!(data.stripePaymentIntentId || data.paymentIntentId || data.paidAt || data.depositPaidAt),
       // Reply to a reminder text: "confirmed" (C) or "reschedule" (R).
       reminderReply: data.rescheduleRequestedAt ? "reschedule" : data.clientConfirmedAt ? "confirmed" : "",
+      // The shop marked that the client didn't show up (Insights counts these).
+      noShow: !!data.noShowAt,
       assignedName: String(data.assignedMemberName || "").trim(),
       assignedUid: String(data.assignedMemberUid || "").trim(),
       readAt: toDate(data.readAt),
@@ -1021,6 +1023,7 @@
   }
 
   function replyMark(b) {
+    if (b.noShow) return ' <i class="app-cal-reply is-noshow" title="No-show">✕</i>';
     if (b.reminderReply === "confirmed") return ' <i class="app-cal-reply is-ok" title="Client confirmed">✓</i>';
     if (b.reminderReply === "reschedule") return ' <i class="app-cal-reply is-resched" title="Wants to reschedule">↻</i>';
     return "";
@@ -1418,7 +1421,7 @@
     if (title) title.textContent = booking.customerName || "Appointment";
     var status = $("calDetailStatus");
     if (status) {
-      status.textContent = STATUS_LABEL[booking.status] || booking.status || "";
+      status.textContent = booking.noShow ? "No-show" : (STATUS_LABEL[booking.status] || booking.status || "");
       status.classList.toggle("hidden", !status.textContent);
     }
     var when = "";
@@ -1498,6 +1501,36 @@
     if (cancel) cancel.classList.toggle("hidden", !(may && live));
     // Charter trips hold boat slots on the server, and paid bookings keep their payment record: cancel those instead.
     if (del) del.classList.toggle("hidden", !(may && booking && !booking.paid && !charter));
+    // No-show: only for appointments that have already started.
+    var noShow = $("calDetailNoShow");
+    if (noShow) {
+      var started = booking && booking.start && booking.start <= new Date();
+      var showable = booking && NO_SHOW_STATUSES.indexOf(booking.status) !== -1;
+      noShow.classList.toggle("hidden", !(may && started && showable));
+      noShow.textContent = booking && booking.noShow ? "Undo no-show" : "Mark no-show";
+    }
+  }
+
+  var NO_SHOW_STATUSES = ["confirmed", "completed", "pending_deposit", "pending_payment"];
+
+  function toggleNoShow() {
+    var booking = detailBooking();
+    if (!booking || calState.detailBusy || !calState.col) return;
+    calState.detailBusy = true;
+    setDetailButtonsDisabled(true);
+    var next = !booking.noShow;
+    calState.col.doc(booking.id).update({
+      noShowAt: next ? firebase.firestore.FieldValue.serverTimestamp() : firebase.firestore.FieldValue.delete(),
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+    }).then(function () {
+      calState.detailBusy = false;
+      setDetailButtonsDisabled(false);
+      booking.noShow = next;
+      setDetailOpen(true, booking);
+      paintCalendar();
+    }).catch(function () {
+      detailFail("calDetailError", "Couldn't save that. Check your connection and try again.");
+    });
   }
 
   function detailFail(id, msg) {
@@ -1511,7 +1544,7 @@
   }
 
   function setDetailButtonsDisabled(on) {
-    ["calDetailEdit", "calDetailCancelAppt", "calDetailDelete", "calDetailDone", "calDetailClose",
+    ["calDetailEdit", "calDetailCancelAppt", "calDetailDelete", "calDetailNoShow", "calDetailDone", "calDetailClose",
       "calConfirmBack", "calConfirmGo", "calEditBack", "calEditSave"].forEach(function (id) {
       var el = $(id);
       if (el) el.disabled = !!on;
@@ -2788,6 +2821,8 @@
     if (cancelBtn) cancelBtn.addEventListener("click", function () { askConfirm("cancel"); });
     var delBtn = $("calDetailDelete");
     if (delBtn) delBtn.addEventListener("click", function () { askConfirm("delete"); });
+    var noShowBtn = $("calDetailNoShow");
+    if (noShowBtn) noShowBtn.addEventListener("click", toggleNoShow);
     var confirmBack = $("calConfirmBack");
     if (confirmBack) confirmBack.addEventListener("click", function () { showDetailMode("view"); });
     var confirmGo = $("calConfirmGo");

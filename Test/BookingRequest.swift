@@ -49,6 +49,10 @@ struct BookingRequest: Identifiable {
     var clientConfirmedAt: Date? = nil
     /// Client replied R to a reminder text (wants a new time).
     var rescheduleRequestedAt: Date? = nil
+    /// Set when the shop marks that the client didn't show up (Insights counts these).
+    var noShowAt: Date? = nil
+    /// Who made the booking in the app or on the web portal (empty for online bookings).
+    var createdByUid: String? = nil
 
     var isHoldingSlotForPayment: Bool {
         guard holdUntil != nil else { return false }

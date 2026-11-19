@@ -520,7 +520,9 @@ class FirebaseService: ObservableObject {
                 cancelRefundStatus: d["cancelRefundStatus"] as? String,
                 holdUntil: (d["holdUntil"] as? Timestamp)?.dateValue(),
                 clientConfirmedAt: (d["clientConfirmedAt"] as? Timestamp)?.dateValue(),
-                rescheduleRequestedAt: (d["rescheduleRequestedAt"] as? Timestamp)?.dateValue()
+                rescheduleRequestedAt: (d["rescheduleRequestedAt"] as? Timestamp)?.dateValue(),
+                noShowAt: (d["noShowAt"] as? Timestamp)?.dateValue(),
+                createdByUid: d["createdByUid"] as? String
             )
         }
         if status != nil {

@@ -153,10 +153,38 @@ final class InsightsViewModel: ObservableObject {
     // Insights redesign (matches the web).
     @Published var window: InsightsWindow = .days30
     @Published var snapshot = InsightsSnapshot()
+    /// What the period is compared with (remembered on this phone).
+    @Published var compare: InsightsCompare = InsightsCompare(rawValue: UserDefaults.standard.string(forKey: "insights.compare") ?? "") ?? .previous {
+        didSet { UserDefaults.standard.set(compare.rawValue, forKey: "insights.compare") }
+    }
+    @Published var compareStart: Date = Calendar.current.date(byAdding: .day, value: -59, to: Date()) ?? Date()
+    @Published var compareEnd: Date = Calendar.current.date(byAdding: .day, value: -30, to: Date()) ?? Date()
+    /// nil = pick from the range length.
+    @Published var grain: InsightsGrain?
+    /// Team member uid, or "" for everyone.
+    @Published var staffFilter = ""
+    /// Service name, or "" for all services.
+    @Published var serviceFilter = ""
 
-    var bucketLabel: String {
-        let b = window.bounds(customStart: customRangeStart, customEnd: customRangeEnd)
-        return InsightsWindow.usesMonths(from: b.from, to: b.to) ? "by month" : "by week"
+    var periodBounds: (from: Date, to: Date) { window.bounds(customStart: customRangeStart, customEnd: customRangeEnd) }
+
+    var compareBounds: (from: Date, to: Date)? {
+        compare.bounds(for: periodBounds, customStart: compareStart, customEnd: compareEnd)
+    }
+
+    /// "Oct 20 – Nov 19 · compared with Sep 20 – Oct 19".
+    var periodLine: String {
+        func label(_ b: (from: Date, to: Date)) -> String {
+            let last = b.to.addingTimeInterval(-1)
+            let thisYear = Calendar.current.component(.year, from: Date())
+            let withYear = Calendar.current.component(.year, from: b.from) != thisYear || Calendar.current.component(.year, from: last) != thisYear
+            let f: Date.FormatStyle = withYear ? .dateTime.month(.abbreviated).day().year() : .dateTime.month(.abbreviated).day()
+            return "\(b.from.formatted(f)) – \(last.formatted(f))"
+        }
+        var t = label(periodBounds)
+        if let c = compareBounds { t += " · compared with " + label(c) }
+        if !staffFilter.isEmpty || !serviceFilter.isEmpty { t += " · filtered" }
+        return t
     }
 
     /// "vs last 30 days", or the custom dates.
@@ -171,7 +199,7 @@ final class InsightsViewModel: ObservableObject {
 
     /// Rebuilds the redesigned Insights from what's loaded. `canSeeMoney` hides revenue and tips.
     func recomputeSnapshot(tenant: [String: Any]?, staffCount: Int, memberNames: [String: String], teamMode: Bool, canSeeMoney: Bool) {
-        let b = window.bounds(customStart: customRangeStart, customEnd: customRangeEnd)
+        let b = periodBounds
         snapshot = InsightsEngine.compute(
             bookings: cachedTenantBookings,
             charges: canSeeMoney && stripeConnected ? cachedStripeCharges.map { (date: $0.date, amount: $0.amount) } : nil,
@@ -182,7 +210,11 @@ final class InsightsViewModel: ObservableObject {
             memberNames: memberNames,
             teamMode: teamMode,
             from: b.from,
-            to: b.to
+            to: b.to,
+            compare: compareBounds,
+            grain: grain,
+            staffFilter: staffFilter,
+            serviceFilter: serviceFilter
         )
     }
 
@@ -630,31 +662,39 @@ final class InsightsViewModel: ObservableObject {
         return "↗ \(sign)\(Int(pct.rounded()))% vs last period"
     }
 
+    /// Card payments for the last two years (so 12 months can compare with last year), 100 at a time.
     private func loadStripeCharges() async -> [(Date, Double)] {
-        do {
-            // Two years back so 12 months can compare with the 12 before.
-            let start = Calendar.current.date(byAdding: .day, value: -730, to: Date()) ?? Date()
-            let payload: [String: Any] = [
-                "startTimestampSeconds": Int(start.timeIntervalSince1970),
-                "limit": 100,
-            ]
-            let tx = try await functions.httpsCallable("getConnectBalanceTransactions").call(payload)
-            let txData = tx.data as? [String: Any]
-            let list = txData?["transactions"] as? [[String: Any]] ?? []
-            var charges: [(Date, Double)] = []
+        let start = Int((Calendar.current.date(byAdding: .day, value: -731, to: Date()) ?? Date()).timeIntervalSince1970)
+        var charges: [(Date, Double)] = []
+        var seen = Set<String>()
+        var endTs: Int?
+        for _ in 0..<15 {
+            var payload: [String: Any] = ["startTimestampSeconds": start, "limit": 100]
+            if let endTs { payload["endTimestampSeconds"] = endTs }
+            guard let tx = try? await functions.httpsCallable("getConnectBalanceTransactions").call(payload) else { break }
+            let list = (tx.data as? [String: Any])?["transactions"] as? [[String: Any]] ?? []
+            // Page through Stripe's own rows (txn_…); studio-share rows from the ledger ride along.
+            var oldest: Int?
+            var stripeRows = 0
             for t in list {
-                let typeStr = (t["type"] as? String ?? "").lowercased()
-                guard typeStr == "charge" else { continue }
                 let created = (t["created"] as? NSNumber)?.intValue ?? 0
                 guard created > 0 else { continue }
-                let d = Date(timeIntervalSince1970: TimeInterval(created))
+                let id = t["id"] as? String ?? ""
+                if id.hasPrefix("txn_") {
+                    stripeRows += 1
+                    oldest = min(oldest ?? created, created)
+                }
+                let key = id.isEmpty ? "\(created):\((t["amount"] as? NSNumber)?.intValue ?? 0)" : id
+                guard !seen.contains(key) else { continue }
+                seen.insert(key)
+                guard (t["type"] as? String ?? "").lowercased() == "charge" else { continue }
                 let amountCents = (t["net"] as? NSNumber)?.intValue ?? (t["amount"] as? NSNumber)?.intValue ?? 0
-                charges.append((d, Double(abs(amountCents)) / 100))
+                charges.append((Date(timeIntervalSince1970: TimeInterval(created)), Double(abs(amountCents)) / 100))
             }
-            return charges
-        } catch {
-            return []
+            guard stripeRows >= 100, let oldest, oldest > start else { break }
+            endTs = oldest - 1
         }
+        return charges
     }
 
     private static func startOfRollingDays(_ days: Int) -> Date {

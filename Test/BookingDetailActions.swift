@@ -49,6 +49,29 @@ extension RequestsViewModel {
         }
     }
 
+    /// Marks (or unmarks) that the client didn't show up. Insights counts these; the web calendar does the same.
+    func setNoShow(requestId: String, _ on: Bool) async -> Bool {
+        guard let tid = tenantId, !requestId.isEmpty else { return false }
+        await MainActor.run { isUpdatingStatus = true; actionError = nil }
+        defer { Task { @MainActor in self.isUpdatingStatus = false } }
+        do {
+            try await Firestore.firestore().collection("tenants").document(tid)
+                .collection("bookingRequests").document(requestId).updateData([
+                    "noShowAt": on ? FieldValue.serverTimestamp() : FieldValue.delete(),
+                    "updatedAt": FieldValue.serverTimestamp(),
+                ])
+            await MainActor.run {
+                if let i = bookingRequests.firstIndex(where: { $0.documentId == requestId }) {
+                    bookingRequests[i].noShowAt = on ? Date() : nil
+                }
+            }
+            return true
+        } catch {
+            await MainActor.run { actionError = error.localizedDescription }
+            return false
+        }
+    }
+
     /// Changes the service (and its length) and the notes on an existing booking.
     func updateServiceAndNotes(requestId: String, service: TenantService?, notes: String) async -> Bool {
         guard let tid = tenantId, !requestId.isEmpty else { return false }

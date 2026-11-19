@@ -740,6 +740,14 @@ struct BookingRequestDetailView: View {
             && !(currentRequest.documentId ?? "").isEmpty
     }
 
+    /// No-show: for appointments that have already started.
+    private var canMarkNoShow: Bool {
+        guard canManageActions, !(currentRequest.documentId ?? "").isEmpty,
+              let start = currentRequest.departureStart, start <= Date() else { return false }
+        return [BookingRequestStatus.confirmed, "completed", BookingRequestStatus.pendingDeposit, BookingRequestStatus.pendingPayment]
+            .contains(statusLower)
+    }
+
     /// Service + notes can change while the booking is still live.
     private var canEditDetails: Bool {
         canManageActions && (BookingRequestStatus.isNew(currentRequest.status)
@@ -938,8 +946,19 @@ struct BookingRequestDetailView: View {
     /// Edit details / delete — same options as the web calendar.
     @ViewBuilder
     private var moreActionsCard: some View {
-        if canEditDetails || canDeletePermanently {
+        if canEditDetails || canDeletePermanently || canMarkNoShow {
             VStack(spacing: 10) {
+                if canMarkNoShow {
+                    let marked = currentRequest.noShowAt != nil
+                    Button {
+                        Task { _ = await viewModel.setNoShow(requestId: currentRequest.documentId ?? "", !marked) }
+                    } label: {
+                        Label(marked ? "Undo no-show" : "Mark no-show", systemImage: marked ? "arrow.uturn.backward" : "person.fill.xmark")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(viewModel.isUpdatingStatus)
+                }
                 if canEditDetails {
                     Button {
                         showEditDetailsSheet = true
@@ -1037,6 +1056,11 @@ struct BookingRequestDetailView: View {
                 reply: currentRequest.rescheduleRequestedAt != nil ? "reschedule"
                     : (currentRequest.clientConfirmedAt != nil ? "confirmed" : nil)
             )
+            if currentRequest.noShowAt != nil {
+                Label("No-show", systemImage: "person.fill.xmark")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(Color(hex: "#A3432F"))
+            }
             if let start = request.departureStart {
                 BookingRequestDetailRow(
                     label: isCharter ? "Trip date" : "Requested date",

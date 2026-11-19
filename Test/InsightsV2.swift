@@ -126,6 +126,18 @@ struct InsightsTeamRow: Identifiable {
     let prebookPct: Int?
 }
 
+/// One appointment in the report's detail list.
+struct InsightsApptRow: Identifiable {
+    let id = UUID()
+    let start: Date
+    let client: String
+    let service: String
+    let staff: String
+    let status: String
+    let priceCents: Int
+    let paidCents: Int
+}
+
 struct InsightsSnapshot {
     var revenue: Double?
     var revenueChangePct: Int?
@@ -187,6 +199,11 @@ struct InsightsSnapshot {
     var onlineCancels = 0
     /// Services to offer in the filter, most booked first.
     var serviceNames: [String] = []
+    // For reports.
+    var busiest: [(label: String, count: Int)] = []
+    var appointments: [InsightsApptRow] = []
+    var payments: [(date: Date, amount: Double)] = []
+    var tipsList: [InsightsTipEntry] = []
 }
 
 enum InsightsEngine {
@@ -433,6 +450,17 @@ enum InsightsEngine {
             var byStaff: [String: Int] = [:]
             for e in t { byStaff[memberNames[e.staffUid] ?? "Shop", default: 0] += e.tipCents }
             s.tipsByStaff = byStaff.sorted { $0.value > $1.value }.prefix(3).map { ($0.key, $0.value) }
+            s.tipsList = t.sorted { $0.date < $1.date }
+        }
+        if let charges, !filtered {
+            s.payments = charges.filter { $0.date >= from && $0.date < now }.sorted { $0.date < $1.date }
+        }
+        s.appointments = cur.rows.filter { $0.isBooked || $0.isCancelled }.sorted { $0.start < $1.start }.map { b in
+            InsightsApptRow(
+                start: b.start, client: b.name, service: b.service, staff: b.staff,
+                status: b.noShow ? "No-show" : b.isCancelled ? "Canceled" : b.start <= today ? "Completed" : "Upcoming",
+                priceCents: b.valueCents, paidCents: b.paidCents
+            )
         }
 
         // Charts: buckets start exactly on the first day of the range.
@@ -478,6 +506,12 @@ enum InsightsEngine {
             if h >= 0 && h < s.heatHours.count { heat[d][h] += 1 }
         }
         s.heat = heat
+        var slots: [String: Int] = [:]
+        for b in cur.visits {
+            let label = b.start.formatted(.dateTime.weekday(.abbreviated)) + " " + b.start.formatted(.dateTime.hour(.defaultDigits(amPM: .abbreviated)))
+            slots[label, default: 0] += 1
+        }
+        s.busiest = slots.sorted { $0.value > $1.value }.prefix(5).map { ($0.key, $0.value) }
 
         // Rebook rates: of visits in the range, the share with another visit within N days.
         for n in [30, 60, 90] {

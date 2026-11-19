@@ -601,7 +601,7 @@
     if (state.service && services.indexOf(state.service) === -1) services.unshift(state.service);
     html += '<label class="app-ins-select"><span class="app-sr-only">Service</span><select data-ins="service">' +
       opts([["", "All services"]].concat(services.map(function (s) { return [s, s]; })), state.service) + "</select></label>";
-    html += '<button type="button" class="app-btn app-btn--ghost app-ins-dl" data-ins-download>Download CSV</button></div>';
+    html += '<button type="button" class="app-btn app-btn--primary app-ins-dl" data-ins-report>Build report</button></div>';
     if (state.compare === "custom") {
       var c = comparePeriod() || period();
       html += '<div class="app-ins-custom">Compare with <label>From <input type="date" data-ins="cmpFrom" value="' + iso(c.from) + '" max="' + iso(new Date()) + '"></label>' +
@@ -839,7 +839,8 @@
     return names;
   }
 
-  function teamTable(cur, from, to, byClient, seeMoney) {
+  /** Per team member: service value, visits, booked time, pre-booked (busiest first). */
+  function teamRows(cur, from, to, byClient) {
     var names = memberNames();
     var rows = {};
     cur.booked.forEach(function (b) {
@@ -851,16 +852,26 @@
       r.minutes += b.minutes;
     });
     var open = openMinutes(from, to);
-    var keys = Object.keys(rows).sort(function (a, b) { return (rows[b].value - rows[a].value) || (rows[b].visits.length - rows[a].visits.length); });
-    if (!keys.length) return '<p class="app-empty">No visits with a team member in this range.</p>';
+    return Object.keys(rows).map(function (k) {
+      var r = rows[k];
+      return {
+        name: r.name,
+        value: r.value / 100,
+        visits: r.visits.length,
+        busy: open > 0 ? Math.min(100, Math.round((r.minutes / open) * 100)) : null,
+        prebook: prebookPct(r.visits, byClient),
+      };
+    }).sort(function (a, b) { return (b.value - a.value) || (b.visits - a.visits); });
+  }
+
+  function teamTable(cur, from, to, byClient, seeMoney) {
+    var rows = teamRows(cur, from, to, byClient);
+    if (!rows.length) return '<p class="app-empty">No visits with a team member in this range.</p>';
     return '<div class="app-ins-table' + (seeMoney ? "" : " is-4") + '" role="table"><div class="is-head" role="row"><span>Team member</span>' + (seeMoney ? "<span>Service value</span>" : "") +
       "<span>Visits</span><span>Booked time</span><span>Pre-booked</span></div>" +
-      keys.map(function (k) {
-        var r = rows[k];
-        var busy = open > 0 ? Math.min(100, Math.round((r.minutes / open) * 100)) + "%" : "—";
-        var pb = prebookPct(r.visits, byClient);
-        return '<div role="row"><span>' + esc(r.name) + "</span>" + (seeMoney ? "<span>" + money(r.value / 100, true) + "</span>" : "") +
-          "<span>" + r.visits.length + "</span><span>" + busy + "</span><span>" + (pb == null ? "—" : pb + "%") + "</span></div>";
+      rows.map(function (r) {
+        return '<div role="row"><span>' + esc(r.name) + "</span>" + (seeMoney ? "<span>" + money(r.value, true) + "</span>" : "") +
+          "<span>" + r.visits + "</span><span>" + (r.busy == null ? "—" : r.busy + "%") + "</span><span>" + (r.prebook == null ? "—" : r.prebook + "%") + "</span></div>";
       }).join("") + "</div>";
   }
 
@@ -898,7 +909,18 @@
       "</div>";
   }
 
-  /* ── Download ── */
+  /* ── Report builder (PDF or CSV) ── */
+
+  var REPORT_SECTIONS = [
+    { id: "summary", label: "Summary" },
+    { id: "money", label: "Money", money: true },
+    { id: "appointments", label: "Appointments" },
+    { id: "schedule", label: "Schedule" },
+    { id: "clients", label: "Clients" },
+    { id: "team", label: "Team members", team: true },
+    { id: "online", label: "Online bookings" },
+    { id: "details", label: "Detail lists (every appointment, payment, and tip)" },
+  ];
 
   function csvCell(v) {
     var s = String(v == null ? "" : v);
@@ -907,53 +929,487 @@
     return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
   }
 
-  function download() {
-    if (!state.bookings) return;
+  function shopName() {
+    var s = state.session || {};
+    return String(s.shopName || (s.tenant && (s.tenant.businessName || s.tenant.displayName)) || "Your shop");
+  }
+
+  function pctText(cur, prev) {
+    var c = charts();
+    if (state.compare === "none" || prev == null || !c.pct) return "";
+    var p = c.pct(cur, prev);
+    return p == null ? "" : (p >= 0 ? "▲ " : "▼ ") + Math.abs(p) + "%";
+  }
+
+  function ptsText(cur, prev) {
+    if (state.compare === "none" || cur == null || prev == null) return "";
+    var d = cur - prev;
+    return d === 0 ? "same" : (d > 0 ? "▲ " : "▼ ") + Math.abs(d) + " pt";
+  }
+
+  function phoneFmt(ten) {
+    var d = String(ten || "").replace(/\D/g, "");
+    return d.length === 10 ? "(" + d.slice(0, 3) + ") " + d.slice(3, 6) + "-" + d.slice(6) : d;
+  }
+
+  /** Everything the report shows, for the current state (dates, compare, filters). */
+  function reportModel() {
     var p = period();
-    var names = memberNames();
+    var cp = comparePeriod();
+    var first = firstVisitByClient();
+    var byClient = bookingsByClient();
+    var cur = periodStats(p.from, p.to, first, byClient);
+    var prev = cp ? periodStats(cp.from, cp.to, first, byClient) : null;
     var seeMoney = canSeeRevenue();
-    var lines = [];
-    var row = function (cells) { lines.push(cells.map(csvCell).join(",")); };
-    row(["Insights", rangeLabel(p) + (filtering() ? " (filtered)" : "")]);
-    row([]);
-    row(["Appointments"]);
-    row(["Date", "Time", "Client", "Phone", "Email", "Service", "Team member", "Status", "Booked", "Price", "Deposit paid"]);
-    list().filter(function (b) { return inWindow(b, p.from, p.to) && (isBooked(b) || b.status === "cancelled"); })
-      .sort(function (a, b) { return a.start - b.start; })
-      .forEach(function (b) {
-        row([
-          iso(b.start),
-          b.start.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }),
-          b.name, b.phone, b.email, b.service, b.staff,
-          b.noShow ? "No-show" : b.status === "cancelled" ? "Canceled" : b.start <= new Date() ? "Completed" : "Upcoming",
-          b.online ? "Online" : "By shop",
-          seeMoney ? (valueCents(b) / 100).toFixed(2) : "",
-          seeMoney ? (b.paidCents / 100).toFixed(2) : "",
-        ]);
+    var filtered = filtering();
+    var m = { p: p, cp: cp, cur: cur, prev: prev, seeMoney: seeMoney, filtered: filtered };
+
+    var revEntries = null;
+    if (seeMoney && filtered) {
+      revEntries = function (a, z) {
+        return list().filter(function (b) { return isVisit(b) && inWindow(b, a, z); }).map(function (b) { return { date: b.start, value: valueCents(b) / 100 }; });
+      };
+    } else if (seeMoney && Array.isArray(state.revenue)) {
+      revEntries = function (a, z) { return state.revenue.filter(function (e) { return e.date >= a && e.date < z; }); };
+    }
+    var sum = function (l) { return l.reduce(function (a, e) { return a + e.value; }, 0); };
+    m.revLabel = filtered ? "Service value" : "Revenue";
+    m.revenue = revEntries ? sum(revEntries(p.from, p.to)) : null;
+    m.revenuePrev = revEntries && cp ? sum(revEntries(cp.from, cp.to)) : null;
+    if (revEntries) {
+      m.revBuckets = fill(buckets(p.from, p.to), revEntries(p.from, p.to));
+      m.revCompare = compareSeries(m.revBuckets, revEntries);
+    }
+    var visitEntries = function (a, z) {
+      return list().filter(function (b) { return isVisit(b) && inWindow(b, a, z); }).map(function (b) { return { date: b.start, value: 1 }; });
+    };
+    m.visitBuckets = fill(buckets(p.from, p.to), visitEntries(p.from, p.to));
+    m.visitCompare = compareSeries(m.visitBuckets, visitEntries);
+
+    var tipsIn = function (a, z) {
+      return (Array.isArray(state.tips) ? state.tips : []).filter(function (t) {
+        return t.date >= a && t.date < z && t.tipCents > 0 && (!state.staff || t.staffUid === state.staff);
       });
-    if (seeMoney && Array.isArray(state.revenue) && !filtering()) {
-      row([]);
-      row(["Card payments (after Stripe fees)"]);
-      row(["Date", "Amount"]);
-      state.revenue.filter(function (e) { return e.date >= p.from && e.date < p.to; })
-        .sort(function (a, b) { return a.date - b.date; })
-        .forEach(function (e) { row([iso(e.date), e.value.toFixed(2)]); });
+    };
+    m.tips = tipsIn(p.from, p.to);
+    m.tipTotal = m.tips.reduce(function (a, t) { return a + t.tipCents; }, 0) / 100;
+    m.tipPrev = cp ? tipsIn(cp.from, cp.to).reduce(function (a, t) { return a + t.tipCents; }, 0) / 100 : null;
+    var tipBase = m.tips.reduce(function (a, t) { return a + t.serviceCents; }, 0);
+    m.tipAvgPct = tipBase ? Math.round(((m.tipTotal * 100) / tipBase) * 100) : 0;
+
+    var today = new Date();
+    var upcoming = list().filter(function (b) { return isVisit(b) && b.status !== "completed" && b.start > today; });
+    var sumValue = function (l) { return l.reduce(function (a, b) { return a + valueCents(b); }, 0) / 100; };
+    var sumDeposits = function (l) {
+      return l.reduce(function (a, b) { var v = valueCents(b); return a + (v > 0 ? Math.min(b.paidCents, v) : b.paidCents); }, 0) / 100;
+    };
+    [7, 30].forEach(function (n) {
+      var l = upcoming.filter(function (b) { return b.start <= new Date(today.getTime() + n * DAY); });
+      m["up" + n] = { count: l.length, value: sumValue(l), deposits: sumDeposits(l) };
+    });
+
+    m.rates = rebookRates(cur.booked, byClient);
+    m.newClients = Object.keys(first).filter(function (k) { return first[k] >= p.from && first[k] < p.to; }).length;
+    m.winBack = winBack();
+    var svc = {};
+    cur.booked.forEach(function (b) { svc[b.service] = (svc[b.service] || 0) + 1; });
+    m.services = Object.keys(svc).sort(function (a, b) { return svc[b] - svc[a]; }).map(function (k) { return [k, svc[k]]; });
+    var slots = {};
+    cur.booked.forEach(function (b) {
+      var k = DAYS[b.start.getDay()] + " " + b.start.toLocaleTimeString("en-US", { hour: "numeric" });
+      slots[k] = (slots[k] || 0) + 1;
+    });
+    m.busiest = Object.keys(slots).sort(function (a, b) { return slots[b] - slots[a]; }).slice(0, 5).map(function (k) { return [k, slots[k]]; });
+    m.team = seesWholeTeam() && !state.staff ? teamRows(cur, p.from, p.to, byClient) : [];
+    m.online = onlineStats(cur.rows, first, p.from, p.to);
+    m.onlinePrev = prev && cp ? onlineStats(prev.rows, first, cp.from, cp.to) : null;
+    m.appts = list().filter(function (b) { return inWindow(b, p.from, p.to) && (isBooked(b) || b.status === "cancelled"); })
+      .sort(function (a, b) { return a.start - b.start; });
+    m.payments = seeMoney && !filtered && Array.isArray(state.revenue)
+      ? state.revenue.filter(function (e) { return e.date >= p.from && e.date < p.to; }).sort(function (a, b) { return a.date - b.date; })
+      : [];
+    return m;
+  }
+
+  function apptStatus(b) {
+    return b.noShow ? "No-show" : b.status === "cancelled" ? "Canceled" : b.start <= new Date() ? "Completed" : "Upcoming";
+  }
+
+  function filterLabel() {
+    var names = memberNames();
+    return [state.staff ? names[state.staff] || "Team member" : "", state.service].filter(Boolean).join(" · ");
+  }
+
+  function reportCsv(m, on) {
+    var names = memberNames();
+    var lines = [];
+    var row = function (cells) { lines.push((cells || []).map(csvCell).join(",")); };
+    var cur = m.cur, prev = m.prev;
+    row([shopName() + " · Insights report"]);
+    row(["Dates", rangeLabel(m.p)]);
+    if (m.cp) row(["Compared with", rangeLabel(m.cp)]);
+    if (m.filtered) row(["Filters", filterLabel()]);
+    if (on.summary) {
+      row([]); row(["Summary"]); row(["Metric", "This period", m.cp ? "Compared period" : "", m.cp ? "Change" : ""]);
+      if (m.seeMoney && m.revenue != null) row([m.revLabel, m.revenue.toFixed(2), m.revenuePrev != null ? m.revenuePrev.toFixed(2) : "", pctText(m.revenue, m.revenuePrev)]);
+      row(["Visits", cur.count, prev ? prev.count : "", pctText(cur.count, prev && prev.count)]);
+      if (m.seeMoney) row(["Avg ticket", cur.avgTicket.toFixed(2), prev ? prev.avgTicket.toFixed(2) : "", pctText(cur.avgTicket, prev && prev.avgTicket)]);
+      row(["No-shows %", cur.noShowPct, prev ? prev.noShowPct : "", ptsText(cur.noShowPct, prev && prev.noShowPct)]);
+      row(["Booked time %", cur.utilization, prev ? prev.utilization : "", ptsText(cur.utilization, prev && prev.utilization)]);
+      row(["Returning %", cur.returningPct, prev ? prev.returningPct : "", ptsText(cur.returningPct, prev && prev.returningPct)]);
     }
-    if (seeMoney && Array.isArray(state.tips)) {
-      row([]);
-      row(["Tips"]);
-      row(["Date", "Tip", "Service amount", "Team member"]);
-      state.tips.filter(function (t) { return t.date >= p.from && t.date < p.to && t.tipCents > 0 && (!state.staff || t.staffUid === state.staff); })
-        .sort(function (a, b) { return a.date - b.date; })
-        .forEach(function (t) { row([iso(t.date), (t.tipCents / 100).toFixed(2), (t.serviceCents / 100).toFixed(2), names[t.staffUid] || "Shop"]); });
+    if (on.money && m.seeMoney) {
+      row([]); row(["Money"]);
+      if (m.revBuckets) {
+        row(["Period", m.revLabel, m.revCompare ? "Compared" : ""]);
+        m.revBuckets.forEach(function (b, i) { row([b.label, b.value.toFixed(2), m.revCompare ? m.revCompare[i].toFixed(2) : ""]); });
+      }
+      row(["Tips", m.tipTotal.toFixed(2), m.tipPrev != null ? m.tipPrev.toFixed(2) : "", pctText(m.tipTotal, m.tipPrev)]);
+      row(["Booked ahead · next 7 days", m.up7.value.toFixed(2), m.up7.count + " appts", "Deposits paid " + m.up7.deposits.toFixed(2)]);
+      row(["Booked ahead · next 30 days", m.up30.value.toFixed(2), m.up30.count + " appts", "Deposits paid " + m.up30.deposits.toFixed(2)]);
     }
-    var blob = new Blob(["﻿" + lines.join("\r\n")], { type: "text/csv;charset=utf-8" });
+    if (on.appointments) {
+      row([]); row(["Appointments"]);
+      row(["Completed", cur.completed]);
+      row(["Canceled", cur.cancelled, cur.cancelPct == null ? "" : cur.cancelPct + "%"]);
+      row(["No-show", cur.noShows, cur.noShowPct == null ? "" : cur.noShowPct + "%", "Healthy: under " + HEALTHY.noShow + "%"]);
+      row(["Pre-booked %", cur.prebookPct, ptsText(cur.prebookPct, prev && prev.prebookPct), "Healthy: " + HEALTHY.prebook + "%+"]);
+    }
+    if (on.schedule) {
+      row([]); row(["Schedule"]);
+      row(["Booked vs open %", cur.utilization, cur.bookedHours + " of " + cur.openHours + " open hours", "Healthy: " + HEALTHY.booked + "%+"]);
+      row(["Period", "Visits", m.visitCompare ? "Compared" : ""]);
+      m.visitBuckets.forEach(function (b, i) { row([b.label, b.value, m.visitCompare ? m.visitCompare[i] : ""]); });
+      row(["Busiest times", "Visits"]);
+      m.busiest.forEach(function (r) { row(r); });
+    }
+    if (on.clients) {
+      row([]); row(["Clients"]);
+      row(["Returning %", cur.returningPct, "New clients", m.newClients]);
+      [30, 60, 90].forEach(function (n) { row(["Rebooked within " + n + " days %", m.rates[n] == null ? "" : m.rates[n]]); });
+      row(["Top services", "Visits"]);
+      m.services.forEach(function (r) { row(r); });
+      row(["Clients to win back (60+ days, from today)", "Phone", "Days since last visit"]);
+      m.winBack.forEach(function (w) { row([w.name, phoneFmt(w.phone), Math.round((new Date() - w.last) / DAY)]); });
+    }
+    if (on.team && m.team.length) {
+      row([]); row(["Team members"]); row(["Name", m.seeMoney ? "Service value" : "", "Visits", "Booked time %", "Pre-booked %"]);
+      m.team.forEach(function (r) { row([r.name, m.seeMoney ? r.value.toFixed(2) : "", r.visits, r.busy, r.prebook]); });
+    }
+    if (on.online) {
+      var o = m.online;
+      row([]); row(["Online bookings"]);
+      row(["From your website", o.online, pctText(o.online, m.onlinePrev && m.onlinePrev.online)]);
+      row(["Booked by you", o.byYou]);
+      row(["New clients who booked online", o.newClients]);
+      row(["Online no-shows", o.noShows]);
+      row(["Online cancels", o.cancels]);
+    }
+    if (on.details) {
+      row([]); row(["Appointments list"]);
+      row(["Date", "Time", "Client", "Phone", "Email", "Service", "Team member", "Status", "Booked", "Price", "Deposit paid"]);
+      m.appts.forEach(function (b) {
+        row([iso(b.start), b.start.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }), b.name, phoneFmt(b.phone), b.email, b.service, b.staff,
+          apptStatus(b), b.online ? "Online" : "By shop", m.seeMoney ? (valueCents(b) / 100).toFixed(2) : "", m.seeMoney ? (b.paidCents / 100).toFixed(2) : ""]);
+      });
+      if (m.payments.length) {
+        row([]); row(["Card payments (after Stripe fees)"]); row(["Date", "Amount"]);
+        m.payments.forEach(function (e) { row([iso(e.date), e.value.toFixed(2)]); });
+      }
+      if (m.seeMoney && m.tips.length) {
+        row([]); row(["Tips"]); row(["Date", "Tip", "Service amount", "Team member"]);
+        m.tips.forEach(function (t) { row([iso(t.date), (t.tipCents / 100).toFixed(2), (t.serviceCents / 100).toFixed(2), names[t.staffUid] || "Shop"]); });
+      }
+    }
+    return "﻿" + lines.join("\r\n");
+  }
+
+  function reportHtml(m, on) {
+    var c = charts();
+    var names = memberNames();
+    var cur = m.cur, prev = m.prev;
+    var cmpWord = m.cp ? (state.compare === "year" ? "Last year" : state.compare === "custom" ? "Compared dates" : "Previous period") : "";
+    var chg = function (t) { return t ? ' <span class="chg' + (t.indexOf("▼") === 0 ? " dn" : "") + '">' + esc(t) + "</span>" : ""; };
+    var tile = function (label, value, change) { return '<div class="tile"><span>' + esc(label) + "</span><strong>" + value + "</strong>" + chg(change) + "</div>"; };
+    var tableRows = function (rows) {
+      return rows.map(function (r) { return "<tr>" + r.map(function (x, i) { return "<td" + (i ? ' class="r"' : "") + ">" + x + "</td>"; }).join("") + "</tr>"; }).join("");
+    };
+    var chart = function (pts, cmp, fmt, title) {
+      if (!c.bars) return "";
+      return c.bars(pts, fmt, title, Object.assign({ width: 720, height: 170 }, cmp ? { compare: cmp } : {})) +
+        (cmp ? '<p class="legend"><i class="bar"></i>This period <i class="line"></i>' + esc(cmpWord) + "</p>" : "");
+    };
+    var hint = function (text, ok) { return '<p class="hint' + (ok ? " ok" : "") + '">' + (ok ? "✓ " : "") + esc(text) + "</p>"; };
+    var filters = filterLabel();
+    var h = '<header><p class="shop">' + esc(shopName()) + '</p><h1>Insights report</h1><p class="meta">' + esc(rangeLabel(m.p)) +
+      (m.cp ? " · compared with " + esc(rangeLabel(m.cp)) : "") + (filters ? " · " + esc(filters) : "") + "</p></header>";
+
+    if (on.summary) {
+      h += '<section><h2>Summary</h2><div class="tiles">';
+      if (m.seeMoney && m.revenue != null) h += tile(m.revLabel, money(m.revenue, m.revenue >= 1000), pctText(m.revenue, m.revenuePrev));
+      h += tile("Visits", String(cur.count), pctText(cur.count, prev && prev.count));
+      if (m.seeMoney) h += tile("Avg ticket", cur.avgTicket ? money(cur.avgTicket, true) : "—", cur.avgTicket ? pctText(cur.avgTicket, prev && prev.avgTicket) : "");
+      h += tile("No-shows", cur.noShowPct == null ? "—" : cur.noShowPct + "%", ptsText(cur.noShowPct, prev && prev.noShowPct));
+      h += tile("Booked time", cur.utilization == null ? "—" : cur.utilization + "%", ptsText(cur.utilization, prev && prev.utilization));
+      h += tile("Returning", cur.returningPct == null ? "—" : cur.returningPct + "%", ptsText(cur.returningPct, prev && prev.returningPct));
+      h += "</div></section>";
+    }
+    if (on.money && m.seeMoney) {
+      h += "<section><h2>Money</h2>";
+      if (m.revBuckets) h += "<h3>" + esc(m.revLabel) + " by " + grain() + "</h3>" + chart(m.revBuckets, m.revCompare, function (v) { return money(v, false); }, m.revLabel);
+      if (m.filtered) h += hint("Card payments can't be split by team member or service, so this shows the price of those visits.", false);
+      h += '<table class="kv">' + tableRows([
+        ["Tips", money(m.tipTotal, false) + chg(pctText(m.tipTotal, m.tipPrev)) + (m.tips.length ? " · avg " + m.tipAvgPct + "% · " + m.tips.length + (m.tips.length === 1 ? " tip" : " tips") : "")],
+        ["Booked ahead · next 7 days (from today)", money(m.up7.value, true) + " · " + m.up7.count + " appts · " + money(m.up7.deposits, true) + " deposits paid"],
+        ["Booked ahead · next 30 days (from today)", money(m.up30.value, true) + " · " + m.up30.count + " appts · " + money(m.up30.deposits, true) + " deposits paid"],
+      ]) + "</table></section>";
+    }
+    if (on.appointments) {
+      var ap = cur.appts || 0;
+      var pc = function (n) { return ap ? Math.round((n / ap) * 100) + "%" : "—"; };
+      h += '<section><h2>Appointments</h2><table class="kv">' + tableRows([
+        ["Completed", cur.completed + " · " + pc(cur.completed)],
+        ["Canceled", cur.cancelled + " · " + pc(cur.cancelled) + chg(ptsText(cur.cancelPct, prev && prev.cancelPct))],
+        ["No-show", cur.noShows + " · " + pc(cur.noShows) + chg(ptsText(cur.noShowPct, prev && prev.noShowPct))],
+        ["Pre-booked (next visit booked before leaving)", (cur.prebookPct == null ? "—" : cur.prebookPct + "%") + chg(ptsText(cur.prebookPct, prev && prev.prebookPct))],
+      ]) + "</table>" + hint("Healthy: no-shows under " + HEALTHY.noShow + "%", cur.noShowPct != null && cur.noShowPct < HEALTHY.noShow) +
+        hint("Healthy: pre-booked " + HEALTHY.prebook + "%+", cur.prebookPct != null && cur.prebookPct >= HEALTHY.prebook) + "</section>";
+    }
+    if (on.schedule) {
+      h += '<section><h2>Schedule</h2><table class="kv">' + tableRows([
+        ["Booked vs open", cur.utilization == null ? "Set weekly hours to see this" : cur.utilization + "% · " + cur.bookedHours + " of " + cur.openHours + " open hours"],
+        ["Busiest times", m.busiest.length ? m.busiest.map(function (r) { return esc(r[0]) + " (" + r[1] + ")"; }).join(", ") : "—"],
+      ]) + "</table>" + (cur.utilization != null ? hint("Healthy: " + HEALTHY.booked + "%+ booked", cur.utilization >= HEALTHY.booked) : "") +
+        "<h3>Visits by " + grain() + "</h3>" + chart(m.visitBuckets, m.visitCompare, function (v) { return v === 1 ? "1 visit" : v + " visits"; }, "Visits") + "</section>";
+    }
+    if (on.clients) {
+      h += '<section><h2>Clients</h2><table class="kv">' + tableRows([
+        ["Returning", (cur.returningPct == null ? "—" : cur.returningPct + "%") + " · " + m.newClients + (m.newClients === 1 ? " new client" : " new clients")],
+        ["Rebooked within 30 / 60 / 90 days", [30, 60, 90].map(function (n) { return m.rates[n] == null ? "—" : m.rates[n] + "%"; }).join(" / ")],
+      ]) + "</table>" + (cur.returningPct != null ? hint("Healthy: " + HEALTHY.returning + "%+ returning", cur.returningPct >= HEALTHY.returning) : "");
+      if (m.services.length) {
+        h += '<h3>Top services</h3><table class="grid"><tr><th>Service</th><th class="r">Visits</th></tr>' +
+          tableRows(m.services.slice(0, 10).map(function (r) { return [esc(r[0]), r[1]]; })) + "</table>";
+      }
+      h += "<h3>Clients to win back <small>(60+ days, from today)</small></h3>" + (m.winBack.length
+        ? '<table class="grid"><tr><th>Client</th><th>Phone</th><th class="r">Days</th></tr>' + tableRows(m.winBack.slice(0, 20).map(function (w) {
+            return [esc(w.name), esc(phoneFmt(w.phone)), Math.round((new Date() - w.last) / DAY)];
+          })) + "</table>"
+        : hint("Everyone's been in within the last " + WIN_BACK_DAYS + " days.", false)) + "</section>";
+    }
+    if (on.team && m.team.length) {
+      h += '<section><h2>Team members</h2><table class="grid"><tr><th>Name</th>' + (m.seeMoney ? '<th class="r">Service value</th>' : "") +
+        '<th class="r">Visits</th><th class="r">Booked time</th><th class="r">Pre-booked</th></tr>' +
+        tableRows(m.team.map(function (r) {
+          var cells = [esc(r.name)];
+          if (m.seeMoney) cells.push(money(r.value, true));
+          return cells.concat([r.visits, r.busy == null ? "—" : r.busy + "%", r.prebook == null ? "—" : r.prebook + "%"]);
+        })) + "</table></section>";
+    }
+    if (on.online) {
+      var o = m.online;
+      var pctOn = o.total ? Math.round((o.online / o.total) * 100) : 0;
+      h += '<section><h2>Online bookings</h2><table class="kv">' + tableRows([
+        ["From your website", o.online + " · " + pctOn + "%" + chg(pctText(o.online, m.onlinePrev && m.onlinePrev.online))],
+        ["Booked by you", o.byYou + " · " + (o.total ? 100 - pctOn : 0) + "%"],
+        ["New clients who booked online", o.newClients],
+        ["Online no-shows · cancels", o.noShows + " · " + o.cancels],
+      ]) + "</table></section>";
+    }
+    if (on.details) {
+      var team = seesWholeTeam();
+      h += '<section class="break"><h2>Appointments list</h2>' + (m.appts.length
+        ? '<table class="grid small"><tr><th>Date</th><th>Client</th><th>Service</th>' + (team ? "<th>Team member</th>" : "") + "<th>Status</th>" +
+          (m.seeMoney ? '<th class="r">Price</th><th class="r">Deposit</th>' : "") + "</tr>" +
+          tableRows(m.appts.map(function (b) {
+            var cells = [esc(shortDate(b.start) + " " + b.start.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })), esc(b.name), esc(b.service)];
+            if (team) cells.push(esc(b.staff));
+            cells.push(apptStatus(b));
+            if (m.seeMoney) cells.push(money(valueCents(b) / 100, false), money(b.paidCents / 100, false));
+            return cells;
+          })) + "</table>"
+        : hint("No appointments in this range.", false));
+      if (m.payments.length) {
+        h += '<h3>Card payments <small>(after Stripe fees)</small></h3><table class="grid small"><tr><th>Date</th><th class="r">Amount</th></tr>' +
+          tableRows(m.payments.map(function (e) { return [esc(shortDate(e.date, true)), money(e.value, false)]; })) +
+          '<tr class="total"><td>Total</td><td class="r">' + money(m.payments.reduce(function (a, e) { return a + e.value; }, 0), false) + "</td></tr></table>";
+      }
+      if (m.seeMoney && m.tips.length) {
+        h += '<h3>Tips</h3><table class="grid small"><tr><th>Date</th><th>Team member</th><th class="r">Tip</th><th class="r">Service</th></tr>' +
+          tableRows(m.tips.map(function (t) {
+            return [esc(shortDate(t.date, true)), esc(names[t.staffUid] || "Shop"), money(t.tipCents / 100, false), money(t.serviceCents / 100, false)];
+          })) + "</table>";
+      }
+      h += "</section>";
+    }
+    h += "<footer>Made with Get Bookking · " + esc(new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })) + "</footer>";
+    var css = "*{box-sizing:border-box}body{font-family:-apple-system,BlinkMacSystemFont,'Helvetica Neue',Arial,sans-serif;color:#2b211b;margin:0;padding:32px 40px;font-size:12px;line-height:1.45}" +
+      "header{border-bottom:2px solid #2b211b;padding-bottom:12px;margin-bottom:8px}.shop{margin:0;font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:#857563}h1{margin:2px 0 4px;font-size:26px}.meta{margin:0;color:#6b5f52}" +
+      "section{margin-top:22px;page-break-inside:avoid}section.break{page-break-before:always;page-break-inside:auto}h2{font-size:15px;margin:0 0 10px;padding-bottom:4px;border-bottom:1px solid #e8e0d4}h3{font-size:12px;margin:14px 0 6px;color:#6b5f52}h3 small{font-weight:400}" +
+      ".tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}.tile{border:1px solid #e8e0d4;border-radius:8px;padding:8px 10px}.tile span{display:block;font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:#857563}.tile strong{font-size:18px}" +
+      ".chg{font-size:10px;font-weight:600;color:#4f7a52;margin-left:4px;text-transform:none;letter-spacing:0}.tile .chg{display:block;margin:2px 0 0;font-size:10px}.chg.dn{color:#a3432f}table{width:100%;border-collapse:collapse}.kv td{padding:5px 0;border-bottom:1px solid #f0e9df}.kv td.r{text-align:right;font-weight:600}" +
+      ".grid th{text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:#857563;border-bottom:1px solid #e8e0d4;padding:4px 6px 4px 0}.grid td{padding:4px 6px 4px 0;border-bottom:1px solid #f0e9df}.grid .r{text-align:right}.grid.small{font-size:11px}tr.total td{font-weight:700;border-top:1px solid #2b211b}" +
+      ".hint{margin:6px 0 0;color:#857563;font-size:11px}.hint.ok{color:#4f7a52}.legend{margin:4px 0 0;font-size:10px;color:#857563}.legend i{display:inline-block;vertical-align:middle;margin-right:4px}.legend i.bar{width:9px;height:9px;background:#A3752F;border-radius:2px}.legend i.line{width:16px;border-top:1.6px dashed #857563;margin-left:10px}" +
+      ".app-chart-plot svg{width:100%;height:auto;display:block}.app-chart-grid{stroke:#e8e0d4;stroke-dasharray:2 3}.app-chart-base{stroke:#e8e0d4}.app-chart-axis{font-size:10px;fill:#6b5f52}.app-chart-hit{fill:transparent}.app-chart-compare{stroke:#857563;stroke-width:1.6;stroke-dasharray:4 3;fill:none}.app-sr-only,.app-chart-tip{display:none}" +
+      "footer{margin-top:28px;padding-top:8px;border-top:1px solid #e8e0d4;color:#857563;font-size:10px}@page{margin:14mm}@media print{body{padding:0}}";
+    var title = shopName() + " Insights " + iso(m.p.from) + " to " + iso(new Date(m.p.to.getTime() - 1));
+    return '<!doctype html><html><head><meta charset="utf-8"><title>' + esc(title) + "</title><style>" + css + "</style></head><body>" + h + "</body></html>";
+  }
+
+  function saveFile(text, name, type) {
+    var blob = new Blob([text], { type: type });
     var a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
-    a.download = "insights-" + iso(p.from) + "-to-" + iso(new Date(p.to.getTime() - 1)) + ".csv";
+    a.download = name;
     document.body.appendChild(a);
     a.click();
     setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 500);
+  }
+
+  /** Prints the report from a hidden frame; the browser's print window saves it as a PDF. */
+  function printHtml(html) {
+    var frame = document.createElement("iframe");
+    frame.setAttribute("aria-hidden", "true");
+    frame.style.cssText = "position:fixed;right:0;bottom:0;width:0;height:0;border:0;opacity:0";
+    document.body.appendChild(frame);
+    var doc = frame.contentWindow.document;
+    doc.open();
+    doc.write(html);
+    doc.close();
+    var oldTitle = document.title;
+    var cleaned = false;
+    var done = function () {
+      if (cleaned) return;
+      cleaned = true;
+      document.title = oldTitle;
+      setTimeout(function () { frame.remove(); }, 1000);
+    };
+    setTimeout(function () {
+      // Browsers name the PDF after the page title.
+      document.title = doc.title;
+      frame.contentWindow.addEventListener("afterprint", done);
+      frame.contentWindow.focus();
+      frame.contentWindow.print();
+      setTimeout(done, 60000);
+    }, 300);
+  }
+
+  function reportHost() {
+    var host = $("insReport");
+    if (!host) {
+      host = document.createElement("div");
+      host.id = "insReport";
+      document.body.appendChild(host);
+      host.addEventListener("click", function (ev) {
+        if (ev.target.closest("[data-rep-close]")) { closeReport(); return; }
+        var go = ev.target.closest("[data-rep-export]");
+        if (go && !go.disabled) runReport(go);
+      });
+      host.addEventListener("change", function (ev) {
+        if (ev.target && ev.target.name === "rcompare") {
+          var box = host.querySelector(".app-rep-cmp");
+          if (box) box.classList.toggle("hidden", ev.target.value !== "custom");
+        }
+      });
+    }
+    return host;
+  }
+
+  function openReport() {
+    if (!state.bookings) return;
+    var p = period();
+    var cp = comparePeriod() || { from: new Date(p.from.getTime() - (p.to - p.from)), to: p.from };
+    var names = memberNames();
+    var opt = function (v, label, cur) { return '<option value="' + esc(v) + '"' + (v === cur ? " selected" : "") + ">" + esc(label) + "</option>"; };
+    var counts = {};
+    state.bookings.forEach(function (b) { if (isBooked(b)) counts[b.service] = (counts[b.service] || 0) + 1; });
+    var services = Object.keys(counts).sort(function (a, b) { return counts[b] - counts[a]; }).slice(0, 40);
+    var today = iso(new Date());
+    var html = '<div class="app-rep-scrim" data-rep-close></div><div class="app-rep" role="dialog" aria-modal="true" aria-labelledby="repTitle">' +
+      '<div class="app-rep-head"><h2 id="repTitle">Build a report</h2><button type="button" class="app-rep-x" data-rep-close aria-label="Close">×</button></div>' +
+      '<div class="app-rep-body">' +
+      '<fieldset><legend>Dates</legend><div class="app-rep-row">' +
+      '<label>From <input type="date" name="rfrom" value="' + iso(p.from) + '" max="' + today + '"></label>' +
+      '<label>To <input type="date" name="rto" value="' + iso(new Date(p.to.getTime() - 1)) + '" max="' + today + '"></label></div>' +
+      '<label class="app-rep-full">Compare <select name="rcompare">' + COMPARES.map(function (cc) { return opt(cc.id, cc.label, state.compare); }).join("") + "</select></label>" +
+      '<div class="app-rep-row app-rep-cmp' + (state.compare === "custom" ? "" : " hidden") + '">' +
+      '<label>Compare from <input type="date" name="rcfrom" value="' + iso(cp.from) + '" max="' + today + '"></label>' +
+      '<label>to <input type="date" name="rcto" value="' + iso(new Date(cp.to.getTime() - 1)) + '" max="' + today + '"></label></div></fieldset>' +
+      '<fieldset><legend>Filters</legend><div class="app-rep-row">' +
+      (seesWholeTeam() ? '<label>Team member <select name="rstaff">' + opt("", "All team", state.staff) +
+        (state.session.members || []).filter(function (mm) { return mm.uid; }).map(function (mm) { return opt(mm.uid, names[mm.uid] || mm.email || "Team member", state.staff); }).join("") +
+        "</select></label>" : "") +
+      '<label>Service <select name="rservice">' + opt("", "All services", state.service) + services.map(function (sv) { return opt(sv, sv, state.service); }).join("") +
+      "</select></label></div></fieldset>" +
+      '<fieldset><legend>Include</legend><div class="app-rep-checks">' +
+      REPORT_SECTIONS.filter(function (sec) { return (!sec.money || canSeeRevenue()) && (!sec.team || seesWholeTeam()); }).map(function (sec) {
+        return '<label><input type="checkbox" name="rsec" value="' + sec.id + '" checked> ' + esc(sec.label) + "</label>";
+      }).join("") + "</div></fieldset>" +
+      '<fieldset><legend>Format</legend><div class="app-rep-formats">' +
+      '<label class="app-rep-radio"><input type="radio" name="rformat" value="pdf" checked> <span><strong>PDF</strong>A clean report with charts. Pick "Save as PDF" in the print window.</span></label>' +
+      '<label class="app-rep-radio"><input type="radio" name="rformat" value="csv"> <span><strong>CSV</strong>The same numbers and lists, for Excel or Google Sheets.</span></label></div></fieldset>' +
+      '<p class="app-rep-error hidden" id="repError" role="alert"></p></div>' +
+      '<div class="app-rep-foot"><button type="button" class="app-btn app-btn--ghost" data-rep-close>Cancel</button>' +
+      '<button type="button" class="app-btn app-btn--primary" data-rep-export>Export</button></div></div>';
+    var host = reportHost();
+    host.innerHTML = html;
+    var firstField = host.querySelector("input,select");
+    if (firstField) firstField.focus();
+  }
+
+  function closeReport() {
+    var host = $("insReport");
+    if (host) host.innerHTML = "";
+  }
+
+  function runReport(btn) {
+    var host = $("insReport");
+    var val = function (n) { var el = host.querySelector('[name="' + n + '"]'); return el ? el.value : ""; };
+    var err = $("repError");
+    var fail = function (msg) { err.textContent = msg; err.classList.remove("hidden"); };
+    err.classList.add("hidden");
+    if (!val("rfrom") || !val("rto")) return fail("Pick a start and end date.");
+    var from = fromIso(val("rfrom"));
+    var to = fromIso(val("rto"));
+    if (from > to) { var t = from; from = to; to = t; }
+    var on = {};
+    host.querySelectorAll('[name="rsec"]:checked').forEach(function (cb) { on[cb.value] = true; });
+    if (!Object.keys(on).length) return fail("Pick at least one section to include.");
+    var format = (host.querySelector('[name="rformat"]:checked') || {}).value || "pdf";
+    var compare = val("rcompare") || "prev";
+    if (compare === "custom" && (!val("rcfrom") || !val("rcto"))) return fail("Pick the dates to compare with.");
+
+    // Use the report's choices for this export, then put the page back the way it was.
+    var keep = {
+      range: state.range, customFrom: state.customFrom, customTo: state.customTo, compare: state.compare,
+      cmpFrom: state.cmpFrom, cmpTo: state.cmpTo, staff: state.staff, service: state.service, grain: state.grain,
+    };
+    var restore = function () { Object.keys(keep).forEach(function (k) { state[k] = keep[k]; }); };
+    state.range = "custom";
+    state.customFrom = from;
+    state.customTo = to;
+    state.compare = compare;
+    state.grain = "auto";
+    if (compare === "custom") { state.cmpFrom = fromIso(val("rcfrom")); state.cmpTo = fromIso(val("rcto")); }
+    state.staff = val("rstaff");
+    state.service = val("rservice");
+    btn.disabled = true;
+    btn.textContent = "Building…";
+    Promise.all([loadRevenue(), loadTips()]).then(function () {
+      var m = reportModel();
+      var stamp = iso(m.p.from) + "-to-" + iso(new Date(m.p.to.getTime() - 1));
+      var out = format === "csv" ? reportCsv(m, on) : reportHtml(m, on);
+      restore();
+      closeReport();
+      paint();
+      if (format === "csv") saveFile(out, "insights-report-" + stamp + ".csv", "text/csv;charset=utf-8");
+      else printHtml(out);
+    }).catch(function () {
+      restore();
+      btn.disabled = false;
+      btn.textContent = "Export";
+      fail("Couldn't build the report. Check your connection and try again.");
+    });
   }
 
   /* ── Wiring ── */
@@ -989,7 +1445,7 @@
       if (a) { state.aheadMode = a.getAttribute("data-ahead"); paint(); return; }
       var g = ev.target.closest("[data-grain]");
       if (g) { state.grain = g.getAttribute("data-grain"); paint(); return; }
-      if (ev.target.closest("[data-ins-download]")) download();
+      if (ev.target.closest("[data-ins-report]")) openReport();
     });
     body.addEventListener("change", function (ev) {
       var el = ev.target.closest("[data-ins]");
@@ -1015,6 +1471,10 @@
         }
         refresh();
       }
+    });
+    document.addEventListener("keydown", function (ev) {
+      var rep = $("insReport");
+      if (ev.key === "Escape" && rep && rep.innerHTML) closeReport();
     });
     ["insFrom", "insTo"].forEach(function (id) {
       var el = $(id);

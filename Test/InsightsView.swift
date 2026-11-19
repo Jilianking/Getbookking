@@ -15,6 +15,7 @@ struct InsightsView: View {
     let sectionTitle: String
     /// Booked ahead: 0 = deposits + services, 1 = deposits paid, 2 = services still due.
     @State private var aheadMode = 0
+    @State private var showReport = false
 
     // MARK: Redesign helpers
 
@@ -141,10 +142,52 @@ struct InsightsView: View {
             }
             .padding(.horizontal, 16)
         }
-        Text(viewModel.periodLine)
-            .font(.caption2)
-            .foregroundStyle(AppDesign.textSecondary)
-            .padding(.horizontal, 20)
+        HStack(alignment: .center) {
+            Text(viewModel.periodLine)
+                .font(.caption2)
+                .foregroundStyle(AppDesign.textSecondary)
+            Spacer(minLength: 8)
+            Button {
+                showReport = true
+            } label: {
+                Label("Build report", systemImage: "doc.text")
+                    .font(.caption.weight(.semibold))
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 7)
+                    .foregroundStyle(AppDesign.brandCream)
+                    .background(Capsule().fill(AppDesign.brandDark))
+            }
+            .buttonStyle(.plain)
+            .disabled(viewModel.isLoading)
+        }
+        .padding(.leading, 20)
+        .padding(.trailing, 16)
+    }
+
+    private var shopName: String {
+        let t = sessionStore.tenant ?? [:]
+        let n = ((t["businessName"] as? String) ?? (t["displayName"] as? String) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        return n.isEmpty ? "Your shop" : n
+    }
+
+    private var reportSheet: some View {
+        var names: [String: String] = [:]
+        for m in sessionStore.teamMembers { names[m.uid] = m.displayName }
+        let tenant = sessionStore.tenant
+        let staffCount = seesWholeTeam ? sessionStore.teamMembers.count : 1
+        let team = seesWholeTeam
+        let money = canSeeMoney
+        let vm = viewModel
+        return InsightsReportSheet(
+            viewModel: viewModel, shopName: shopName, teamMembers: sessionStore.teamMembers,
+            seesWholeTeam: seesWholeTeam, canSeeMoney: canSeeMoney
+        ) { from, to, compare, cmpStart, cmpEnd, staff, service in
+            vm.reportSnapshot(
+                from: from, to: to, compare: compare, compareStart: cmpStart, compareEnd: cmpEnd,
+                staffFilter: staff, serviceFilter: service,
+                tenant: tenant, staffCount: staff.isEmpty ? staffCount : 1, memberNames: names, teamMode: team, canSeeMoney: money
+            )
+        }
     }
 
     private var grainPicker: some View {
@@ -514,6 +557,7 @@ struct InsightsView: View {
             }
         }
         .navigationViewStyle(.stack)
+        .sheet(isPresented: $showReport) { reportSheet }
         .task {
             await viewModel.loadData(
                 isDemoMode: authViewModel.isDemoMode,

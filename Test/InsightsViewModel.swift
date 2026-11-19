@@ -218,6 +218,31 @@ final class InsightsViewModel: ObservableObject {
         )
     }
 
+    /// A snapshot for a report's own dates, compare, and filters (doesn't change the screen).
+    func reportSnapshot(
+        from: Date, to: Date, compare: InsightsCompare, compareStart: Date, compareEnd: Date,
+        staffFilter: String, serviceFilter: String,
+        tenant: [String: Any]?, staffCount: Int, memberNames: [String: String], teamMode: Bool, canSeeMoney: Bool
+    ) -> InsightsSnapshot {
+        let p = InsightsWindow.custom.bounds(customStart: from, customEnd: to)
+        return InsightsEngine.compute(
+            bookings: cachedTenantBookings,
+            charges: canSeeMoney && stripeConnected ? cachedStripeCharges.map { (date: $0.date, amount: $0.amount) } : nil,
+            tips: canSeeMoney ? (cachedTips ?? []) : nil,
+            servicePrices: cachedServicePrices,
+            tenant: tenant,
+            staffCount: staffCount,
+            memberNames: memberNames,
+            teamMode: teamMode,
+            from: p.from,
+            to: p.to,
+            compare: compare.bounds(for: p, customStart: compareStart, customEnd: compareEnd),
+            grain: nil,
+            staffFilter: staffFilter,
+            serviceFilter: serviceFilter
+        )
+    }
+
     private func loadServicePrices(tenantId: String) async -> [String: Int] {
         guard let services = try? await firebaseService.fetchTenantServices(tenantId: tenantId) else { return [:] }
         var map: [String: Int] = [:]

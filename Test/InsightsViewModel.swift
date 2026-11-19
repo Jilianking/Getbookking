@@ -150,6 +150,70 @@ final class InsightsViewModel: ObservableObject {
     @Published var revenueDailyPoints: [DailyRevenuePoint] = []
     @Published var revenueMonthlyPoints: [MonthlyRevenuePoint] = []
 
+    // Insights redesign (matches the web).
+    @Published var window: InsightsWindow = .days30
+    @Published var snapshot = InsightsSnapshot()
+
+    var bucketLabel: String {
+        let b = window.bounds(customStart: customRangeStart, customEnd: customRangeEnd)
+        return InsightsWindow.usesMonths(from: b.from, to: b.to) ? "by month" : "by week"
+    }
+
+    /// "vs last 30 days", or the custom dates.
+    var periodLabel: String {
+        guard window == .custom else { return "last \(window.label)" }
+        let b = window.bounds(customStart: customRangeStart, customEnd: customRangeEnd)
+        let end = Calendar.current.date(byAdding: .day, value: -1, to: b.to) ?? b.to
+        return "\(b.from.formatted(.dateTime.month(.abbreviated).day())) – \(end.formatted(.dateTime.month(.abbreviated).day()))"
+    }
+    private var cachedServicePrices: [String: Int] = [:]
+    private var cachedTips: [InsightsTipEntry]?
+
+    /// Rebuilds the redesigned Insights from what's loaded. `canSeeMoney` hides revenue and tips.
+    func recomputeSnapshot(tenant: [String: Any]?, staffCount: Int, memberNames: [String: String], teamMode: Bool, canSeeMoney: Bool) {
+        let b = window.bounds(customStart: customRangeStart, customEnd: customRangeEnd)
+        snapshot = InsightsEngine.compute(
+            bookings: cachedTenantBookings,
+            charges: canSeeMoney && stripeConnected ? cachedStripeCharges.map { (date: $0.date, amount: $0.amount) } : nil,
+            tips: canSeeMoney ? (cachedTips ?? []) : nil,
+            servicePrices: cachedServicePrices,
+            tenant: tenant,
+            staffCount: staffCount,
+            memberNames: memberNames,
+            teamMode: teamMode,
+            from: b.from,
+            to: b.to
+        )
+    }
+
+    private func loadServicePrices(tenantId: String) async -> [String: Int] {
+        guard let services = try? await firebaseService.fetchTenantServices(tenantId: tenantId) else { return [:] }
+        var map: [String: Int] = [:]
+        for s in services {
+            guard let p = s.price, p > 0 else { continue }
+            let cents = Int((p * 100).rounded())
+            map[s.id] = cents
+            map["name:" + s.name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()] = cents
+        }
+        return map
+    }
+
+    /// Tips (owner, or managers who can see earnings) from the server; nil when not allowed.
+    private func loadTips() async -> [InsightsTipEntry]? {
+        let fromMs = (Date().addingTimeInterval(-730 * 86400).timeIntervalSince1970 * 1000).rounded()
+        guard let result = try? await functions.httpsCallable("getTipsSummary").call(["fromMs": fromMs]),
+              let data = result.data as? [String: Any] else { return nil }
+        let rows = data["tips"] as? [[String: Any]] ?? []
+        return rows.map { r in
+            InsightsTipEntry(
+                date: Date(timeIntervalSince1970: ((r["createdMs"] as? NSNumber)?.doubleValue ?? 0) / 1000),
+                tipCents: (r["tipCents"] as? NSNumber)?.intValue ?? 0,
+                serviceCents: (r["serviceCents"] as? NSNumber)?.intValue ?? 0,
+                staffUid: r["staffUid"] as? String ?? ""
+            )
+        }
+    }
+
     private var cachedTenantBookings: [BookingRequest] = []
     private var cachedLegacyRequests: [Request] = []
     private var cachedCustomerDates: [Date] = []
@@ -237,6 +301,8 @@ final class InsightsViewModel: ObservableObject {
                 if connected {
                     charges = await loadStripeCharges()
                 }
+                let prices = await loadServicePrices(tenantId: tid)
+                let tips = await loadTips()
 
                 await MainActor.run {
                     useTenantData = true
@@ -246,6 +312,8 @@ final class InsightsViewModel: ObservableObject {
                     cachedCustomerDates = custs.map(\.createdAt)
                     cachedStripeCharges = charges
                     cachedLegacyRevenueEntries = []
+                    cachedServicePrices = prices
+                    cachedTips = tips
                     stripeConnected = connected
                     isLoading = false
                     recomputeForSelectedRange()
@@ -564,7 +632,8 @@ final class InsightsViewModel: ObservableObject {
 
     private func loadStripeCharges() async -> [(Date, Double)] {
         do {
-            let start = Calendar.current.date(byAdding: .day, value: -365, to: Date()) ?? Date()
+            // Two years back so 12 months can compare with the 12 before.
+            let start = Calendar.current.date(byAdding: .day, value: -730, to: Date()) ?? Date()
             let payload: [String: Any] = [
                 "startTimestampSeconds": Int(start.timeIntervalSince1970),
                 "limit": 100,

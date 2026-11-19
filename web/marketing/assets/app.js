@@ -226,7 +226,9 @@
       ShopAppInsights.load(session);
     }
     if (route === "messages" && window.ShopAppMessages) {
-      ShopAppMessages.load(session);
+      // Insights → "Clients to win back" links here with ?phone= to open that conversation.
+      var msgQs = new URLSearchParams(location.search);
+      ShopAppMessages.load(session, msgQs.get("phone") ? { phone: msgQs.get("phone") } : undefined);
     }
     if (route === "requests" && window.ShopAppRequests) {
       ShopAppRequests.load(session);

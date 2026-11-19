@@ -11907,6 +11907,47 @@ exports.listTenantMembers = functions
 });
 
 /**
+ * Insights → Tips: tipped payments since `fromMs` (owner, or a manager allowed to see earnings).
+ * Returns { tips: [{ createdMs, tipCents, serviceCents, staffUid }] } — tips go 100% to staff.
+ */
+exports.getTipsSummary = functions.https.onCall(async (data, context) => {
+  if (!context.auth) {
+    throw new functions.https.HttpsError("unauthenticated", "Must be signed in");
+  }
+  const ctx = await getMemberAccessContext(context.auth.uid);
+  const perms = ctx.managerPermissions || {};
+  if (!ctx.isOwner && !(ctx.accessRole === "manager" && perms.viewEarningsReports === true)) {
+    throw new functions.https.HttpsError("permission-denied", "Only people who can see earnings can see tips.");
+  }
+  let fromMs = Number(data && data.fromMs);
+  if (!Number.isFinite(fromMs) || fromMs <= 0) fromMs = Date.now() - 60 * 864e5;
+  // Never more than ~2 years back.
+  fromMs = Math.max(fromMs, Date.now() - 800 * 864e5);
+  const snap = await db
+    .collection("tenants")
+    .doc(ctx.tenantId)
+    .collection("paymentLedger")
+    .where("createdAt", ">=", admin.firestore.Timestamp.fromMillis(fromMs))
+    .limit(5000)
+    .get();
+  const tips = [];
+  snap.forEach((doc) => {
+    const l = doc.data() || {};
+    const tip = Math.max(0, Math.round(Number(l.tipCents) || 0));
+    if (tip <= 0) return;
+    if (l.refundedAt || l.status === "refunded") return;
+    const created = l.createdAt && l.createdAt.toMillis ? l.createdAt.toMillis() : 0;
+    tips.push({
+      createdMs: created,
+      tipCents: tip,
+      serviceCents: Math.max(0, Math.round(Number(l.serviceCents) || 0)),
+      staffUid: (l.attributedMemberUid || ctx.tenant.ownerUid || "").toString(),
+    });
+  });
+  return { tips };
+});
+
+/**
  * Owner-only: team payout overview for the web Team payouts page.
  * Params: { fromMs?, toMs? } (defaults to the current month).
  * Returns { members, entries, truncated } — members carry payout settings, Stripe status, and

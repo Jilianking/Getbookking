@@ -23,6 +23,7 @@
     session: null, range: "30", bookings: null, revenue: null, revenueFor: "",
     tips: null, tipsFor: "", servicePrices: null, wired: false,
     customFrom: null, customTo: null,
+    aheadMode: "all",
   };
 
   function $(id) { return document.getElementById(id); }
@@ -468,6 +469,15 @@
     var up7 = upcoming.filter(function (b) { return b.start <= in7; });
     var up30 = upcoming.filter(function (b) { return b.start <= in30; });
     var sumValue = function (list) { return list.reduce(function (a, b) { return a + valueCents(b); }, 0) / 100; };
+    // A deposit counts toward the appointment's total (capped at the service value when it's known).
+    var sumDeposits = function (list) {
+      return list.reduce(function (a, b) { var v = valueCents(b); return a + (v > 0 ? Math.min(b.paidCents, v) : b.paidCents); }, 0) / 100;
+    };
+    var aheadValue = function (list) {
+      if (state.aheadMode === "deposits") return sumDeposits(list);
+      if (state.aheadMode === "services") return Math.max(0, sumValue(list) - sumDeposits(list));
+      return sumValue(list);
+    };
 
     // Summary row.
     var tiles = [];
@@ -499,10 +509,16 @@
       }
       html += card("Revenue", revBody, "is-span2", "by " + bucketWord());
       html += '<div class="app-ins-stack">';
-      html += card("Booked ahead",
-        '<p class="app-ins-figure">' + money(sumValue(up7), true) + "</p>" +
+      var aheadSeg = '<div class="app-ins-mini-seg" role="group" aria-label="Booked ahead shows">' +
+        [["all", "All"], ["deposits", "Deposits"], ["services", "Services"]].map(function (o) {
+          return '<button type="button" data-ahead="' + o[0] + '" class="' + (state.aheadMode === o[0] ? "is-on" : "") + '">' + o[1] + "</button>";
+        }).join("") + "</div>";
+      var aheadNote = state.aheadMode === "deposits" ? "Deposits already paid" : state.aheadMode === "services" ? "Still due at appointments" : "Deposits + services";
+      html += card("Booked ahead", aheadSeg +
+        '<p class="app-ins-figure">' + money(aheadValue(up7), true) + "</p>" +
         '<p class="app-ins-line">Next 7 days · ' + up7.length + (up7.length === 1 ? " appt" : " appts") + "</p>" +
-        '<p class="app-ins-line">Next 30 days · ' + money(sumValue(up30), true) + " · " + up30.length + " appts</p>", "", "confirmed");
+        '<p class="app-ins-line">Next 30 days · ' + money(aheadValue(up30), true) + " · " + up30.length + " appts</p>" +
+        '<p class="app-ins-line app-ins-note">' + aheadNote + "</p>", "", "confirmed");
       var tipsBody;
       if (!Array.isArray(state.tips)) {
         tipsBody = '<p class="app-empty">Loading tips…</p>';
@@ -605,6 +621,12 @@
         state.customFrom = new Date(t.getFullYear(), t.getMonth(), t.getDate() - 29);
       }
       refresh();
+    });
+    $("insBody").addEventListener("click", function (ev) {
+      var b = ev.target.closest("[data-ahead]");
+      if (!b) return;
+      state.aheadMode = b.getAttribute("data-ahead");
+      paint();
     });
     ["insFrom", "insTo"].forEach(function (id) {
       var el = $(id);

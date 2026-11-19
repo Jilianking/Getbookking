@@ -14,6 +14,8 @@ struct InsightsView: View {
     var drawerState: DrawerState
     let sectionTitle: String
     @State private var tileScroll: String?
+    /// Booked ahead: 0 = deposits + services, 1 = deposits paid, 2 = services still due.
+    @State private var aheadMode = 0
 
     // MARK: Redesign helpers
 
@@ -143,9 +145,20 @@ struct InsightsView: View {
                     .padding(.horizontal, 16)
                     HStack(alignment: .top, spacing: 10) {
                         InsightsCard(title: "Booked ahead") {
-                            Text(usd(s.upcoming7Value)).font(.title3.weight(.bold))
+                            Picker("Show", selection: $aheadMode) {
+                                Text("All").tag(0)
+                                Text("Deposits").tag(1)
+                                Text("Services").tag(2)
+                            }
+                            .pickerStyle(.segmented)
+                            .controlSize(.mini)
+                            let v7 = aheadMode == 1 ? s.upcoming7Deposits : aheadMode == 2 ? max(0, s.upcoming7Value - s.upcoming7Deposits) : s.upcoming7Value
+                            let v30 = aheadMode == 1 ? s.upcoming30Deposits : aheadMode == 2 ? max(0, s.upcoming30Value - s.upcoming30Deposits) : s.upcoming30Value
+                            Text(usd(v7)).font(.title3.weight(.bold))
                             Text("7 days · \(s.upcoming7Count) appts").font(.caption).foregroundStyle(AppDesign.textSecondary)
-                            Text("30 days · \(usd(s.upcoming30Value))").font(.caption).foregroundStyle(AppDesign.textSecondary)
+                            Text("30 days · \(usd(v30))").font(.caption).foregroundStyle(AppDesign.textSecondary)
+                            Text(aheadMode == 1 ? "Deposits already paid" : aheadMode == 2 ? "Still due at appointments" : "Deposits + services")
+                                .font(.caption2).foregroundStyle(AppDesign.textSecondary)
                         }
                         InsightsCard(title: "Tips") {
                             Text(usd(s.tipsTotal)).font(.title3.weight(.bold))

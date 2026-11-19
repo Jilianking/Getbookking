@@ -3714,3 +3714,8 @@ body.is-cal-dragging, body.is-cal-dragging * { cursor: grabbing !important; user
 .app-ins-custom { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; margin: 10px 0 0; font-size: 13px; color: var(--muted); }
 .app-ins-custom.hidden { display: none; }
 .app-ins-custom input { margin-left: 6px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--paper); font: inherit; color: var(--text); }
+
+.app-ins-mini-seg { display: inline-flex; padding: 2px; margin-bottom: 8px; border-radius: 999px; background: color-mix(in srgb, var(--cream) 70%, var(--card)); }
+.app-ins-mini-seg button { border: 0; background: none; padding: 3px 10px; border-radius: 999px; font: inherit; font-size: 12px; color: var(--muted); cursor: pointer; }
+.app-ins-mini-seg button.is-on { background: var(--ink); color: var(--cream); }
+.app-ins-note { font-size: 12px; }

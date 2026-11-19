@@ -78,6 +78,9 @@ struct InsightsSnapshot {
     var upcoming7Count = 0
     var upcoming30Value: Double = 0
     var upcoming30Count = 0
+    /// Deposits already paid on upcoming appointments (7 / 30 days).
+    var upcoming7Deposits: Double = 0
+    var upcoming30Deposits: Double = 0
     var tipsTotal: Double = 0
     var tipsAvgPct = 0
     var tipsCount = 0
@@ -109,6 +112,7 @@ enum InsightsEngine {
         let client: String
         let minutes: Int
         let valueCents: Int
+        let paidCents: Int
     }
 
     static func pct(_ cur: Double, _ prev: Double) -> Int? {
@@ -149,7 +153,8 @@ enum InsightsEngine {
                 name: (r.customerName ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Client" : (r.customerName ?? ""),
                 phone: phone, client: client,
                 minutes: (r.durationMinutes ?? 0) > 0 ? (r.durationMinutes ?? 60) : 60,
-                valueCents: value
+                valueCents: value,
+                paidCents: max(0, r.paidCents ?? 0)
             )
         }
         let booked = list.filter { bookedStatuses.contains($0.status) }
@@ -204,6 +209,12 @@ enum InsightsEngine {
         s.upcoming7Value = Double(u7.reduce(0) { $0 + $1.valueCents }) / 100
         s.upcoming30Count = u30.count
         s.upcoming30Value = Double(u30.reduce(0) { $0 + $1.valueCents }) / 100
+        // A deposit counts toward the appointment's total; never more than the service value when it's known.
+        func deposits(_ l: [B]) -> Double {
+            Double(l.reduce(0) { $0 + ($1.valueCents > 0 ? min($1.paidCents, $1.valueCents) : $1.paidCents) }) / 100
+        }
+        s.upcoming7Deposits = deposits(u7)
+        s.upcoming30Deposits = deposits(u30)
 
         if let tips {
             let t = tips.filter { $0.date >= from && $0.tipCents > 0 }
@@ -417,20 +428,43 @@ struct InsightsBarChart: View {
     let buckets: [InsightsBucket]
     let color: Color
     let format: (Double) -> String
+
+    private var monthly: Bool {
+        guard let f = buckets.first else { return false }
+        return f.end.timeIntervalSince(f.start) > 20 * 86400
+    }
+
+    /// At most ~5 date labels so they never overlap.
+    private var labelDates: [Date] {
+        guard !buckets.isEmpty else { return [] }
+        let step = max(1, Int(ceil(Double(buckets.count) / 5)))
+        return stride(from: 0, to: buckets.count, by: step).map { buckets[$0].start }
+    }
+
     var body: some View {
         Chart(buckets) { b in
-            BarMark(x: .value("Period", b.label), y: .value("Value", b.value))
-                .foregroundStyle(color)
-                .cornerRadius(3)
+            BarMark(
+                x: .value("Period", b.start, unit: monthly ? .month : .weekOfYear),
+                y: .value("Value", b.value)
+            )
+            .foregroundStyle(color)
+            .cornerRadius(3)
         }
         .chartYAxis {
-            AxisMarks(position: .leading) { v in
+            AxisMarks(position: .leading, values: .automatic(desiredCount: 4)) { v in
                 AxisGridLine().foregroundStyle(AppDesign.chipBorder.opacity(0.6))
                 AxisValueLabel { if let d = v.as(Double.self) { Text(format(d)).font(.caption2) } }
             }
         }
         .chartXAxis {
-            AxisMarks { _ in AxisValueLabel().font(.caption2) }
+            AxisMarks(values: labelDates) { v in
+                AxisValueLabel {
+                    if let d = v.as(Date.self) {
+                        Text(monthly ? d.formatted(.dateTime.month(.abbreviated)) : d.formatted(.dateTime.month(.abbreviated).day()))
+                            .font(.caption2)
+                    }
+                }
+            }
         }
         .frame(height: 150)
     }

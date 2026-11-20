@@ -2858,7 +2858,7 @@ function charterHowItWorksPage(tenant) {
   var faqHtml = faqs.map(function(f, i) {
     return '<div class="charter-faq-item" data-edit-key="charterFaq:' + i + ':edit">' +
       '<h4>' + '<span data-edit-key="charterFaq:' + i + ':question">' + esc(f.q) + '</span></h4>' +
-      '<p>' + '<span data-edit-key="charterFaq:' + i + ':answer">' + esc(f.a).replace(/\n/g, '<br>') + '</span></p></div>';
+      '<p>' + '<span data-edit-key="charterFaq:' + i + ':answer">' + escParagraphs(f.a) + '</span></p></div>';
   }).join('');
   return '<div class="charter-page">' +
     charterNavHtml(tenant, 'how') +

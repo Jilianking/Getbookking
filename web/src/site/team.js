@@ -528,10 +528,10 @@ function teamMemberProfileContentHtml(tenant, provider) {
     var key = tmWcKey(field);
     var raw = text == null ? '' : String(text);
     if (!key) {
-      return multiline ? esc(raw).replace(/\n/g, '<br>') : esc(raw);
+      return multiline ? escParagraphs(raw) : esc(raw);
     }
     var emptyAttr = raw ? '' : ' class="bk-copy-empty" data-bk-empty-slot="1"';
-    var inner = multiline ? esc(raw).replace(/\n/g, '<br>') : esc(raw);
+    var inner = multiline ? escParagraphs(raw) : esc(raw);
     return '<span data-edit-key="' + esc(key) + '"' + emptyAttr + '>' + inner + '</span>';
   }
   var siteName = teamMemberSiteName(tenant, provider);

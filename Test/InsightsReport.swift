@@ -9,7 +9,7 @@ import UIKit
 import Charts
 
 enum InsightsReportSection: String, CaseIterable, Identifiable {
-    case summary, money, appointments, schedule, clients, team, online, details
+    case summary, money, ahead, appointments, schedule, clients, team, online, details
     var id: String { rawValue }
     var label: String {
         switch self {
@@ -20,6 +20,7 @@ enum InsightsReportSection: String, CaseIterable, Identifiable {
         case .clients: return "Clients"
         case .team: return "Team members"
         case .online: return "Online bookings"
+        case .ahead: return "Next 30 days (deposits and balances)"
         case .details: return "Detail lists (every appointment, payment, and tip)"
         }
     }
@@ -201,6 +202,9 @@ enum InsightsReportPDF {
             case .clients: blocks.append(AnyView(ReportClients(s: s)))
             case .team: if !s.team.isEmpty { blocks.append(AnyView(ReportTeam(s: s, info: info))) }
             case .online: blocks.append(AnyView(ReportOnline(s: s)))
+            case .ahead: blocks.append(AnyView(ReportTitled(title: "Next 30 days (from today)") {
+                InsightsAheadView(s: s, showMoney: info.canSeeMoney, isCharter: false)
+            }))
             case .details:
                 let rows = s.appointments
                 if rows.isEmpty {

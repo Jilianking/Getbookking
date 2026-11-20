@@ -221,6 +221,12 @@
             minutes: typeof dur === "number" && dur > 0 ? dur : 60,
             // Booked online through the shop's site (not made by the shop in the app).
             online: source.indexOf("web") !== -1 && !d.createdByUid,
+            // Money fields for "Next 30 days" (same rules as app-balance.js).
+            money: {
+              priceCents: d.priceCents, payments: d.payments, paidCents: d.paidCents, depositPartCents: d.depositPartCents,
+              depositPaidAt: d.depositPaidAt, paidAt: d.paidAt, tripCents: d.tripCents, addonCents: d.addonCents,
+            },
+            depositRequestCents: typeof d.depositRequestCents === "number" ? d.depositRequestCents : 0,
           };
         }).filter(function (b) { return all || b.staffUid === uid; });
       }).catch(function () {
@@ -760,6 +766,9 @@
       html += "</div></div>";
     }
 
+    // The month ahead (from today).
+    html += section("Next 30 days") + '<div class="app-ins-grid">' + card("Booked ahead · deposits and balances", aheadCard(aheadStats(), seeMoney), "is-wide", "from today") + "</div>";
+
     // Appointments.
     html += section("Appointments") + '<div class="app-ins-grid">';
     var ap = cur.appts || 0;
@@ -831,6 +840,80 @@
 
     host.innerHTML = html;
     if (c.wireTips) host.querySelectorAll(".app-ins-body").forEach(function (b) { c.wireTips(b); });
+  }
+
+  /**
+   * The month ahead (from today, next 30 days): booked value, deposits paid, still due, deposits waiting,
+   * by week. Uses each booking's price (or its service's) and the payments recorded on it.
+   */
+  function aheadStats() {
+    var now = new Date();
+    var end = new Date(now.getTime() + 30 * DAY);
+    var prices = state.servicePrices || {};
+    var weeks = [0, 1, 2, 3].map(function (i) {
+      var s = new Date(dayStart(now).getTime() + i * 7 * DAY);
+      var e = i === 3 ? end : new Date(s.getTime() + 7 * DAY);
+      return { start: s, end: e, paid: 0, due: 0, count: 0 };
+    });
+    var out = { count: 0, booked: 0, paid: 0, due: 0, waitingCount: 0, waitingCents: 0, unpriced: 0, weeks: weeks };
+    list().forEach(function (b) {
+      if (!isVisit(b) || b.status === "completed" || !b.start || b.start <= now || b.start > end) return;
+      var svc = prices[b.serviceId] || prices["name:" + b.service.toLowerCase()] || 0;
+      var m = global.ShopAppBalance ? ShopAppBalance.model(b.money || {}, svc) : { price: valueCents(b) || null, paid: b.paidCents, balance: null };
+      var price = m.price;
+      var paid = price != null ? Math.min(m.paid, price) : m.paid;
+      var due = price != null ? Math.max(0, price - paid) : 0;
+      out.count += 1;
+      if (price == null) out.unpriced += 1;
+      out.booked += price != null ? price : paid;
+      out.paid += paid;
+      out.due += due;
+      if (b.status === "pending_deposit" || b.status === "pending_payment") {
+        out.waitingCount += 1;
+        out.waitingCents += b.depositRequestCents || 0;
+      }
+      for (var i = 0; i < weeks.length; i++) {
+        if (b.start >= weeks[i].start && b.start < weeks[i].end) {
+          weeks[i].paid += paid;
+          weeks[i].due += due;
+          weeks[i].count += 1;
+          break;
+        }
+      }
+    });
+    return out;
+  }
+
+  function aheadCard(a, seeMoney) {
+    var noun = state.session && isCharterShop() ? ["trip", "trips"] : ["appt", "appts"];
+    if (!a.count) return '<p class="app-empty">Nothing booked in the next 30 days yet.</p>';
+    var head = seeMoney
+      ? '<p class="app-ins-figure">' + money(a.booked / 100, true) + '</p><p class="app-ins-line">' + a.count + " " + (a.count === 1 ? noun[0] : noun[1]) + " booked</p>"
+      : '<p class="app-ins-figure">' + a.count + '</p><p class="app-ins-line">' + (a.count === 1 ? noun[0] : noun[1]) + " booked</p>";
+    if (!seeMoney) return head;
+    var max = Math.max.apply(null, a.weeks.map(function (w) { return w.paid + w.due; }).concat([1]));
+    var rows = a.weeks.map(function (w) {
+      var last = new Date(w.end.getTime() - 1);
+      var label = shortDate(w.start) + " – " + shortDate(last);
+      var total = w.paid + w.due;
+      return '<div class="app-ins-ahead-row"><span>' + esc(label) + '</span><span class="app-ins-ahead-bar">' +
+        (w.paid ? '<i class="is-paid" style="width:' + (w.paid / max) * 100 + '%"></i>' : "") +
+        (w.due ? '<i class="is-due" style="width:' + (w.due / max) * 100 + '%"></i>' : "") +
+        "</span><strong>" + (total ? money(total / 100, true) : "—") + "</strong></div>";
+    }).join("");
+    return head +
+      '<div class="app-ins-rows">' +
+      '<div><span><i class="app-ins-dot is-paidd"></i>Deposits paid</span><strong>' + money(a.paid / 100, true) + "</strong></div>" +
+      '<div><span><i class="app-ins-dot is-duee"></i>Still due</span><strong>' + money(a.due / 100, true) + "</strong></div>" +
+      "<div><span>Deposits waiting</span><strong>" + (a.waitingCount ? money(a.waitingCents / 100, true) + " · " + a.waitingCount : "0") + "</strong></div>" +
+      "</div>" +
+      '<div class="app-ins-ahead">' + rows + "</div>" +
+      '<p class="app-ins-legend"><i class="is-bar"></i>Deposits paid <i class="is-due-key"></i>Still due</p>' +
+      (a.unpriced ? '<p class="app-hint">' + a.unpriced + " booked without a price. Add prices to your services to count them.</p>" : "");
+  }
+
+  function isCharterShop() {
+    return String((state.session.tenant && state.session.tenant.subscriptionPlan) || "").toLowerCase() === "charter";
   }
 
   function memberNames() {
@@ -919,6 +1002,7 @@
     { id: "clients", label: "Clients" },
     { id: "team", label: "Team members", team: true },
     { id: "online", label: "Online bookings" },
+    { id: "ahead", label: "Next 30 days (deposits and balances)" },
     { id: "details", label: "Detail lists (every appointment, payment, and tip)" },
   ];
 
@@ -1025,6 +1109,7 @@
     m.onlinePrev = prev && cp ? onlineStats(prev.rows, first, cp.from, cp.to) : null;
     m.appts = list().filter(function (b) { return inWindow(b, p.from, p.to) && (isBooked(b) || b.status === "cancelled"); })
       .sort(function (a, b) { return a.start - b.start; });
+    m.ahead = aheadStats();
     m.payments = seeMoney && !filtered && Array.isArray(state.revenue)
       ? state.revenue.filter(function (e) { return e.date >= p.from && e.date < p.to; }).sort(function (a, b) { return a.date - b.date; })
       : [];
@@ -1104,6 +1189,19 @@
       row(["New clients who booked online", o.newClients]);
       row(["Online no-shows", o.noShows]);
       row(["Online cancels", o.cancels]);
+    }
+    if (on.ahead) {
+      var ah = m.ahead;
+      row([]); row(["Next 30 days (from today)"]);
+      row(["Booked", ah.count]);
+      if (m.seeMoney) {
+        row(["Booked value", (ah.booked / 100).toFixed(2)]);
+        row(["Deposits paid", (ah.paid / 100).toFixed(2)]);
+        row(["Still due", (ah.due / 100).toFixed(2)]);
+        row(["Deposits waiting", (ah.waitingCents / 100).toFixed(2), ah.waitingCount + " bookings"]);
+        row(["Week", "Deposits paid", "Still due", "Bookings"]);
+        ah.weeks.forEach(function (w) { row([shortDate(w.start) + " – " + shortDate(new Date(w.end.getTime() - 1)), (w.paid / 100).toFixed(2), (w.due / 100).toFixed(2), w.count]); });
+      }
     }
     if (on.details) {
       row([]); row(["Appointments list"]);
@@ -1215,6 +1313,17 @@
         ["New clients who booked online", o.newClients],
         ["Online no-shows · cancels", o.noShows + " · " + o.cancels],
       ]) + "</table></section>";
+    }
+    if (on.ahead) {
+      var ah2 = m.ahead;
+      h += '<section><h2>Next 30 days <small>(from today)</small></h2><table class="kv">' + tableRows(m.seeMoney ? [
+        ["Booked", ah2.count + " · " + money(ah2.booked / 100, true)],
+        ["Deposits paid", money(ah2.paid / 100, true)],
+        ["Still due", money(ah2.due / 100, true)],
+        ["Deposits waiting", ah2.waitingCount ? money(ah2.waitingCents / 100, true) + " · " + ah2.waitingCount : "0"],
+      ].concat(ah2.weeks.map(function (w) {
+        return [esc(shortDate(w.start) + " – " + shortDate(new Date(w.end.getTime() - 1))), money(w.paid / 100, true) + " paid · " + money(w.due / 100, true) + " due · " + w.count];
+      })) : [["Booked", ah2.count]]) + "</table></section>";
     }
     if (on.details) {
       var team = seesWholeTeam();

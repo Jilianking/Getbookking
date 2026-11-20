@@ -224,6 +224,7 @@
       ? ' data-cal-ms="' + opts.start.getTime() + '"'
       : "";
     if (opts.reqId) startAttr += ' data-req-id="' + esc(opts.reqId) + '"';
+    if (opts.bookingId) startAttr += ' data-booking-id-open="' + esc(opts.bookingId) + '"';
     return (
       '<button type="button" class="app-row' +
       (unread ? "" : " is-read") +
@@ -281,6 +282,14 @@
       }
       var ms = parseInt(btn.getAttribute("data-cal-ms") || "", 10);
       goCalendar(ms ? new Date(ms) : null);
+      // Balances due: open the booking's details (Payment section) on the calendar.
+      var openId = btn.getAttribute("data-booking-id-open");
+      if (openId) {
+        setTimeout(function () {
+          var booking = bookingById(openId);
+          if (booking) setDetailOpen(true, booking);
+        }, 60);
+      }
     });
   }
 
@@ -354,32 +363,55 @@
         booked;
     }
 
+    // Balances due: deposits waiting and money still owed — today first (collect before they leave),
+    // then the next 7 days, then past visits that were never paid off (last 30 days).
+    var dueUntil = new Date(todayStart);
+    dueUntil.setDate(dueUntil.getDate() + 8);
+    var dueFrom = new Date(todayStart);
+    dueFrom.setDate(dueFrom.getDate() - 30);
     var due = scopedList
-      .filter(function (b) {
-        return DUE_STATUSES[b.status];
-      })
-      .sort(function (a, b) {
-        return (a.start || 0) - (b.start || 0);
-      });
-    var dueHtml = due
-      .slice(0, 6)
+      .filter(function (b) { return b.start && b.start >= dueFrom && b.start < dueUntil && !b.noShow; })
       .map(function (b) {
+        var waiting = !!DUE_STATUSES[b.status];
+        var cents = waiting
+          ? Number(b.raw && b.raw.depositRequestCents) || 0
+          : (global.ShopAppBalance && b.raw ? ShopAppBalance.dueCents(b.raw, b.status, servicePriceFor(b)) : 0);
+        return { b: b, waiting: waiting, cents: cents };
+      })
+      .filter(function (x) { return x.waiting || x.cents > 0; })
+      .sort(function (x, y) {
+        var rank = function (r) { return sameDay(r.b.start, now) ? 0 : r.b.start > now ? 1 : 2; };
+        var dr = rank(x) - rank(y);
+        if (dr) return dr;
+        return rank(x) === 2 ? y.b.start - x.b.start : x.b.start - y.b.start;
+      });
+    var dueTotal = due.reduce(function (a, x) { return a + (x.waiting ? 0 : x.cents); }, 0);
+    var dueMoney = function (c) { return global.ShopAppBalance ? ShopAppBalance.money(c) : "$" + Math.round(c / 100); };
+    var dueHtml = due
+      .slice(0, 8)
+      .map(function (x) {
+        var b = x.b;
         var bits = [];
         if (b.serviceName) bits.push(b.serviceName);
-        bits.push(STATUS_LABEL[b.status] || b.status);
-        return rowHtml(b, {
-          unread: true,
-          sub: bits.join(" · "),
-          meta: b.start ? formatWhen(b.start) : "",
-          start: b.start,
-        });
+        bits.push(x.waiting ? "Awaiting deposit" + (x.cents ? " " + dueMoney(x.cents) : "") : dueMoney(x.cents) + " due");
+        var past = !sameDay(b.start, now) && b.start < now;
+        var meta = sameDay(b.start, now)
+          ? "Today " + formatTime(b.start)
+          : past ? b.start.toLocaleDateString("en-US", { month: "short", day: "numeric" }) + " · unpaid" : formatWhen(b.start);
+        return rowHtml(b, { unread: !past, sub: bits.join(" · "), meta: meta, start: b.start, bookingId: b.id });
       })
       .join("");
+    var dueHead = $("dueTitle");
+    if (dueHead) {
+      dueHead.textContent = "Balances due" + (due.length ? " · " + due.length + (dueTotal ? " · " + dueMoney(dueTotal) : "") : "");
+    }
     paintList(
       "dueList",
       "dueEmpty",
       dueHtml,
-      "No outstanding invoices. Unpaid balances and overdue deposits show up here."
+      charter
+        ? "Nothing owed. Trips with a balance or a deposit waiting show up here, today's departures first."
+        : "Nothing owed. Appointments with a balance or a deposit waiting show up here, today's first."
     );
 
     var upcoming = occupying
@@ -2509,6 +2541,8 @@
         var setup = $("dashSetup");
         if (setup) setup.classList.toggle("hidden", list.length > 0);
         paintCalendar();
+        // Balances due use service prices for bookings without their own price.
+        if (calState.session && calState.bookings) paint(calState.session, calState.bookings);
       })
       .catch(function () {
         calState.services = [];

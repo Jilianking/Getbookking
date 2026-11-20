@@ -3811,3 +3811,16 @@ body.is-cal-dragging, body.is-cal-dragging * { cursor: grabbing !important; user
 .app-pay-linkbox input { flex: 1; min-width: 0; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--card); font: inherit; font-size: 12px; color: var(--text); }
 
 .app-sheet-error.is-ok { color: var(--sage); }
+
+/* Insights: Next 30 days */
+.app-ins-ahead { display: grid; gap: 8px; margin-top: 12px; }
+.app-ins-ahead-row { display: grid; grid-template-columns: 120px minmax(0, 1fr) 70px; align-items: center; gap: 10px; font-size: 13px; }
+.app-ins-ahead-row > span:first-child { color: var(--muted); white-space: nowrap; }
+.app-ins-ahead-row strong { text-align: right; font-weight: 600; }
+.app-ins-ahead-bar { display: flex; height: 12px; border-radius: 999px; background: color-mix(in srgb, var(--cream) 55%, transparent); overflow: hidden; }
+.app-ins-ahead-bar i { display: block; height: 100%; }
+.app-ins-ahead-bar i.is-paid, .app-ins-dot.is-paidd { background: #A3752F; }
+.app-ins-ahead-bar i.is-due, .app-ins-dot.is-duee { background: #E3D3B8; }
+.app-ins-legend i.is-due-key { width: 10px; height: 10px; border-radius: 2px; background: #E3D3B8; margin-left: 10px; }
+.app-ins-card .app-card-head small { font-weight: 400; }
+@media (max-width: 640px) { .app-ins-ahead-row { grid-template-columns: 92px minmax(0, 1fr) 60px; font-size: 12px; } }

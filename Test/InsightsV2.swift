@@ -126,6 +126,16 @@ struct InsightsTeamRow: Identifiable {
     let prebookPct: Int?
 }
 
+/// The month ahead (next 30 days from today), one week of it.
+struct InsightsAheadWeek: Identifiable {
+    let id = UUID()
+    let start: Date
+    let end: Date
+    var paid = 0
+    var due = 0
+    var count = 0
+}
+
 /// One appointment in the report's detail list.
 struct InsightsApptRow: Identifiable {
     let id = UUID()
@@ -204,6 +214,15 @@ struct InsightsSnapshot {
     var appointments: [InsightsApptRow] = []
     var payments: [(date: Date, amount: Double)] = []
     var tipsList: [InsightsTipEntry] = []
+    // Next 30 days (from today): booked value, deposits paid, still due, deposits waiting, by week.
+    var aheadCount = 0
+    var aheadBooked = 0
+    var aheadPaid = 0
+    var aheadDue = 0
+    var aheadWaitingCount = 0
+    var aheadWaitingCents = 0
+    var aheadUnpriced = 0
+    var aheadWeeks: [InsightsAheadWeek] = []
 }
 
 enum InsightsEngine {
@@ -546,6 +565,43 @@ enum InsightsEngine {
         }
         s.winBackMore = max(0, wb.count - 5)
 
+        // Next 30 days: prices and the payments recorded on each booking (same as the Payment section).
+        do {
+            let end = today.addingTimeInterval(30 * 86400)
+            let day0 = cal.startOfDay(for: today)
+            var weeks = (0..<4).map { i -> InsightsAheadWeek in
+                let st = day0.addingTimeInterval(Double(i * 7) * 86400)
+                return InsightsAheadWeek(start: st, end: i == 3 ? end : st.addingTimeInterval(7 * 86400))
+            }
+            for r in raw {
+                guard let start = r.departureStart, start > today, start <= end, r.noShowAt == nil else { continue }
+                let status = BookingRequestStatus.normalized(r.status)
+                guard bookedStatuses.contains(status), status != "completed" else { continue }
+                if let staffF, (r.assignedMemberUid ?? "") != staffF { continue }
+                let svcName = (r.serviceName ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+                if let serviceF, (svcName.isEmpty ? "Other" : svcName) != serviceF { continue }
+                let svcPrice = servicePrices[r.serviceId ?? ""] ?? servicePrices["name:" + svcName.lowercased()] ?? 0
+                let m = BookingBalance(r, servicePriceCents: svcPrice)
+                let paid = m.price.map { min(m.paid, $0) } ?? m.paid
+                let due = m.price.map { max(0, $0 - paid) } ?? 0
+                s.aheadCount += 1
+                if m.price == nil { s.aheadUnpriced += 1 }
+                s.aheadBooked += m.price ?? paid
+                s.aheadPaid += paid
+                s.aheadDue += due
+                if status == BookingRequestStatus.pendingDeposit || status == BookingRequestStatus.pendingPayment {
+                    s.aheadWaitingCount += 1
+                    s.aheadWaitingCents += r.depositRequestCents ?? 0
+                }
+                if let i = weeks.firstIndex(where: { start >= $0.start && start < $0.end }) {
+                    weeks[i].paid += paid
+                    weeks[i].due += due
+                    weeks[i].count += 1
+                }
+            }
+            s.aheadWeeks = weeks
+        }
+
         var svc: [String: Int] = [:]
         for b in cur.visits { svc[b.service, default: 0] += 1 }
         s.topServices = svc.sorted { $0.value > $1.value }.prefix(5).map { ($0.key, $0.value) }
@@ -859,6 +915,61 @@ struct InsightsHeatmap: View {
                 .font(.caption2)
                 .foregroundStyle(AppDesign.textSecondary)
                 .padding(.top, 4)
+        }
+    }
+}
+
+/// Next 30 days: booked, deposits paid, still due, deposits waiting, and a bar per week.
+struct InsightsAheadView: View {
+    let s: InsightsSnapshot
+    let showMoney: Bool
+    let isCharter: Bool
+
+    private func usd(_ cents: Int) -> String {
+        (Double(cents) / 100).formatted(.currency(code: "USD").precision(.fractionLength(0)))
+    }
+
+    var body: some View {
+        let noun = isCharter ? (s.aheadCount == 1 ? "trip" : "trips") : (s.aheadCount == 1 ? "appt" : "appts")
+        if s.aheadCount == 0 {
+            Text("Nothing booked in the next 30 days yet.").font(.caption).foregroundStyle(AppDesign.textSecondary)
+        } else if !showMoney {
+            Text("\(s.aheadCount) \(noun) booked").font(.title3.weight(.bold))
+        } else {
+            VStack(alignment: .leading, spacing: 8) {
+                Text(usd(s.aheadBooked)).font(.title3.weight(.bold))
+                Text("\(s.aheadCount) \(noun) booked").font(.caption).foregroundStyle(AppDesign.textSecondary)
+                HStack { Circle().fill(AppDesign.brandWarm).frame(width: 8, height: 8); Text("Deposits paid").font(.subheadline); Spacer(); Text(usd(s.aheadPaid)).font(.subheadline.weight(.semibold)) }
+                Divider()
+                HStack { Circle().fill(Color(hex: "#E3D3B8")).frame(width: 8, height: 8); Text("Still due").font(.subheadline); Spacer(); Text(usd(s.aheadDue)).font(.subheadline.weight(.semibold)) }
+                Divider()
+                HStack { Text("Deposits waiting").font(.subheadline); Spacer(); Text(s.aheadWaitingCount > 0 ? "\(usd(s.aheadWaitingCents)) · \(s.aheadWaitingCount)" : "0").font(.subheadline.weight(.semibold)) }
+                let mx = max(1, s.aheadWeeks.map { $0.paid + $0.due }.max() ?? 1)
+                VStack(spacing: 6) {
+                    ForEach(s.aheadWeeks) { w in
+                        HStack(spacing: 8) {
+                            Text("\(w.start.formatted(.dateTime.month(.abbreviated).day())) – \(w.end.addingTimeInterval(-1).formatted(.dateTime.month(.abbreviated).day()))")
+                                .font(.caption2).foregroundStyle(AppDesign.textSecondary).frame(width: 92, alignment: .leading)
+                            GeometryReader { geo in
+                                HStack(spacing: 0) {
+                                    Rectangle().fill(AppDesign.brandWarm).frame(width: geo.size.width * CGFloat(w.paid) / CGFloat(mx))
+                                    Rectangle().fill(Color(hex: "#E3D3B8")).frame(width: geo.size.width * CGFloat(w.due) / CGFloat(mx))
+                                    Spacer(minLength: 0)
+                                }
+                                .background(AppDesign.brandCream.opacity(0.5))
+                                .clipShape(Capsule())
+                            }
+                            .frame(height: 10)
+                            Text(w.paid + w.due > 0 ? usd(w.paid + w.due) : "—").font(.caption2.weight(.semibold)).frame(width: 52, alignment: .trailing)
+                        }
+                    }
+                }
+                .padding(.top, 4)
+                if s.aheadUnpriced > 0 {
+                    Text("\(s.aheadUnpriced) booked without a price. Add prices to your services to count them.")
+                        .font(.caption2).foregroundStyle(AppDesign.textSecondary)
+                }
+            }
         }
     }
 }

@@ -153,7 +153,8 @@ async function runReminderSweep(deps, now = new Date()) {
       const b = doc.data() || {};
       if (String(b.status || "").toLowerCase() !== "confirmed") continue;
       if (b.skipConfirmationSms === true) continue;
-      if (String(b.source || "").toLowerCase() === "seed") continue;
+      const src = String(b.source || "").toLowerCase();
+      if (src === "seed" || src === "demo-seed") continue;
       const start = b.requestedStartTime && b.requestedStartTime.toDate ? b.requestedStartTime.toDate() : null;
       if (!start) continue;
       const kind = dueKind(settings, start, now, tz, b);

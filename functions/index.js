@@ -7510,6 +7510,31 @@ const publicWebCallableOptions = {
  * Public checkout page for a deposit or manual payment link.
  * Params: { tenantSlug, paymentIntentId }
  */
+/**
+ * Deposit link → "Pay in full": the booking's price (its own, or its service's) minus what's already paid.
+ * Offered only on deposit links for a booking with a price higher than the deposit.
+ * Returns { available, depositCents, fullCents }.
+ */
+async function depositPayFullInfo(tenantId, meta) {
+  const none = { available: false, depositCents: 0, fullCents: 0 };
+  const rid = (meta.bookingRequestId || "").toString().trim();
+  if (!rid || meta.balanceLink === "true" || (meta.paymentKind || "") !== "deposit") return none;
+  const depositCents = parseInt(meta.depositOriginalCents || meta.serviceAmountCents, 10) || 0;
+  if (depositCents <= 0) return none;
+  const snap = await db.collection("tenants").doc(tenantId).collection("bookingRequests").doc(rid).get();
+  if (!snap.exists) return none;
+  const d = snap.data() || {};
+  let price = balances.bookingPriceCents(d);
+  if (price == null && d.serviceId) {
+    const svc = await db.collection("tenants").doc(tenantId).collection("services").doc(String(d.serviceId)).get();
+    const p = svc.exists ? Number((svc.data() || {}).price) : NaN;
+    if (Number.isFinite(p) && p > 0) price = Math.round(p * 100);
+  }
+  if (price == null) return { ...none, depositCents };
+  const fullCents = Math.max(0, price - balances.paidServiceCents(d));
+  return { available: fullCents > depositCents && fullCents <= 5000000, depositCents, fullCents };
+}
+
 exports.getDepositCheckout = onCall(publicWebCallableOptions, async (request) => {
   const data = request.data || {};
   const tenantSlug = (data.tenantSlug || "").toString().trim().toLowerCase();
@@ -7538,6 +7563,8 @@ exports.getDepositCheckout = onCall(publicWebCallableOptions, async (request) =>
   const businessName = (tenantData.businessName || tenantData.displayName || "Payment").toString();
   const pk = stripePublishableKeyParam.value().trim();
   const paid = pi.status === "succeeded";
+  const payFull = paid ? { available: false } : await depositPayFullInfo(resolved.id, meta).catch(() => ({ available: false }));
+  const payFullOn = meta.payFull === "true";
   return {
     paid,
     status: pi.status,
@@ -7553,8 +7580,13 @@ exports.getDepositCheckout = onCall(publicWebCallableOptions, async (request) =>
     totalCents: paid ? pi.amount : priced ? priced.totalCents : pi.amount,
     rateLabel: priced ? priced.rateLabel : "2.9% + 30¢",
     method: priced ? priced.method : "card",
-    // The pay page offers 15/20/25%/custom/no tip when the shop allows tips on this kind of payment.
-    tipsAllowed: !paid && tipsEnabledForTenant(tenantData) && paymentKindAllowsTip(meta.paymentKind),
+    // The pay page offers 15/20/25%/custom/no tip when the shop allows tips on this kind of payment
+    // (deposits only when the client chose to pay in full).
+    tipsAllowed: !paid && tipsEnabledForTenant(tenantData) && (paymentKindAllowsTip(meta.paymentKind) || payFullOn),
+    tipsEnabled: tipsEnabledForTenant(tenantData),
+    payFull: payFull.available
+      ? { available: true, depositCents: payFull.depositCents, fullCents: payFull.fullCents, selected: payFullOn }
+      : { available: false },
     tipPercents: Array.isArray(tenantData.tipPercents) && tenantData.tipPercents.length === 3
       ? tenantData.tipPercents.map((n) => Number(n) || 0)
       : [15, 20, 25],
@@ -7633,11 +7665,36 @@ exports.repriceCustomerCheckout = onCall(publicWebCallableOptions, async (reques
     throw new HttpsError("invalid-argument", "That payment method cannot be repriced here.");
   }
   let pricingMeta = meta;
-  if (data.tipCents != null && paymentKindAllowsTip(meta.paymentKind)) {
+  // Deposit link: switch between the deposit and paying in full (amount set here, never by the browser).
+  if (data.payFull != null && (meta.paymentKind || "") === "deposit" && meta.bookingRequestId) {
+    const info = await depositPayFullInfo(resolved.id, meta);
+    const wantFull = data.payFull === true && info.available;
+    const cents = wantFull ? info.fullCents : (info.depositCents || parseInt(meta.serviceAmountCents, 10) || 0);
     pricingMeta = {
-      ...meta,
+      ...pricingMeta,
+      serviceAmountCents: String(cents),
+      feeBaseCents: String(cents),
+      depositOriginalCents: String(info.depositCents || parseInt(meta.depositOriginalCents || meta.serviceAmountCents, 10) || 0),
+      payFull: wantFull ? "true" : "false",
+      productName: wantFull ? "Pay in full" : (meta.depositProductName || meta.productName || "Deposit"),
+      depositProductName: meta.depositProductName || meta.productName || "Deposit",
+      // Switching resets the tip; the client picks again for the new amount.
+      tipCents: "0",
+    };
+    // Team split is a percentage of the service: recompute it for the new amount.
+    if ((meta.splitApplied || "") === "true") {
+      const pct = Number(meta.splitPercentApplied) || 0;
+      const studio = Math.max(0, Math.min(cents, Math.round(cents * pct / 100)));
+      pricingMeta.studioShareCents = String(studio);
+      pricingMeta.artistShareCents = String(cents - studio);
+    }
+  }
+  const tipOk = paymentKindAllowsTip(pricingMeta.paymentKind) || pricingMeta.payFull === "true";
+  if (data.tipCents != null && tipOk) {
+    pricingMeta = {
+      ...pricingMeta,
       tipCents: String(tipsEnabledForTenant(tenantData)
-        ? parseTipCents(data.tipCents, parseInt(meta.serviceAmountCents, 10) || 0)
+        ? parseTipCents(data.tipCents, parseInt(pricingMeta.serviceAmountCents, 10) || 0)
         : 0),
     };
   }
@@ -7646,7 +7703,7 @@ exports.repriceCustomerCheckout = onCall(publicWebCallableOptions, async (reques
     throw new HttpsError("failed-precondition", "This payment is missing its service amount.");
   }
   const nextMeta = {
-    ...meta,
+    ...pricingMeta,
     surchargeCents: String(priced.surchargeCents),
     tipCents: String(priced.tipCents || 0),
     checkoutMethod: priced.method,
@@ -7673,7 +7730,7 @@ exports.repriceCustomerCheckout = onCall(publicWebCallableOptions, async (reques
       { merge: true }
     );
   }
-  return priced;
+  return { ...priced, productName: (pricingMeta.productName || meta.productName || "Payment").toString(), payFullSelected: pricingMeta.payFull === "true" };
 });
 
 

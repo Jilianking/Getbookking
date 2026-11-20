@@ -461,3 +461,105 @@ struct BookingPaymentSection: View {
         }
     }
 }
+
+// MARK: - Home: Balances due
+
+/// Deposits waiting and money still owed: today first (collect before they leave), then the next 7 days,
+/// then past visits that were never paid off (last 30 days). Same rules as the web Home card.
+struct BalancesDueCard: View {
+    let bookings: [BookingRequest]
+    let isCharter: Bool
+    let onOpen: (BookingRequest) -> Void
+
+    private struct Row: Identifiable {
+        let id: String
+        let booking: BookingRequest
+        let start: Date
+        let cents: Int
+        let waiting: Bool
+    }
+
+    @MainActor
+    private var rows: [Row] {
+        let cal = Calendar.current
+        let now = Date()
+        let today = cal.startOfDay(for: now)
+        let until = cal.date(byAdding: .day, value: 8, to: today) ?? now
+        let from = cal.date(byAdding: .day, value: -30, to: today) ?? now
+        let list: [Row] = bookings.compactMap { b in
+            guard let start = b.departureStart, start >= from, start < until, b.noShowAt == nil else { return nil }
+            let s = BookingRequestStatus.normalized(b.status)
+            let waiting = s == BookingRequestStatus.pendingDeposit || s == BookingRequestStatus.pendingPayment
+            let cents = waiting ? (b.depositRequestCents ?? 0) : (BookingBalance.dueCents(b) ?? 0)
+            guard waiting || cents > 0 else { return nil }
+            return Row(id: b.documentId ?? b.id, booking: b, start: start, cents: cents, waiting: waiting)
+        }
+        func rank(_ r: Row) -> Int { cal.isDate(r.start, inSameDayAs: now) ? 0 : (r.start > now ? 1 : 2) }
+        return list.sorted { a, b in
+            let ra = rank(a), rb = rank(b)
+            if ra != rb { return ra < rb }
+            return ra == 2 ? a.start > b.start : a.start < b.start
+        }
+    }
+
+    var body: some View {
+        let r = rows
+        let total = r.filter { !$0.waiting }.reduce(0) { $0 + $1.cents }
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text("Balances due").font(.headline).foregroundStyle(AppDesign.textPrimary)
+                Spacer()
+                if !r.isEmpty {
+                    Text("\(r.count)\(total > 0 ? " · " + BookingBalance.usd(total) : "")")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(AppDesign.textSecondary)
+                }
+            }
+            if r.isEmpty {
+                Text(isCharter
+                     ? "Nothing owed. Trips with a balance or a deposit waiting show up here, today's departures first."
+                     : "Nothing owed. Appointments with a balance or a deposit waiting show up here, today's first.")
+                    .font(.subheadline)
+                    .foregroundStyle(AppDesign.textSecondary)
+            } else {
+                ForEach(r.prefix(6)) { row in
+                    Button { onOpen(row.booking) } label: {
+                        HStack(alignment: .center, spacing: 10) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(row.booking.customerName ?? "Client").font(.subheadline.weight(.semibold)).foregroundStyle(AppDesign.textPrimary)
+                                Text(whenText(row.start) + ((row.booking.serviceName ?? "").isEmpty ? "" : " · " + (row.booking.serviceName ?? "")))
+                                    .font(.caption).foregroundStyle(AppDesign.textSecondary).lineLimit(1)
+                            }
+                            Spacer(minLength: 6)
+                            if row.waiting {
+                                Text("Deposit\(row.cents > 0 ? " " + BookingBalance.usd(row.cents) : "") waiting")
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(AppDesign.statusPending)
+                            } else {
+                                BalanceDueTag(cents: row.cents)
+                            }
+                            Image(systemName: "chevron.right").font(.caption2.weight(.semibold)).foregroundStyle(AppDesign.textSecondary)
+                        }
+                        .padding(.vertical, 6)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    if row.id != r.prefix(6).last?.id { Divider() }
+                }
+                if r.count > 6 {
+                    Text("+ \(r.count - 6) more").font(.caption).foregroundStyle(AppDesign.textSecondary)
+                }
+            }
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .appCard()
+    }
+
+    private func whenText(_ d: Date) -> String {
+        let cal = Calendar.current
+        if cal.isDateInToday(d) { return "Today " + d.formatted(date: .omitted, time: .shortened) }
+        if d < Date() { return d.formatted(.dateTime.month(.abbreviated).day()) + " · unpaid" }
+        return d.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day().hour().minute())
+    }
+}

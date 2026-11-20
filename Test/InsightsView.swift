@@ -336,6 +336,12 @@ struct InsightsView: View {
                     .padding(.horizontal, 16)
                 }
 
+                InsightsSectionLabel(text: "Next 30 days")
+                InsightsCard(title: "Booked ahead · deposits and balances", trailing: "from today") {
+                    InsightsAheadView(s: s, showMoney: canSeeMoney, isCharter: ((sessionStore.tenant?["subscriptionPlan"] as? String) ?? "").lowercased() == "charter")
+                }
+                .padding(.horizontal, 16)
+
                 InsightsSectionLabel(text: "Appointments").id("appointments")
                 InsightsCard(title: "Completed, canceled, no-show") {
                     let total = s.completed + s.cancelled + s.noShows

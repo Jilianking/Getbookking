@@ -1,4 +1,5 @@
 import SwiftUI
+import FirebaseAuth
 
 struct DashboardView: View {
     @EnvironmentObject var authViewModel: AuthViewModel
@@ -155,6 +156,20 @@ struct DashboardView: View {
                         showsConnectPrompt: viewModel.useTenantData && !paymentsViewModel.stripeConnected
                     )
                     .padding(.horizontal)
+
+                    if viewModel.useTenantData {
+                        BalancesDueCard(
+                            bookings: balanceBookings,
+                            isCharter: isCharterShop,
+                            onOpen: { openBookingRequest($0) }
+                        )
+                        .padding(.horizontal)
+                        .task(id: sessionStore.tenantId ?? "") {
+                            if let tid = sessionStore.tenantId, BookingBalance.servicePrices.isEmpty {
+                                await BookingBalance.loadServicePrices(tenantId: tid)
+                            }
+                        }
+                    }
 
                     recentRequestsCard
                 }
@@ -404,6 +419,21 @@ struct DashboardView: View {
         )
     }
     #endif
+
+    /// Bookings this person can see, for the Balances due card.
+    private var balanceBookings: [BookingRequest] {
+        let uid: String? = Auth.auth().currentUser?.uid
+        return sessionStore.bookingRequests.scopedForTeamAccess(
+            authViewModel.teamAccess,
+            currentUserUid: uid,
+            roster: sessionStore.teamMembers
+        )
+    }
+
+    private var isCharterShop: Bool {
+        let plan = (sessionStore.tenant?["subscriptionPlan"] as? String) ?? ""
+        return plan.lowercased() == "charter"
+    }
 
     private var recentRequestsCard: some View {
         VStack(alignment: .leading, spacing: 12) {

@@ -181,7 +181,10 @@ async function recordCardPaymentOnBooking(tenantId, bookingRequestId, pi, opts) 
     if (!snap.exists) return;
     const d = snap.data() || {};
     if (d.payments && d.payments[pi.id]) return;
-    const role = meta.balanceLink === "true" ? "balance" : (opts && opts.role) || (String(meta.paymentKind) === "deposit" ? "deposit" : "payment");
+    // Paid in full from a deposit link: the whole price, so it's a payment, not a deposit.
+    const role = meta.balanceLink === "true" ? "balance"
+      : meta.payFull === "true" ? "payment"
+        : (opts && opts.role) || (String(meta.paymentKind) === "deposit" ? "deposit" : "payment");
     const entry = {
       kind,
       role,
@@ -493,5 +496,6 @@ module.exports = {
   refundPlan,
   balanceSettings,
   bookingPriceCents,
+  paidServiceCents,
   _test: { computedFields, appointmentStart, paidServiceCents, reminderText, tzOffsetMinutes },
 };

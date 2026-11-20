@@ -3824,3 +3824,9 @@ body.is-cal-dragging, body.is-cal-dragging * { cursor: grabbing !important; user
 .app-ins-legend i.is-due-key { width: 10px; height: 10px; border-radius: 2px; background: #E3D3B8; margin-left: 10px; }
 .app-ins-card .app-card-head small { font-weight: 400; }
 @media (max-width: 640px) { .app-ins-ahead-row { grid-template-columns: 92px minmax(0, 1fr) 60px; font-size: 12px; } }
+
+/* Clients: edit contact */
+.app-client-edit { display: grid; gap: 8px; margin: 4px 0 12px; }
+.app-client-edit label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); }
+.app-client-edit input { padding: 9px 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--paper); font: inherit; font-size: 15px; color: var(--text); }
+.app-req-contact .app-client-note-btn { margin-left: 6px; }

@@ -17269,6 +17269,8 @@ const { registerBookingDepositFunctions } = require("./bookingDeposit");
 registerBookingDepositFunctions(exports, { stripeSecretKey, resolveTenantBySlug });
 
 const balances = require("./balances");
+// Copies on bookings (client contact, service name, team member name) follow edits to the original.
+require("./syncCopies").registerSyncCopies(exports);
 balances.registerBalanceFunctions(exports, { getMemberAccessContext, sms, stripeSecretKey, twilioAccountSid: sms.twilioAccountSid, twilioAuthToken: sms.twilioAuthToken });
 
 registerMcpFunctions(exports, { stripeSecretKey, Stripe, twilioAccountSid: sms.twilioAccountSid, twilioAuthToken: sms.twilioAuthToken });

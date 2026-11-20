@@ -202,9 +202,19 @@
         esc(STATUS_LABEL[b.status] || b.status) + "</span></div>";
     };
     var notes = notesOf(c);
+    var contactHtml = state.editingContact
+      ? '<form class="app-client-edit" id="clientEditForm">' +
+        '<label>Name<input type="text" name="name" value="' + esc(c.name || "") + '" required autocomplete="off"></label>' +
+        '<label>Phone<input type="tel" name="phone" value="' + esc(c.phone || "") + '" autocomplete="off"></label>' +
+        '<label>Email<input type="email" name="email" value="' + esc(c.email || "") + '" autocomplete="off"></label>' +
+        '<p class="app-hint">Their bookings update too, so the calendar and reminder texts use the new details.</p>' +
+        '<div class="app-client-note-acts"><button type="button" class="app-btn app-btn--ghost app-btn--small" data-contact-act="cancel">Cancel</button>' +
+        '<button type="submit" class="app-btn app-btn--primary app-btn--small">Save</button></div></form>'
+      : '<p class="app-req-contact">' + esc([c.phone, c.email].filter(Boolean).join(" · ") || "No contact info") +
+        ' <button type="button" class="app-client-note-btn" data-contact-act="edit">Edit</button></p>' +
+        (links.length ? '<div class="app-req-links">' + links.join("") + "</div>" : "");
     body.innerHTML =
-      '<p class="app-req-contact">' + esc([c.phone, c.email].filter(Boolean).join(" · ") || "No contact info") + "</p>" +
-      (links.length ? '<div class="app-req-links">' + links.join("") + "</div>" : "") +
+      contactHtml +
       (c.smsOptedOutAt ? '<p class="app-hint">This client replied STOP, so texts to them are off.</p>' : "") +
       '<div class="app-req-facts">' +
       '<div class="app-req-fact"><span>Visits</span><strong>' + visits + "</strong></div>" +
@@ -236,9 +246,46 @@
       '<p class="app-sheet-error hidden" id="clientDetailError"></p>';
   }
 
+  /** Saves name / phone / email. The server copies them onto the client's bookings (functions/syncCopies.js). */
+  function saveContact(form) {
+    var c = byId(state.openId);
+    if (!c) return;
+    var name = String(form.name.value || "").trim();
+    var phone = String(form.phone.value || "").trim();
+    var email = String(form.email.value || "").trim().toLowerCase();
+    var err = $("clientDetailError");
+    var fail = function (msg) { if (err) { err.textContent = msg; err.classList.remove("hidden"); } };
+    if (!name) return fail("Enter the client's name.");
+    var d = digits(phone);
+    if (phone && d.length < 10) return fail("Enter a 10-digit phone number, or leave it empty.");
+    if (!email && d.length < 10) return fail("Enter a phone number or an email.");
+    if (email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return fail("That email doesn't look right.");
+    var ten = d.length >= 10 ? d.slice(-10) : "";
+    var formatted = ten ? "(" + ten.slice(0, 3) + ") " + ten.slice(3, 6) + "-" + ten.slice(6) : "";
+    var btn = form.querySelector('button[type="submit"]');
+    if (btn) btn.disabled = true;
+    customerRef(c).set({
+      name: name,
+      phone: formatted,
+      email: email,
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true }).then(function () {
+      c.name = name;
+      c.phone = formatted;
+      c.email = email;
+      state.editingContact = false;
+      render();
+      paintProfile();
+    }).catch(function (e) {
+      if (btn) btn.disabled = false;
+      fail((e && e.message) || "Couldn't save. Try again.");
+    });
+  }
+
   function setProfileOpen(id) {
     state.openId = id || "";
     state.editingNoteId = "";
+    state.editingContact = false;
     ["clientDetailSheet", "clientDetailScrim"].forEach(function (x) {
       var el = $(x);
       if (el) el.classList.toggle("hidden", !id);
@@ -469,7 +516,17 @@
     if (!detailBody.dataset.wired) {
       // Wire once: this runs on every load, and a second listener would add each note twice.
       detailBody.dataset.wired = "1";
+      detailBody.addEventListener("submit", function (ev) {
+        if (ev.target && ev.target.id === "clientEditForm") { ev.preventDefault(); saveContact(ev.target); }
+      });
       detailBody.addEventListener("click", function (ev) {
+        var ca = ev.target.closest("[data-contact-act]");
+        if (ca) {
+          state.editingContact = ca.getAttribute("data-contact-act") === "edit";
+          paintProfile();
+          if (state.editingContact) { var f = $("clientEditForm"); if (f) f.name.focus(); }
+          return;
+        }
         if (ev.target.closest("#clientNoteAdd")) { addNote(); return; }
         var act = ev.target.closest("[data-note-act]");
         if (act) onNoteAction(act);

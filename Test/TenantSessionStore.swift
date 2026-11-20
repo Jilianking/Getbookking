@@ -9,9 +9,23 @@ import Combine
 import FirebaseAuth
 import FirebaseFunctions
 
+extension Notification.Name {
+    /// A client's contact details were copied onto their bookings: reload bookings.
+    static let bookingContactsChanged = Notification.Name("bookingContactsChanged")
+}
+
 @MainActor
 final class TenantSessionStore: ObservableObject {
     static let dataCacheTTL: TimeInterval = 60
+    private var contactObserver: NSObjectProtocol?
+
+    /// Reloads bookings right away after a contact edit (instead of waiting for the cache to expire).
+    func observeContactChanges() {
+        guard contactObserver == nil else { return }
+        contactObserver = NotificationCenter.default.addObserver(forName: .bookingContactsChanged, object: nil, queue: .main) { [weak self] _ in
+            Task { @MainActor in await self?.loadBookingsIfNeeded(force: true) }
+        }
+    }
 
     @Published private(set) var profile: ProviderProfile?
     @Published private(set) var tenantId: String?
@@ -433,6 +447,7 @@ final class TenantSessionStore: ObservableObject {
         if isDemoMode, isDemoSession { return }
         if isDemoMode { return }
         await ensureSessionLoaded(isDemoMode: false)
+        observeContactChanges()
         guard let tid = tenantId else { return }
         if !force, let loadedAt = bookingsLoadedAt,
            Date().timeIntervalSince(loadedAt) < Self.dataCacheTTL {
@@ -785,7 +800,7 @@ final class TenantSessionStore: ObservableObject {
 
     static func parseTeamMembers(_ raw: [[String: Any]]?, ownerUid: String?) -> [TenantTeamMember] {
         guard let raw else { return [] }
-        return raw.compactMap { row in
+        return raw.compactMap { row -> TenantTeamMember? in
             guard let uid = row["uid"] as? String else { return nil }
             let role = TeamAccessRole.fromFirestore(row["accessRole"] as? String ?? row["role"] as? String)
             let fn = (row["firstName"] as? String) ?? ""
@@ -815,7 +830,10 @@ final class TenantSessionStore: ObservableObject {
                     smsMonthlyLimit: (row["smsMonthlyLimit"] as? Int) ?? 1000,
                     memberSettings: TeamMemberSettings(),
                     personalConfirmationType: parsePersonalConfirmationType(row),
-                    effectiveConfirmationType: parseEffectiveConfirmationType(row)
+                    effectiveConfirmationType: parseEffectiveConfirmationType(row),
+                    igStatus: (row["igStatus"] as? String) ?? "off",
+                    igUsername: (row["igUsername"] as? String) ?? "",
+                    igProvisionError: (row["igProvisionError"] as? String) ?? ""
                 )
             }
             return TenantTeamMember(
@@ -840,7 +858,10 @@ final class TenantSessionStore: ObservableObject {
                 smsMonthlyLimit: (row["smsMonthlyLimit"] as? Int) ?? 1000,
                 memberSettings: TeamMemberSettings(dictionary: row["memberSettings"] as? [String: Any]),
                 personalConfirmationType: parsePersonalConfirmationType(row),
-                effectiveConfirmationType: parseEffectiveConfirmationType(row)
+                effectiveConfirmationType: parseEffectiveConfirmationType(row),
+                igStatus: (row["igStatus"] as? String) ?? "off",
+                igUsername: (row["igUsername"] as? String) ?? "",
+                igProvisionError: (row["igProvisionError"] as? String) ?? ""
             )
         }
     }

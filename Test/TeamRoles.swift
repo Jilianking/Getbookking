@@ -343,6 +343,9 @@ struct TenantTeamMember: Identifiable, Equatable {
     let personalConfirmationType: String?
     /// Resolved type for display (owner policy or personal).
     let effectiveConfirmationType: String?
+    var igStatus: String = "off"
+    var igUsername: String = ""
+    var igProvisionError: String = ""
 
     var id: String { uid }
 

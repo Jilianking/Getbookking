@@ -747,8 +747,8 @@ const DEMO_ACTIVITY_BY_SLUG = {
         notes: "Loves the yellowtail bite. Prefers sunrise departures from Garrison Bight.",
         vip: true,
         bookings: [
-          { service: "Half-Day Reef Charter", status: "completed", dayOffset: -41, price: 450 },
-          { service: "Half-Day Reef Charter", status: "confirmed", dayOffset: 5, price: 450 },
+          { service: "Half-Day Reef Charter", status: "completed", dayOffset: -41, price: 450, pay: [["card", "deposit", 100], ["tap", "balance", 350]] },
+          { service: "Half-Day Reef Charter", status: "confirmed", dayOffset: 5, price: 450, pay: [["card", "deposit", 100]] },
         ],
         sms: [
           { dir: "inbound", dayOffset: -6, body: "We still meeting at Garrison Bight at 6:30?" },
@@ -762,8 +762,8 @@ const DEMO_ACTIVITY_BY_SLUG = {
         email: "chris.pell@gmail.com",
         phone: "+13055551148",
         bookings: [
-          { service: "Bachelor / Bachelorette Boat Day", status: "completed", dayOffset: -22, price: 1400 },
-          { service: "Key West Sandbar Day", status: "confirmed", dayOffset: 9, price: 680 },
+          { service: "Bachelor / Bachelorette Boat Day", status: "completed", dayOffset: -22, price: 1400, pay: [["card", "deposit", 300], ["link", "balance", 1100]] },
+          { service: "Key West Sandbar Day", status: "confirmed", dayOffset: 9, price: 680, pay: [["card", "deposit", 150], ["cash", "balance", 200]] },
         ],
         sms: [
           { dir: "inbound", dayOffset: -8, body: "Wedding crew wants another sandbar day — Bluetooth and cooler ok?" },
@@ -775,8 +775,9 @@ const DEMO_ACTIVITY_BY_SLUG = {
         email: "sam.torres.fl@gmail.com",
         phone: "+13055551207",
         bookings: [
-          { service: "Family Flats & Harbor Trip", status: "completed", dayOffset: -18, price: 500 },
-          { service: "Family Flats & Harbor Trip", status: "NEW", dayOffset: 3, price: 500 },
+          { service: "Family Flats & Harbor Trip", status: "completed", dayOffset: -18, price: 500, pay: [["card", "deposit", 100]] },
+          { service: "Half-Day Reef Charter", status: "confirmed", dayOffset: 0, price: 450, pay: [["card", "deposit", 100]] },
+          { service: "Family Flats & Harbor Trip", status: "pending_deposit", dayOffset: 3, price: 500, depositRequest: 100 },
         ],
         sms: [
           { dir: "inbound", dayOffset: -2, body: "Kids ok on the flats trip? They’re 7 and 10." },
@@ -788,8 +789,8 @@ const DEMO_ACTIVITY_BY_SLUG = {
         email: "jamie.ortiz.kw@gmail.com",
         phone: "+13055551284",
         bookings: [
-          { service: "Full-Day Offshore Charter", status: "completed", dayOffset: -33, price: 950 },
-          { service: "Full-Day Offshore Charter", status: "confirmed", dayOffset: 12, price: 950 },
+          { service: "Full-Day Offshore Charter", status: "completed", dayOffset: -33, price: 950, pay: [["tap", "payment", 950]] },
+          { service: "Full-Day Offshore Charter", status: "confirmed", dayOffset: 12, price: 950, pay: [["link", "payment", 950]] },
         ],
         sms: [
           { dir: "inbound", dayOffset: -4, body: "Bringing a cooler for mahi — that cool?" },
@@ -801,8 +802,8 @@ const DEMO_ACTIVITY_BY_SLUG = {
         email: "elena.v.keys@gmail.com",
         phone: "+13055551351",
         bookings: [
-          { service: "Mallory Square Sunset Cruise", status: "completed", dayOffset: -9, price: 250 },
-          { service: "Mallory Square Sunset Cruise", status: "confirmed", dayOffset: 2, price: 250 },
+          { service: "Mallory Square Sunset Cruise", status: "completed", dayOffset: -9, price: 250, pay: [["tap", "payment", 250]] },
+          { service: "Mallory Square Sunset Cruise", status: "confirmed", dayOffset: 2, price: 250, pay: [["card", "deposit", 50]] },
         ],
         sms: [
           { dir: "inbound", dayOffset: -1, body: "Sunset still going out if it’s breezy?" },
@@ -1160,6 +1161,25 @@ async function seedDemoActivity(db, tenantId, slug, Timestamp, opts = {}) {
       };
       if (ctx.ownerUid) booking.assignedMemberUid = ctx.ownerUid;
       if (resolved.serviceId) booking.serviceId = resolved.serviceId;
+      // Booking balances (see functions/balances.js): price, payments, deposit waiting.
+      if (Array.isArray(spec.pay) || spec.depositRequest) {
+        if (spec.price > 0) booking.priceCents = Math.round(spec.price * 100);
+        const payments = {};
+        (spec.pay || []).forEach((p, k) => {
+          const cents = Math.round(p[2] * 100);
+          const at = addDays(start, p[1] === "deposit" ? -(3 + (b % 4)) : 0);
+          payments[`demo_${b}_${k}`] = {
+            kind: p[0], role: p[1], cents,
+            grossCents: p[0] === "cash" ? cents : Math.round(cents * 1.039 + 30),
+            at: Timestamp.fromDate(at > now ? now : at),
+          };
+        });
+        if (Object.keys(payments).length) booking.payments = payments;
+        if (spec.depositRequest) booking.depositRequestCents = Math.round(spec.depositRequest * 100);
+        if (spec.status === "pending_deposit") booking.smsConsentAccepted = true;
+      }
+      // Demo clients have real-looking emails: the balance reminder must never go out for demo rows.
+      booking.balanceReminderSentAt = Timestamp.fromDate(now);
       if (spec.status === "NEW") {
         /* unread inbox */
       } else if (["confirmed", "completed"].includes(spec.status)) {

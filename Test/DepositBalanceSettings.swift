@@ -85,14 +85,16 @@ struct DepositBalanceSettingsSection: View {
     @ObservedObject var model: DepositBalanceSettingsModel
     let showsDeposit: Bool
     let isCharter: Bool
+    /// Pay in full: nothing is owed after paying, so the Balance options are hidden.
+    var showsBalance: Bool = true
 
     var body: some View {
-        Section(
-            header: Text("Deposits & balances"),
-            footer: Text("Balance reminders go to the client by text and email before the appointment. Non-refundable deposits are kept when a booking is cancelled; other payments are still refunded.")
-                .font(.caption2)
-        ) {
-            if showsDeposit {
+        if showsDeposit {
+            Section(
+                header: Text("Deposits"),
+                footer: Text("Non-refundable deposits are kept when a booking is cancelled; other payments are still refunded.")
+                    .font(.caption2)
+            ) {
                 Toggle("Different deposit per service", isOn: $model.perService)
                 if model.perService {
                     if model.services.isEmpty {
@@ -117,16 +119,24 @@ struct DepositBalanceSettingsSection: View {
                     Text("Non-refundable").tag(false)
                 }
             }
-            Picker("Balance due", selection: $model.balanceDue) {
-                Text(isCharter ? "At the trip" : "At the appointment").tag("at")
-                Text(isCharter ? "Before departure" : "Before the appointment").tag("before")
-            }
-            Picker("Balance reminder", selection: $model.reminderDays) {
-                Text("Off").tag(0)
-                Text("1 day before").tag(1)
-                Text("2 days before").tag(2)
-                Text("3 days before").tag(3)
-                Text("1 week before").tag(7)
+        }
+        if showsBalance {
+            Section(
+                header: Text("Balance (money still owed)"),
+                footer: Text("For bookings with a price. The reminder texts and emails the client what's left to pay.")
+                    .font(.caption2)
+            ) {
+                Picker("Balance due", selection: $model.balanceDue) {
+                    Text(isCharter ? "At the trip" : "At the appointment").tag("at")
+                    Text(isCharter ? "Before departure" : "Before the appointment").tag("before")
+                }
+                Picker("Balance reminder", selection: $model.reminderDays) {
+                    Text("Off").tag(0)
+                    Text("1 day before").tag(1)
+                    Text("2 days before").tag(2)
+                    Text("3 days before").tag(3)
+                    Text("1 week before").tag(7)
+                }
             }
         }
     }

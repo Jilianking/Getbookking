@@ -252,6 +252,8 @@ class FirebaseService: ObservableObject {
         let direction = (data["direction"] as? String ?? "").lowercased()
         let from = data["from"] as? String ?? ""
         let to = data["to"] as? String ?? ""
+        let channel = (data["channel"] as? String ?? "").lowercased()
+        let isInstagram = channel == "instagram" || threadId.hasPrefix("ig:")
         let counterpartyPhone = direction == "outbound" ? to : from
         let displayName = (data["clientName"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let paymentKindRaw = (data["paymentKind"] as? String)?
@@ -272,9 +274,17 @@ class FirebaseService: ObservableObject {
         return Message(
             id: doc.documentID,
             clientId: counterpartyPhone,
-            clientName: displayName.isEmpty || ClientsViewModel.isPlaceholderContactName(displayName)
-                ? PhoneFormatting.displayUS(counterpartyPhone)
-                : displayName,
+            clientName: {
+                if isInstagram {
+                    if !displayName.isEmpty, !ClientsViewModel.isPlaceholderContactName(displayName) {
+                        return displayName
+                    }
+                    return "Instagram"
+                }
+                return displayName.isEmpty || ClientsViewModel.isPlaceholderContactName(displayName)
+                    ? PhoneFormatting.displayUS(counterpartyPhone)
+                    : displayName
+            }(),
             content: body,
             sender: direction == "outbound" ? .admin : .client,
             createdAt: createdAt,
@@ -398,6 +408,9 @@ class FirebaseService: ObservableObject {
     }
 
     func sendMessage(_ message: Message) async throws -> String {
+        if PhoneFormatting.isInstagramThreadId(message.threadId) {
+            return try await sendInstagramMessage(message)
+        }
         let toPhone = PhoneFormatting.e164US(message.clientId) ?? message.clientId
         var payload: [String: Any] = [
             "to": toPhone,
@@ -435,6 +448,27 @@ class FirebaseService: ObservableObject {
                 return PhoneFormatting.smsThreadId(returnedThreadId)
             }
             return PhoneFormatting.smsThreadId(message.threadId)
+        } catch {
+            let msg = FirebaseFunctionsErrorHelper.message(from: error)
+            throw NSError(domain: "FirebaseService", code: -1, userInfo: [NSLocalizedDescriptionKey: msg])
+        }
+    }
+
+    private func sendInstagramMessage(_ message: Message) async throws -> String {
+        let threadId = PhoneFormatting.smsThreadId(message.threadId)
+        let payload: [String: Any] = [
+            "threadId": threadId,
+            "body": message.content,
+            "clientName": message.clientName,
+        ]
+        do {
+            let result = try await functions.httpsCallable("sendClientInstagramMessage").call(payload)
+            let data = result.data as? [String: Any] ?? [:]
+            if let returnedThreadId = data["threadId"] as? String,
+               !returnedThreadId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                return PhoneFormatting.smsThreadId(returnedThreadId)
+            }
+            return threadId
         } catch {
             let msg = FirebaseFunctionsErrorHelper.message(from: error)
             throw NSError(domain: "FirebaseService", code: -1, userInfo: [NSLocalizedDescriptionKey: msg])
@@ -520,7 +554,17 @@ class FirebaseService: ObservableObject {
                 cancelRefundStatus: d["cancelRefundStatus"] as? String,
                 holdUntil: (d["holdUntil"] as? Timestamp)?.dateValue(),
                 clientConfirmedAt: (d["clientConfirmedAt"] as? Timestamp)?.dateValue(),
-                rescheduleRequestedAt: (d["rescheduleRequestedAt"] as? Timestamp)?.dateValue()
+                rescheduleRequestedAt: (d["rescheduleRequestedAt"] as? Timestamp)?.dateValue(),
+                noShowAt: (d["noShowAt"] as? Timestamp)?.dateValue(),
+                createdByUid: d["createdByUid"] as? String,
+                priceCents: BookingRequest.intField(d["priceCents"]),
+                bookingPayments: BookingPaymentEntry.parse(d["payments"]),
+                tripCents: BookingRequest.intField(d["tripCents"]),
+                addonCents: BookingRequest.intField(d["addonCents"]),
+                depositPartCents: BookingRequest.intField(d["depositPartCents"]),
+                paidAt: (d["paidAt"] as? Timestamp)?.dateValue(),
+                depositPaidAt: (d["depositPaidAt"] as? Timestamp)?.dateValue(),
+                depositRequestCents: BookingRequest.intField(d["depositRequestCents"])
             )
         }
         if status != nil {
@@ -734,6 +778,72 @@ class FirebaseService: ObservableObject {
         var data = updates
         data["updatedAt"] = Timestamp(date: Date())
         try await db.collection("tenants").document(tenantId).collection("customers").document(customerId).setData(data, merge: true)
+    }
+
+    /// After a contact edit: copies the new name / email / phone onto that client's bookings, so the calendar,
+    /// booking details, the website, and reminder texts all use the current details. Matches bookings by the
+    /// customer id, the old email, or the old phone (in the formats bookings store it). Returns how many changed.
+    @discardableResult
+    func syncCustomerContactToBookings(
+        tenantId: String,
+        customerId: String,
+        oldEmail: String?,
+        oldPhone: String?,
+        name: String,
+        email: String,
+        phone: String?
+    ) async throws -> Int {
+        let col = db.collection("tenants").document(tenantId).collection("bookingRequests")
+        var docs: [String: DocumentSnapshot] = [:]
+        func collect(_ q: Query) async {
+            if let snap = try? await q.getDocuments() {
+                for d in snap.documents { docs[d.documentID] = d }
+            }
+        }
+        await collect(col.whereField("customerId", isEqualTo: customerId))
+        let oldMail = (oldEmail ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        if !oldMail.isEmpty {
+            await collect(col.whereField("customerEmail", in: Array(Set([oldMail, oldMail.lowercased()]))))
+        }
+        // The old phone, plus the number the client record was first filed under (its id is often the
+        // original phone's 10 digits), so a number changed before this sync existed still finds its bookings.
+        var tens: [String] = []
+        if let ten = PhoneFormatting.last10Digits(from: oldPhone) { tens.append(ten) }
+        if customerId.count == 10, customerId.allSatisfy(\.isNumber), !tens.contains(customerId) { tens.append(customerId) }
+        for ten in tens {
+            var forms = Set([ten, "+1" + ten, "1" + ten, PhoneFormatting.displayUS(ten)])
+            if ten == PhoneFormatting.last10Digits(from: oldPhone),
+               let raw = oldPhone?.trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty { forms.insert(raw) }
+            await collect(col.whereField("customerPhone", in: Array(forms.prefix(10))))
+        }
+        let cleanName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanEmail = email.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        var batch = db.batch()
+        var pending = 0
+        var changed = 0
+        for (_, doc) in docs {
+            let d = doc.data() ?? [:]
+            var patch: [String: Any] = [:]
+            if !cleanName.isEmpty, (d["customerName"] as? String) != cleanName { patch["customerName"] = cleanName }
+            if !cleanEmail.isEmpty, ((d["customerEmail"] as? String) ?? "").lowercased() != cleanEmail { patch["customerEmail"] = cleanEmail }
+            if let phone, !phone.isEmpty,
+               PhoneFormatting.last10Digits(from: d["customerPhone"] as? String) != PhoneFormatting.last10Digits(from: phone) {
+                patch["customerPhone"] = phone
+            }
+            if ((d["customerId"] as? String) ?? "").isEmpty { patch["customerId"] = customerId }
+            guard !patch.isEmpty else { continue }
+            patch["updatedAt"] = Timestamp(date: Date())
+            batch.updateData(patch, forDocument: doc.reference)
+            pending += 1
+            changed += 1
+            if pending >= 400 {
+                try await batch.commit()
+                batch = db.batch()
+                pending = 0
+            }
+        }
+        if pending > 0 { try await batch.commit() }
+        return changed
     }
 
     /// Patches `clientName` on SMS threads that match the customer's phone (inbox + thread titles).

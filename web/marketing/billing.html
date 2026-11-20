@@ -21,7 +21,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500&display=swap" rel="stylesheet" />
   <meta name="billing-copy" content="sms-billing-assign-v3" />
   <link rel="stylesheet" href="assets/account.css?v=9" />
-  <link rel="stylesheet" href="assets/billing.css?v=12" />
+  <link rel="stylesheet" href="assets/billing.css?v=13" />
   <script>
     /** Leaves the page; inside the shop app it takes over the whole window (Stripe pages can't load in a frame). */
     function bkGo(url) {
@@ -2097,10 +2097,18 @@
       domainError('');
       resetDomainCheckout();
       var btn = domainEl('domainSearchBtn');
+      var input = domainEl('domainQuery');
+      var list = domainEl('domainResults');
+      // Loading: button spinner + a placeholder row while the registrar checks names (can take a few seconds).
       btn.disabled = true;
+      input.disabled = true;
+      btn.innerHTML = '<span class="bill-spinner" aria-hidden="true"></span>Searching…';
+      btn.setAttribute('aria-busy', 'true');
+      list.innerHTML = '<li class="bill-invoice-item bill-domain-loading" role="status"><div><div class="bill-invoice-title">Checking ' +
+        q.replace(/[&<>"']/g, '') + '…</div><div class="bill-invoice-id">Looking up prices and similar names</div></div><span class="bill-spinner bill-spinner--dark" aria-hidden="true"></span></li>';
+      domainShow('domainResults', true);
       fns.httpsCallable('searchDomains')({ query: q, source: 'web' }).then(function(res) {
         var d = res.data || {};
-        var list = domainEl('domainResults');
         list.innerHTML = '';
         (d.results || []).forEach(function(r) {
           var li = document.createElement('li');
@@ -2134,8 +2142,15 @@
         domainShow('domainResults', (d.results || []).length > 0);
         if (d.message) domainError(d.message);
       }).catch(function(err) {
+        list.innerHTML = '';
+        domainShow('domainResults', false);
         domainError(formatFirebaseHttpsError(err));
-      }).then(function() { btn.disabled = false; });
+      }).then(function() {
+        btn.disabled = false;
+        input.disabled = false;
+        btn.textContent = 'Search';
+        btn.removeAttribute('aria-busy');
+      });
     }
 
     function openDomainCheckout(kind, domain, priceLabel, renewLabel) {

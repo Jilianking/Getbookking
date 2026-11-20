@@ -20,6 +20,9 @@ struct MessagesView: View {
     @State private var pendingDeleteIds: [String] = []
     @State private var showDeleteConfirm = false
     @State private var isDeleting = false
+    /// Inbox channel chips. Resets when Messages is opened again.
+    @State private var channelFilter: MessageInboxChannel = .all
+    @State private var showMessagingSettings = false
     @StateObject private var messagingSettingsViewModel = ManagerSettingsViewModel()
     var drawerState: DrawerState
     let sectionTitle: String
@@ -39,42 +42,53 @@ struct MessagesView: View {
         return []
     }
 
+    private var channelSummaries: [SmsThreadSummary] {
+        switch channelFilter {
+        case .all:
+            return visibleSummaries
+        case .texts:
+            return visibleSummaries.filter { !$0.isInstagram }
+        case .instagram:
+            return visibleSummaries.filter(\.isInstagram)
+        }
+    }
+
     private var filteredSummaries: [SmsThreadSummary] {
         let q = searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        let base = visibleSummaries
+        let base = channelSummaries
         guard !q.isEmpty else { return base }
         let qDigits = PhoneFormatting.digits(from: searchText)
         return base.filter { summary in
             let displayName = viewModel.resolvedDisplayName(for: summary)
+            let handle = (summary.igUsername ?? "").lowercased()
             return displayName.lowercased().contains(q)
                 || summary.clientName.lowercased().contains(q)
+                || handle.contains(q)
                 || summary.lastMessageBody.lowercased().contains(q)
-                || (!qDigits.isEmpty && PhoneFormatting.digits(from: summary.threadId).contains(qDigits))
+                || (!qDigits.isEmpty && !summary.isInstagram && PhoneFormatting.digits(from: summary.threadId).contains(qDigits))
         }
     }
 
     var body: some View {
-        NavigationView {
+        NavigationStack {
             ZStack {
                 VStack(spacing: 0) {
-                    AppSearchField(placeholder: "Search conversations...", text: $searchText)
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 8)
+                    AppFilterChipBar(
+                        filters: MessageInboxChannel.allCases.map { (filter: $0, title: $0.title) },
+                        selection: $channelFilter
+                    )
+                    .padding(.top, 8)
+                    .padding(.bottom, 8)
 
                     Group {
                         if filteredSummaries.isEmpty {
                             ContentUnavailableView {
-                                Label("No messages yet", systemImage: "message")
+                                Label(emptyInboxTitle, systemImage: "message")
                             } description: {
-                                Text(searchText.isEmpty
-                                    ? "Tap the compose button to text a client."
-                                    : "No conversations match your search.")
+                                Text(emptyInboxMessage)
                             } actions: {
-                                if searchText.isEmpty {
-                                    Button("New message") {
-                                        resetComposePrefill()
-                                        showingCompose = true
-                                    }
+                                if emptyInboxOffersCompose {
+                                    Button("New message", action: startNewMessage)
                                 }
                             }
                             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -94,7 +108,8 @@ struct MessagesView: View {
                                         ThreadRow(
                                             summary: summary,
                                             viewModel: viewModel,
-                                            showsDivider: index < filteredSummaries.count - 1
+                                            showsDivider: index < filteredSummaries.count - 1,
+                                            showsChannelLabel: channelFilter != .instagram
                                         )
                                     }
                                     .appTourAnchor(
@@ -183,31 +198,22 @@ struct MessagesView: View {
                             selectedForDelete = []
                         }
                     } else if selectedThreadId == nil {
-                        HStack(spacing: 16) {
+                        Menu {
                             if canDeleteConversations, !filteredSummaries.isEmpty {
                                 Button("Select") {
                                     selectedForDelete = []
                                     isSelecting = true
                                 }
                             }
-                            NavigationLink {
-                                MessagesSettingsView(viewModel: messagingSettingsViewModel)
-                                    .environmentObject(authViewModel)
-                            } label: {
-                                Image(systemName: "gearshape")
-                                    .font(.body)
+                            Button("Settings") {
+                                showMessagingSettings = true
                             }
-                            .accessibilityLabel("Messaging settings")
-
-                            Button(action: {
-                                resetComposePrefill()
-                                showingCompose = true
-                            }) {
-                                Image(systemName: "square.and.pencil")
-                                    .font(.body)
-                            }
-                            .accessibilityLabel("New message")
+                        } label: {
+                            Image(systemName: "ellipsis")
+                                .font(.body.weight(.semibold))
+                                .frame(width: 32, height: 32)
                         }
+                        .accessibilityLabel("More")
                     }
                 }
             }
@@ -229,27 +235,14 @@ struct MessagesView: View {
             .onChange(of: viewModel.lastError) { _, err in
                 showErrorAlert = err != nil
             }
-            .safeAreaInset(edge: .bottom) {
-                if isSelecting, selectedThreadId == nil {
-                    Button(role: .destructive) {
-                        pendingDeleteIds = Array(selectedForDelete)
-                        showDeleteConfirm = true
-                    } label: {
-                        HStack {
-                            if isDeleting { ProgressView() }
-                            Text(selectedForDelete.isEmpty ? "Delete" : "Delete (\(selectedForDelete.count))")
-                                .font(.body.weight(.semibold))
-                        }
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 12)
-                    }
-                    .buttonStyle(.bordered)
-                    .tint(.red)
-                    .disabled(selectedForDelete.isEmpty || isDeleting)
-                    .padding(.horizontal, 16)
-                    .padding(.bottom, 8)
-                    .background(AppDesign.cardBackground)
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                if selectedThreadId == nil {
+                    inboxBottomBar
                 }
+            }
+            .onChange(of: channelFilter) { _, _ in
+                let visibleIds = Set(filteredSummaries.map(\.threadId))
+                selectedForDelete.formIntersection(visibleIds)
             }
             .confirmationDialog(
                 pendingDeleteIds.count == 1
@@ -346,8 +339,11 @@ struct MessagesView: View {
                 viewModel.stopThreadsListening()
                 drawerState.suppressDrawerEdgeOpen = false
             }
+            .navigationDestination(isPresented: $showMessagingSettings) {
+                MessagesSettingsView(viewModel: messagingSettingsViewModel)
+                    .environmentObject(authViewModel)
+            }
         }
-        .navigationViewStyle(.stack)
     }
 
     private func applyOpenThreadFromPush(_ threadId: String?) {
@@ -379,6 +375,100 @@ struct MessagesView: View {
         composePrefillBookingRequestId = nil
         composePrefillMessage = ""
     }
+
+    private var inboxIsSearching: Bool {
+        !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private var emptyInboxTitle: String {
+        if inboxIsSearching { return "No matches" }
+        switch channelFilter {
+        case .instagram:
+            return "No Instagram messages"
+        case .texts:
+            return visibleSummaries.contains(where: \.isInstagram) ? "No texts yet" : "No messages yet"
+        case .all:
+            return "No messages yet"
+        }
+    }
+
+    private var emptyInboxMessage: String {
+        if inboxIsSearching { return "No conversations match your search." }
+        switch channelFilter {
+        case .instagram:
+            return "Clients message you first."
+        case .texts, .all:
+            return "Tap the compose button to text a client."
+        }
+    }
+
+    private var emptyInboxOffersCompose: Bool {
+        !inboxIsSearching && channelFilter != .instagram
+    }
+
+    private func startNewMessage() {
+        resetComposePrefill()
+        showingCompose = true
+    }
+
+    private var inboxBottomBar: some View {
+        Group {
+            if isSelecting {
+                Button(role: .destructive) {
+                    pendingDeleteIds = Array(selectedForDelete)
+                    showDeleteConfirm = true
+                } label: {
+                    HStack {
+                        if isDeleting { ProgressView() }
+                        Text(selectedForDelete.isEmpty ? "Delete" : "Delete (\(selectedForDelete.count))")
+                            .font(.body.weight(.semibold))
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 12)
+                }
+                .buttonStyle(.bordered)
+                .tint(.red)
+                .disabled(selectedForDelete.isEmpty || isDeleting)
+            } else {
+                HStack(spacing: 10) {
+                    AppSearchField(placeholder: "Search conversations...", text: $searchText)
+                    Button(action: startNewMessage) {
+                        Image(systemName: "square.and.pencil")
+                            .font(.body.weight(.semibold))
+                            .foregroundStyle(Color.white)
+                            .frame(width: 44, height: 44)
+                            .background(Circle().fill(AppDesign.brandDark))
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("New message")
+                }
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.top, 8)
+        .padding(.bottom, 8)
+        .frame(maxWidth: .infinity)
+        .background(AppDesign.background)
+        .overlay(alignment: .top) {
+            Rectangle()
+                .fill(AppDesign.chipBorder.opacity(0.9))
+                .frame(height: 0.5)
+        }
+    }
+}
+
+private enum MessageInboxChannel: String, CaseIterable, Hashable {
+    case all
+    case texts
+    case instagram
+
+    var title: String {
+        switch self {
+        case .all: return "All"
+        case .texts: return "Texts"
+        case .instagram: return "Instagram"
+        }
+    }
 }
 
 extension MessagesView {
@@ -398,6 +488,7 @@ struct ThreadRow: View {
     let summary: SmsThreadSummary
     @ObservedObject var viewModel: MessagesViewModel
     var showsDivider: Bool = true
+    var showsChannelLabel: Bool = true
 
     private var displayName: String {
         viewModel.resolvedDisplayName(for: summary)
@@ -409,13 +500,18 @@ struct ThreadRow: View {
                 AppAvatarView(
                     tenantLogoURL: nil,
                     accountPhotoURL: nil,
-                    displayNameFallback: displayName,
+                    displayNameFallback: displayName.hasPrefix("@") ? String(displayName.dropFirst()) : displayName,
                     size: 44
                 )
                 VStack(alignment: .leading, spacing: 4) {
                     Text(displayName)
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(AppDesign.textPrimary)
+                    if summary.isInstagram, showsChannelLabel {
+                        Text("Instagram")
+                            .font(.caption2)
+                            .foregroundStyle(AppDesign.textSecondary)
+                    }
                     if !summary.lastMessageBody.isEmpty {
                         Text(summary.lastMessageBody)
                             .font(.subheadline)
@@ -491,7 +587,11 @@ struct MessageThreadView: View {
                         Text(clientName)
                             .font(.title3.weight(.semibold))
                             .foregroundStyle(AppDesign.textPrimary)
-                        if !clientPhone.isEmpty, clientPhone != clientName {
+                        if isInstagramThread {
+                            Text("Instagram")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        } else if !clientPhone.isEmpty, clientPhone != clientName {
                             Text(clientPhone)
                                 .font(.caption)
                                 .foregroundColor(.secondary)
@@ -556,14 +656,21 @@ struct MessageThreadView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-            if let status = consentStatus, !status.allowsSending {
+            if isInstagramThread, !instagramReplyOpen {
+                Text("Instagram only allows a reply within 24 hours of their last message.")
+                    .font(.caption)
+                    .foregroundStyle(AppDesign.textSecondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 16)
+                    .padding(.top, 8)
+            } else if let status = consentStatus, !status.allowsSending {
                 consentStatusLine(status)
             }
 
             MessageComposerBar(
                 message: $newMessage,
                 darkStyle: false,
-                placeholder: composerAllowsSending ? "Type a message..." : "Texting is off for this client",
+                placeholder: composerPlaceholder,
                 quickPresets: viewModel.smsQuickPresets,
                 isSending: isLoading,
                 canSend: composerAllowsSending,
@@ -578,7 +685,8 @@ struct MessageThreadView: View {
                 fieldFocused: $isComposerFocused,
                 onComposerChromeChanged: {
                     scrollToLatestRequest += 1
-                }
+                },
+                instagramThread: isInstagramThread
             )
             .appTourAnchor(.messagesReply, isActive: appTour.isStepActive(.messagesReply))
             .disabled(!composerAllowsSending)
@@ -603,15 +711,19 @@ struct MessageThreadView: View {
         }
         .task {
             if let summary = viewModel.summary(for: threadId) {
-                clientPhone = PhoneFormatting.displayUS(summary.clientPhoneForSend)
+                clientPhone = summary.isInstagram
+                    ? ""
+                    : PhoneFormatting.displayUS(summary.clientPhoneForSend)
                 clientName = viewModel.resolvedDisplayName(for: summary)
             }
             await sessionStore.loadBookingsIfNeeded(isDemoMode: authViewModel.isDemoMode)
-            let phoneForLookup = clientPhone.isEmpty ? threadId : clientPhone
-            linkedBookingRequestId = BookingRequestPaymentLookup.bookingRequestId(
-                forClientPhone: phoneForLookup,
-                in: sessionStore.bookingRequests
-            )
+            if !isInstagramThread {
+                let phoneForLookup = clientPhone.isEmpty ? threadId : clientPhone
+                linkedBookingRequestId = BookingRequestPaymentLookup.bookingRequestId(
+                    forClientPhone: phoneForLookup,
+                    in: sessionStore.bookingRequests
+                )
+            }
             await clientsViewModel.loadClients(
                 isDemoMode: authViewModel.isDemoMode,
                 sessionStore: sessionStore
@@ -673,10 +785,12 @@ struct MessageThreadView: View {
                 ClientProfileView(
                     client: clientsViewModel.resolveClient(
                         name: clientName,
-                        phone: clientPhone.isEmpty ? threadId : clientPhone
+                        phone: isInstagramThread ? "" : (clientPhone.isEmpty ? threadId : clientPhone)
                     ),
                     clientsViewModel: clientsViewModel,
-                    drawerState: drawerState
+                    drawerState: drawerState,
+                    instagramUsername: instagramProfileHandle,
+                    instagramThreadId: isInstagramThread ? threadId : nil
                 )
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) {
@@ -689,8 +803,42 @@ struct MessageThreadView: View {
         }
     }
 
+    private var isInstagramThread: Bool {
+        viewModel.summary(for: threadId)?.isInstagram == true
+            || PhoneFormatting.isInstagramThreadId(threadId)
+    }
+
+    /// Username without @, used to open the Instagram conversation.
+    private var instagramProfileHandle: String? {
+        guard isInstagramThread else { return nil }
+        if let raw = viewModel.summary(for: threadId)?.igUsername {
+            let handle = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+                .trimmingCharacters(in: CharacterSet(charactersIn: "@"))
+            if !handle.isEmpty { return handle }
+        }
+        let name = clientName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard name.hasPrefix("@") else { return nil }
+        let handle = String(name.dropFirst()).trimmingCharacters(in: .whitespacesAndNewlines)
+        return handle.isEmpty ? nil : handle
+    }
+
+    /// Missing window still allows a try; the server rejects a late reply.
+    private var instagramReplyOpen: Bool {
+        guard isInstagramThread else { return true }
+        guard let expires = viewModel.summary(for: threadId)?.igWindowExpiresAt else { return true }
+        return expires > Date()
+    }
+
+    private var composerPlaceholder: String {
+        if isInstagramThread, !instagramReplyOpen {
+            return "Reply window closed"
+        }
+        return composerAllowsSending ? "Type a message..." : "Texting is off for this client"
+    }
+
     /// Unknown status (still loading or couldn't check) never blocks; the server still enforces consent.
     private var composerAllowsSending: Bool {
+        if isInstagramThread { return instagramReplyOpen }
         guard let status = consentStatus else { return true }
         return status.allowsSending
     }
@@ -749,7 +897,7 @@ struct MessageThreadView: View {
     }
 
     private func refreshConsentStatus() async {
-        if authViewModel.isDemoMode { return }
+        if authViewModel.isDemoMode || isInstagramThread { return }
         guard let status = await viewModel.loadSmsConsentStatus(threadId: threadId) else { return }
         await MainActor.run { consentStatus = status }
     }
@@ -823,6 +971,13 @@ struct MessageThreadView: View {
     }
 
     private func refreshClientDisplayName() {
+        if isInstagramThread {
+            clientPhone = ""
+            clientName = viewModel.summary(for: threadId)?.clientName
+                ?? messages.first?.clientName
+                ?? (clientName.isEmpty ? "Instagram" : clientName)
+            return
+        }
         let phone = clientPhone.isEmpty
             ? (viewModel.summary(for: threadId)?.clientPhoneForSend ?? threadId)
             : clientPhone
@@ -847,7 +1002,7 @@ struct MessageThreadView: View {
             isDemoMode: authViewModel.isDemoMode,
             sessionStore: sessionStore
         )
-        if clientPhone.isEmpty, let first = messages.first {
+        if clientPhone.isEmpty, let first = messages.first, !isInstagramThread {
             clientPhone = PhoneFormatting.displayUS(first.clientId)
         }
         refreshClientDisplayName()

@@ -102,6 +102,34 @@
     return err.message || String(err);
   }
 
+  /** Dollar amount from a money box ("45", "$45", "1,200.5" → number), or NaN. */
+  function moneyVal(v) {
+    var n = parseFloat(String(v == null ? "" : v).replace(/[^0-9.]/g, ""));
+    return isFinite(n) ? n : NaN;
+  }
+
+  /** Turns an input into a money box: "$" inside, no arrows, decimal keyboard, tidied to 0.00 on blur. */
+  function moneyBox(input) {
+    input.type = "text";
+    input.setAttribute("inputmode", "decimal");
+    input.setAttribute("autocomplete", "off");
+    if (!input.placeholder) input.placeholder = "0.00";
+    var n0 = moneyVal(input.value);
+    if (input.value && isFinite(n0)) input.value = n0.toFixed(2);
+    input.addEventListener("blur", function () {
+      var n = moneyVal(input.value);
+      input.value = input.value.trim() && isFinite(n) ? n.toFixed(2) : "";
+    });
+    var wrap = document.createElement("div");
+    wrap.className = "set-money";
+    var sign = document.createElement("span");
+    sign.textContent = "$";
+    sign.setAttribute("aria-hidden", "true");
+    wrap.appendChild(sign);
+    wrap.appendChild(input);
+    return wrap;
+  }
+
   function showMsg(root, text, ok) {
     var p = root.querySelector(".set-msg");
     if (!p) {
@@ -435,12 +463,10 @@
     var depLabel = document.createElement("label");
     depLabel.textContent = "Deposit amount";
     var dep = document.createElement("input");
-    dep.type = "number";
-    dep.min = "0";
-    dep.step = "0.01";
     dep.value = wf.depositAmount ? String(wf.depositAmount) : "";
+    dep.setAttribute("aria-label", "Deposit amount");
     depWrap.appendChild(depLabel);
-    depWrap.appendChild(dep);
+    depWrap.appendChild(moneyBox(dep));
 
     // Different deposit per service: lists every service with its own deposit (blank = the default above).
     var perSvc = toggleRow(
@@ -475,14 +501,11 @@
           var name = document.createElement("span");
           name.textContent = sv.name || "Service";
           var inp = document.createElement("input");
-          inp.type = "number";
-          inp.min = "0";
-          inp.step = "0.01";
-          inp.placeholder = dep.value ? "$" + dep.value : "Default";
+          inp.placeholder = dep.value || "Default";
           inp.value = Number(sv.depositAmount) > 0 ? String(sv.depositAmount) : (dep.value || "");
           inp.setAttribute("aria-label", "Deposit for " + (sv.name || "service"));
           row.appendChild(name);
-          row.appendChild(inp);
+          row.appendChild(moneyBox(inp));
           svcList.appendChild(row);
           svcInputs.push({ id: d.id, input: inp, was: Number(sv.depositAmount) || 0 });
         });
@@ -497,11 +520,6 @@
       if (v === "calendar_slots") v = String(wf.confirmationType || "");
       return v === "deposit_to_confirm" || v === "approve_and_deposit";
     }
-    function syncDep() {
-      depWrap.style.display = takesDeposit(select.value) ? "" : "none";
-    }
-    select.addEventListener("change", syncDep);
-    syncDep();
     form.appendChild(typeLabel);
     form.appendChild(select);
     form.appendChild(depWrap);
@@ -524,6 +542,25 @@
       form.appendChild(sel);
       return sel;
     }
+    // Deposit refunds only matter when the booking type takes a deposit.
+    var depRefund = pick("Deposits when a booking is cancelled", "bkDepRefund", [
+      ["yes", "Refundable"], ["no", "Non-refundable"],
+    ], wf.depositRefundable === false ? "no" : "yes");
+    depWrap.appendChild(depRefund.previousSibling);
+    depWrap.appendChild(depRefund);
+
+    // Balance (money still owed): any booking with a price, except Pay in full (nothing is owed after paying).
+    var balWrap = document.createElement("div");
+    balWrap.className = "set-bal-group";
+    var balHead = document.createElement("p");
+    balHead.className = "set-group-title";
+    balHead.textContent = "Balance (money still owed)";
+    var balHint = document.createElement("p");
+    balHint.className = "set-lead";
+    balHint.textContent = "For bookings with a price. The reminder texts the client what's left to pay.";
+    balWrap.appendChild(balHead);
+    balWrap.appendChild(balHint);
+    form.appendChild(balWrap);
     var balDue = pick("Balance due", "bkBalDue", [
       ["at", charterShop ? "At the trip" : "At the appointment"],
       ["before", charterShop ? "Before departure" : "Before the appointment"],
@@ -531,9 +568,15 @@
     var remindDays = pick("Balance reminder", "bkRemind", [
       [0, "Off"], [1, "1 day before"], [2, "2 days before"], [3, "3 days before"], [7, "1 week before"],
     ], wf.balanceReminderDays != null ? wf.balanceReminderDays : (charterShop ? 2 : 1));
-    var depRefund = pick("Deposits when a booking is cancelled", "bkDepRefund", [
-      ["yes", "Refundable"], ["no", "Non-refundable"],
-    ], wf.depositRefundable === false ? "no" : "yes");
+    [balDue.previousSibling, balDue, remindDays.previousSibling, remindDays].forEach(function (el) { balWrap.appendChild(el); });
+
+    function syncDep() {
+      depWrap.style.display = takesDeposit(select.value) ? "" : "none";
+      var v = select.value === "calendar_slots" ? String(wf.confirmationType || "") : select.value;
+      balWrap.style.display = v === "pay_in_full" ? "none" : "";
+    }
+    select.addEventListener("change", syncDep);
+    syncDep();
 
     if (isTeam()) {
       form.appendChild(toggleRow(
@@ -587,7 +630,7 @@
         payload.confirmationType = chosen;
       }
       if (takesDeposit(chosen)) {
-        var amount = Number(dep.value);
+        var amount = moneyVal(dep.value);
         if (amount > 0) payload.depositAmount = amount;
       }
       save.disabled = true;
@@ -605,7 +648,7 @@
         var batch = db.batch();
         var changed = 0;
         svcInputs.forEach(function (row) {
-          var v = Number(row.input.value);
+          var v = moneyVal(row.input.value);
           var next = v > 0 ? Math.round(v * 100) / 100 : null;
           if ((next || 0) === row.was) return;
           batch.update(db.collection("tenants").doc(state.tenantId).collection("services").doc(row.id), { depositAmount: next });
@@ -672,21 +715,48 @@
       '<label class="set-toggle"><div><strong>Include duration</strong></div><input type="checkbox" id="svcDurOn" /></label>' +
       '<label>Duration (minutes)</label><input type="number" id="svcDur" min="5" step="5" value="60" />' +
       '<label class="set-toggle"><div><strong>Show starting price</strong></div><input type="checkbox" id="svcPriceOn" /></label>' +
-      '<label>Price</label><input type="number" id="svcPrice" min="0" step="0.01" />' +
+      '<label for="svcPrice">Price</label><div class="set-money"><span aria-hidden="true">$</span><input type="text" id="svcPrice" inputmode="decimal" placeholder="0.00" autocomplete="off" /></div>' +
       '<div class="set-actions"><button type="button" class="set-cancel">Cancel</button><button type="submit" class="set-save">Add ' + noun + '</button></div>';
     modal.querySelector(".acct-modal-card").appendChild(form);
+    // Typing a price turns on "Show starting price"; leaving the box tidies it to 0.00.
+    var priceInput = form.querySelector("#svcPrice");
+    priceInput.addEventListener("input", function () {
+      if (priceInput.value.trim()) form.querySelector("#svcPriceOn").checked = true;
+    });
+    priceInput.addEventListener("blur", function () {
+      var n = moneyVal(priceInput.value);
+      priceInput.value = priceInput.value.trim() && isFinite(n) ? n.toFixed(2) : "";
+    });
     body.appendChild(backdrop);
     body.appendChild(modal);
 
-    function setModal(open) {
+    // The service being edited, or null when adding a new one.
+    var editing = null;
+
+    function setModal(open, item) {
       backdrop.classList.toggle("hidden", !open);
       modal.classList.toggle("hidden", !open);
       document.body.classList.toggle("acct-modal-open", open);
       if (open) {
+        editing = item || null;
         form.reset();
         var msg = form.querySelector(".set-msg");
         if (msg) msg.remove();
+        modal.querySelector(".acct-modal-head h2").textContent = (editing ? "Edit " : "New ") + noun;
+        form.querySelector(".set-save").textContent = editing ? "Save changes" : "Add " + noun;
+        if (editing) {
+          var d = editing.data;
+          form.querySelector("#svcName").value = d.name || "";
+          var dur = Number(d.durationMinutes);
+          form.querySelector("#svcDurOn").checked = dur > 0;
+          form.querySelector("#svcDur").value = dur > 0 ? dur : 60;
+          var price = Number(d.price);
+          form.querySelector("#svcPriceOn").checked = price > 0;
+          form.querySelector("#svcPrice").value = price > 0 ? price.toFixed(2) : "";
+        }
         form.querySelector("#svcName").focus();
+      } else {
+        editing = null;
       }
     }
     addBtn.addEventListener("click", function () { setModal(true); });
@@ -723,6 +793,12 @@
           if (d.durationMinutes) bits.push(d.durationMinutes + " min");
           if (d.price) bits.push("$" + Number(d.price));
           rowEl.innerHTML = "<p><strong>" + esc(d.name || "Untitled") + "</strong><span>" + esc(bits.join(" · ")) + "</span></p>";
+          var edit = document.createElement("button");
+          edit.type = "button";
+          edit.textContent = "Edit";
+          edit.className = "set-item-edit";
+          edit.addEventListener("click", function () { setModal(true, item); });
+          rowEl.appendChild(edit);
           var rm = document.createElement("button");
           rm.type = "button";
           rm.textContent = "Remove";
@@ -749,12 +825,26 @@
         isActive: true,
         sortOrder: Date.now(),
       };
-      if (includeDur) payload.durationMinutes = Math.max(5, Number(form.querySelector("#svcDur").value) || 60);
-      if (showPrice) {
-        var price = Number(form.querySelector("#svcPrice").value);
-        if (price > 0) payload.price = price;
+      var dur = includeDur ? Math.max(5, Number(form.querySelector("#svcDur").value) || 60) : null;
+      var price = showPrice ? moneyVal(form.querySelector("#svcPrice").value) : 0;
+      if (showPrice && !(price > 0)) return showMsg(form, "Enter a price, or turn off Show starting price.", false);
+      var col = db.collection("tenants").doc(state.tenantId).collection("services");
+      var save;
+      if (editing) {
+        // Keep the slug so existing booking links keep working.
+        var del = firebase.firestore.FieldValue.delete();
+        save = col.doc(editing.id).update({
+          name: name,
+          durationMinutes: dur || del,
+          price: showPrice ? Math.round(price * 100) / 100 : del,
+          updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+        });
+      } else {
+        if (dur) payload.durationMinutes = dur;
+        if (showPrice) payload.price = Math.round(price * 100) / 100;
+        save = col.add(payload);
       }
-      db.collection("tenants").doc(state.tenantId).collection("services").add(payload).then(function () {
+      save.then(function () {
         setModal(false);
         load();
       }).catch(function (err) { showMsg(form, callableError(err), false); });
@@ -1090,14 +1180,12 @@
     var depLabel = document.createElement("label");
     depLabel.textContent = "Deposit amount";
     var dep = document.createElement("input");
-    dep.type = "number";
-    dep.min = "0";
-    dep.step = "0.01";
     dep.value = state.userData.workflow && state.userData.workflow.depositAmount ? String(state.userData.workflow.depositAmount) : "";
+    dep.setAttribute("aria-label", "Deposit amount");
     form.appendChild(label);
     form.appendChild(select);
     form.appendChild(depLabel);
-    form.appendChild(dep);
+    form.appendChild(moneyBox(dep));
     var actions = document.createElement("div");
     actions.className = "set-actions";
     var save = document.createElement("button");
@@ -1113,7 +1201,7 @@
         responseTimeHours: (state.userData.workflow && state.userData.workflow.responseTimeHours) || 24,
       };
       if (select.value === "deposit_to_confirm" || select.value === "approve_and_deposit") {
-        var amount = Number(dep.value);
+        var amount = moneyVal(dep.value);
         if (amount > 0) wfData.depositAmount = amount;
       }
       db.collection("users").doc(state.user.uid).set({ workflow: wfData }, { merge: true }).then(function () {

@@ -67,11 +67,20 @@ enum PhoneFormatting {
         return nil
     }
 
+    /// Instagram thread ids (`ig:{accountId}:{customerId}`) must pass through unchanged.
+    static func isInstagramThreadId(_ raw: String) -> Bool {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.hasPrefix("ig:") else { return false }
+        let parts = trimmed.split(separator: ":", omittingEmptySubsequences: false)
+        guard parts.count == 3, parts[0] == "ig" else { return false }
+        return parts[1].allSatisfy(\.isNumber) && parts[2].allSatisfy(\.isNumber) && !parts[1].isEmpty && !parts[2].isEmpty
+    }
+
     /// Thread id for SMS collections; prefers E.164, falls back to trimmed input.
-    /// Line-scoped ids (`l{lineDigits}_c{clientDigits}`) must pass through unchanged.
+    /// Line-scoped ids (`l{lineDigits}_c{clientDigits}`) and Instagram ids must pass through unchanged.
     static func smsThreadId(_ raw: String) -> String {
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        if isLineScopedThreadId(trimmed) { return trimmed }
+        if isInstagramThreadId(trimmed) || isLineScopedThreadId(trimmed) { return trimmed }
         return e164US(trimmed) ?? trimmed
     }
 

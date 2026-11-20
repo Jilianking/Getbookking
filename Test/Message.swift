@@ -10,6 +10,15 @@ struct SmsThreadSummary: Identifiable, Equatable {
     let assignedMemberUid: String?
     let smsLineScope: String?
     let counterpartPhone: String?
+    var channel: String = "sms"
+    var igUsername: String? = nil
+    var igScopedUserId: String? = nil
+    var igWindowExpiresAt: Date? = nil
+
+    var isInstagram: Bool {
+        channel.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "instagram"
+            || threadId.hasPrefix("ig:")
+    }
 
     /// Studio / owner inbox threads (not a teammate personal line).
     var isStudioLine: Bool {
@@ -24,6 +33,7 @@ struct SmsThreadSummary: Identifiable, Equatable {
     }
 
     var clientPhoneForSend: String {
+        if isInstagram { return "" }
         if let counterpart = counterpartPhone?.trimmingCharacters(in: .whitespacesAndNewlines),
            !counterpart.isEmpty,
            let e164 = PhoneFormatting.e164US(counterpart) {
@@ -38,12 +48,29 @@ struct SmsThreadSummary: Identifiable, Equatable {
         let threadId = ((data["threadId"] as? String) ?? document.documentID)
             .trimmingCharacters(in: .whitespacesAndNewlines)
         guard !threadId.isEmpty else { return nil }
+        let channel = ((data["channel"] as? String) ?? "sms")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let isInstagram = channel.lowercased() == "instagram" || threadId.hasPrefix("ig:")
+        let igUsername = (data["igUsername"] as? String)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
         let storedName = (data["clientName"] as? String)?
             .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let counterpart = (data["counterpartPhone"] as? String) ?? threadId
-        let clientName = storedName.isEmpty || ClientsViewModel.isPlaceholderContactName(storedName)
-            ? PhoneFormatting.displayUS(counterpart)
-            : storedName
+        let handle = (igUsername?.isEmpty == false)
+            ? (igUsername!.hasPrefix("@") ? igUsername! : "@\(igUsername!)")
+            : ""
+        let clientName: String = {
+            if isInstagram {
+                if !handle.isEmpty { return handle }
+                if !storedName.isEmpty, !ClientsViewModel.isPlaceholderContactName(storedName) {
+                    return storedName
+                }
+                return "Instagram"
+            }
+            return storedName.isEmpty || ClientsViewModel.isPlaceholderContactName(storedName)
+                ? PhoneFormatting.displayUS(counterpart)
+                : storedName
+        }()
         let lastMessageBody = (data["lastMessageBody"] as? String) ?? ""
         let lastMessageAt = (data["lastMessageAt"] as? Timestamp)?.dateValue()
         let assignedMemberUid = (data["assignedMemberUid"] as? String)?
@@ -52,6 +79,8 @@ struct SmsThreadSummary: Identifiable, Equatable {
             .trimmingCharacters(in: .whitespacesAndNewlines)
         let counterpartPhone = (data["counterpartPhone"] as? String)?
             .trimmingCharacters(in: .whitespacesAndNewlines)
+        let igScopedUserId = (data["igScopedUserId"] as? String)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
         return SmsThreadSummary(
             threadId: threadId,
             clientName: clientName,
@@ -59,7 +88,11 @@ struct SmsThreadSummary: Identifiable, Equatable {
             lastMessageAt: lastMessageAt,
             assignedMemberUid: assignedMemberUid?.isEmpty == false ? assignedMemberUid : nil,
             smsLineScope: smsLineScope?.isEmpty == false ? smsLineScope : nil,
-            counterpartPhone: counterpartPhone?.isEmpty == false ? counterpartPhone : nil
+            counterpartPhone: counterpartPhone?.isEmpty == false ? counterpartPhone : nil,
+            channel: channel.isEmpty ? "sms" : channel,
+            igUsername: igUsername?.isEmpty == false ? igUsername : nil,
+            igScopedUserId: igScopedUserId?.isEmpty == false ? igScopedUserId : nil,
+            igWindowExpiresAt: (data["igWindowExpiresAt"] as? Timestamp)?.dateValue()
         )
     }
 }

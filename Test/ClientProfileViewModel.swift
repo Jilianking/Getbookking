@@ -444,8 +444,27 @@ final class ClientProfileViewModel: ObservableObject {
             updates["profileExtras"] = cleanedExtras.map { ["id": $0.id, "label": $0.label, "value": $0.value] }
         }
 
+        let oldEmail = client.email
+        let oldPhone = client.phone
         do {
             try await firebaseService.updateTenantCustomer(tenantId: tid, customerId: customerId, updates: updates)
+            // Bookings keep their own copy of the contact: update them so the calendar and booking details match.
+            do {
+                let changed = try await firebaseService.syncCustomerContactToBookings(
+                    tenantId: tid,
+                    customerId: customerId,
+                    oldEmail: oldEmail,
+                    oldPhone: oldPhone,
+                    name: name,
+                    email: email,
+                    phone: PhoneFormatting.normalizedForStorage(phone)
+                )
+                if changed > 0 {
+                    NotificationCenter.default.post(name: .bookingContactsChanged, object: nil)
+                }
+            } catch {
+                print("Error syncing contact to bookings: \(error)")
+            }
             client.name = name.trimmingCharacters(in: .whitespacesAndNewlines)
             client.email = email.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
             client.phone = PhoneFormatting.normalizedForStorage(phone)

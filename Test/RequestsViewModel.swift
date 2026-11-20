@@ -556,44 +556,60 @@ class RequestsViewModel: ObservableObject {
     }
 
     /// Creates a Stripe deposit link and texts it to the client (after confirm).
-    func sendDepositLinkViaSms(for booking: BookingRequest, depositAmount: Double) async {
-        if let store = sessionStore, store.isDemoSession { return }
+    struct DepositLinkResult {
+        let url: String
+        let texted: Bool
+        let error: String?
+    }
+
+    /// Makes a deposit link and texts it to the client. Returns the link even when the text can't go out
+    /// (no phone, client unsubscribed…) so the shop can share it another way; nil if the link couldn't be made.
+    @discardableResult
+    func sendDepositLinkViaSms(for booking: BookingRequest, depositAmount: Double) async -> DepositLinkResult? {
+        if let store = sessionStore, store.isDemoSession { return nil }
         let cents = Int(round(depositAmount * 100))
         guard cents >= 50 else {
             await MainActor.run {
                 actionError = "Deposit must be at least $0.50 to send a payment link."
             }
-            return
+            return nil
         }
-        let phoneRaw = (booking.customerPhone ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !PhoneFormatting.digits(from: phoneRaw).isEmpty else {
-            await MainActor.run {
-                actionError = "Client has no phone number — deposit link was not sent."
-            }
-            return
-        }
+        let rid = (booking.documentId ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         do {
             var payload: [String: Any] = ["serviceAmountCents": cents]
-            if let rid = booking.documentId?.trimmingCharacters(in: .whitespacesAndNewlines), !rid.isEmpty {
+            if !rid.isEmpty {
                 payload["bookingRequestId"] = rid
+                // Remember the amount for "Resend deposit link".
+                if let tid = tenantId {
+                    try? await Firestore.firestore().collection("tenants").document(tid)
+                        .collection("bookingRequests").document(rid).updateData(["depositRequestCents": cents])
+                }
             }
             let result = try await functions.httpsCallable("createDepositLink").call(payload)
             guard let data = result.data as? [String: Any],
                   let urlString = data["url"] as? String,
                   !urlString.isEmpty else {
                 await MainActor.run { actionError = "Could not create deposit link." }
-                return
+                return nil
             }
-            let e164 = PhoneFormatting.e164US(phoneRaw) ?? phoneRaw
+            let phoneRaw = (booking.customerPhone ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            guard let e164 = PhoneFormatting.e164US(phoneRaw) else {
+                let msg = "This client has no phone number."
+                await MainActor.run { actionError = msg + " Share the deposit link from the booking." }
+                return DepositLinkResult(url: urlString, texted: false, error: msg)
+            }
+            let first = BookingTextCopy.firstName(booking.customerName)
+            let what = (booking.serviceName ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            let shop = shopDisplayNameForTexts
+            let dollars = cents % 100 == 0 ? "\(cents / 100)" : String(format: "%.2f", Double(cents) / 100)
+            let body = "Hi\(first.isEmpty ? "" : " " + first), to hold your \(what.isEmpty ? "appointment" : what)"
+                + BookingTextCopy.whenPhrase(booking.departureStart)
+                + " with \(shop), pay the $\(dollars) deposit here: \(urlString)"
             let message = Message(
                 id: nil,
                 clientId: e164,
                 clientName: booking.customerName ?? "Client",
-                content: Message.paymentRequestSMSBody(
-                    kind: .deposit,
-                    amountCents: cents,
-                    url: urlString
-                ),
+                content: body,
                 sender: .admin,
                 createdAt: Date(),
                 read: true,
@@ -602,12 +618,30 @@ class RequestsViewModel: ObservableObject {
                 amountCents: cents,
                 paymentUrl: urlString
             )
-            try await firebaseService.sendMessage(message)
+            do {
+                try await firebaseService.sendMessage(message)
+                return DepositLinkResult(url: urlString, texted: true, error: nil)
+            } catch {
+                var msg = FirebaseFunctionsErrorHelper.message(from: error)
+                if msg.range(of: "opt|unsubscrib|stop", options: [.regularExpression, .caseInsensitive]) != nil {
+                    msg = "This client unsubscribed from texts (replied STOP)."
+                }
+                await MainActor.run { actionError = "The deposit text didn't send: \(msg) Share the link from the booking." }
+                return DepositLinkResult(url: urlString, texted: false, error: msg)
+            }
         } catch {
             await MainActor.run {
                 actionError = FirebaseFunctionsErrorHelper.message(from: error)
             }
+            return nil
         }
+    }
+
+    /// Shop name for client texts.
+    var shopDisplayNameForTexts: String {
+        let t = sessionStore?.tenant ?? [:]
+        let name = ((t["businessName"] as? String) ?? (t["displayName"] as? String) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        return name.isEmpty ? "us" : name
     }
 
     /// Owner / managers with view-all: set or clear staff on a booking request.

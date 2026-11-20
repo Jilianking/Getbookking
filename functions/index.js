@@ -32,6 +32,10 @@
  * Paid subscription (active) required; free trial (trialing) cannot enable SMS —
  * unless BYPASS_SUBSCRIPTION_PAYMENT_GATE is true in sms.js (testing only).
  *
+ * Instagram DMs: set secrets META_APP_SECRET, META_INSTAGRAM_APP_SECRET,
+ * META_WEBHOOK_VERIFY_TOKEN. Paid plans only. Webhook and OAuth URLs are in instagram.js.
+ * Subscribe the webhook in Meta only after metaInstagramWebhook is deployed.
+ *
  * Custom domains (Namecheap): set secret NAMECHEAP_API_KEY and params
  * NAMECHEAP_API_USER, NAMECHEAP_CLIENT_IP; optional NAMECHEAP_USERNAME,
  * NAMECHEAP_API_HOST (sandbox default), NAMECHEAP_NAMESERVER_1/2.
@@ -65,6 +69,7 @@ const {
   normalizeIndustry,
 } = require("./signupPayloads");
 const sms = require("./sms");
+const instagram = require("./instagram");
 const teamPaymentSplit = require("./teamPaymentSplit");
 const {
   isDemoShowcaseStripeAccountId,
@@ -7510,6 +7515,31 @@ const publicWebCallableOptions = {
  * Public checkout page for a deposit or manual payment link.
  * Params: { tenantSlug, paymentIntentId }
  */
+/**
+ * Deposit link → "Pay in full": the booking's price (its own, or its service's) minus what's already paid.
+ * Offered only on deposit links for a booking with a price higher than the deposit.
+ * Returns { available, depositCents, fullCents }.
+ */
+async function depositPayFullInfo(tenantId, meta) {
+  const none = { available: false, depositCents: 0, fullCents: 0 };
+  const rid = (meta.bookingRequestId || "").toString().trim();
+  if (!rid || meta.balanceLink === "true" || (meta.paymentKind || "") !== "deposit") return none;
+  const depositCents = parseInt(meta.depositOriginalCents || meta.serviceAmountCents, 10) || 0;
+  if (depositCents <= 0) return none;
+  const snap = await db.collection("tenants").doc(tenantId).collection("bookingRequests").doc(rid).get();
+  if (!snap.exists) return none;
+  const d = snap.data() || {};
+  let price = balances.bookingPriceCents(d);
+  if (price == null && d.serviceId) {
+    const svc = await db.collection("tenants").doc(tenantId).collection("services").doc(String(d.serviceId)).get();
+    const p = svc.exists ? Number((svc.data() || {}).price) : NaN;
+    if (Number.isFinite(p) && p > 0) price = Math.round(p * 100);
+  }
+  if (price == null) return { ...none, depositCents };
+  const fullCents = Math.max(0, price - balances.paidServiceCents(d));
+  return { available: fullCents > depositCents && fullCents <= 5000000, depositCents, fullCents };
+}
+
 exports.getDepositCheckout = onCall(publicWebCallableOptions, async (request) => {
   const data = request.data || {};
   const tenantSlug = (data.tenantSlug || "").toString().trim().toLowerCase();
@@ -7538,6 +7568,8 @@ exports.getDepositCheckout = onCall(publicWebCallableOptions, async (request) =>
   const businessName = (tenantData.businessName || tenantData.displayName || "Payment").toString();
   const pk = stripePublishableKeyParam.value().trim();
   const paid = pi.status === "succeeded";
+  const payFull = paid ? { available: false } : await depositPayFullInfo(resolved.id, meta).catch(() => ({ available: false }));
+  const payFullOn = meta.payFull === "true";
   return {
     paid,
     status: pi.status,
@@ -7553,8 +7585,13 @@ exports.getDepositCheckout = onCall(publicWebCallableOptions, async (request) =>
     totalCents: paid ? pi.amount : priced ? priced.totalCents : pi.amount,
     rateLabel: priced ? priced.rateLabel : "2.9% + 30¢",
     method: priced ? priced.method : "card",
-    // The pay page offers 15/20/25%/custom/no tip when the shop allows tips on this kind of payment.
-    tipsAllowed: !paid && tipsEnabledForTenant(tenantData) && paymentKindAllowsTip(meta.paymentKind),
+    // The pay page offers 15/20/25%/custom/no tip when the shop allows tips on this kind of payment
+    // (deposits only when the client chose to pay in full).
+    tipsAllowed: !paid && tipsEnabledForTenant(tenantData) && (paymentKindAllowsTip(meta.paymentKind) || payFullOn),
+    tipsEnabled: tipsEnabledForTenant(tenantData),
+    payFull: payFull.available
+      ? { available: true, depositCents: payFull.depositCents, fullCents: payFull.fullCents, selected: payFullOn }
+      : { available: false },
     tipPercents: Array.isArray(tenantData.tipPercents) && tenantData.tipPercents.length === 3
       ? tenantData.tipPercents.map((n) => Number(n) || 0)
       : [15, 20, 25],
@@ -7633,11 +7670,36 @@ exports.repriceCustomerCheckout = onCall(publicWebCallableOptions, async (reques
     throw new HttpsError("invalid-argument", "That payment method cannot be repriced here.");
   }
   let pricingMeta = meta;
-  if (data.tipCents != null && paymentKindAllowsTip(meta.paymentKind)) {
+  // Deposit link: switch between the deposit and paying in full (amount set here, never by the browser).
+  if (data.payFull != null && (meta.paymentKind || "") === "deposit" && meta.bookingRequestId) {
+    const info = await depositPayFullInfo(resolved.id, meta);
+    const wantFull = data.payFull === true && info.available;
+    const cents = wantFull ? info.fullCents : (info.depositCents || parseInt(meta.serviceAmountCents, 10) || 0);
     pricingMeta = {
-      ...meta,
+      ...pricingMeta,
+      serviceAmountCents: String(cents),
+      feeBaseCents: String(cents),
+      depositOriginalCents: String(info.depositCents || parseInt(meta.depositOriginalCents || meta.serviceAmountCents, 10) || 0),
+      payFull: wantFull ? "true" : "false",
+      productName: wantFull ? "Pay in full" : (meta.depositProductName || meta.productName || "Deposit"),
+      depositProductName: meta.depositProductName || meta.productName || "Deposit",
+      // Switching resets the tip; the client picks again for the new amount.
+      tipCents: "0",
+    };
+    // Team split is a percentage of the service: recompute it for the new amount.
+    if ((meta.splitApplied || "") === "true") {
+      const pct = Number(meta.splitPercentApplied) || 0;
+      const studio = Math.max(0, Math.min(cents, Math.round(cents * pct / 100)));
+      pricingMeta.studioShareCents = String(studio);
+      pricingMeta.artistShareCents = String(cents - studio);
+    }
+  }
+  const tipOk = paymentKindAllowsTip(pricingMeta.paymentKind) || pricingMeta.payFull === "true";
+  if (data.tipCents != null && tipOk) {
+    pricingMeta = {
+      ...pricingMeta,
       tipCents: String(tipsEnabledForTenant(tenantData)
-        ? parseTipCents(data.tipCents, parseInt(meta.serviceAmountCents, 10) || 0)
+        ? parseTipCents(data.tipCents, parseInt(pricingMeta.serviceAmountCents, 10) || 0)
         : 0),
     };
   }
@@ -7646,7 +7708,7 @@ exports.repriceCustomerCheckout = onCall(publicWebCallableOptions, async (reques
     throw new HttpsError("failed-precondition", "This payment is missing its service amount.");
   }
   const nextMeta = {
-    ...meta,
+    ...pricingMeta,
     surchargeCents: String(priced.surchargeCents),
     tipCents: String(priced.tipCents || 0),
     checkoutMethod: priced.method,
@@ -7673,7 +7735,7 @@ exports.repriceCustomerCheckout = onCall(publicWebCallableOptions, async (reques
       { merge: true }
     );
   }
-  return priced;
+  return { ...priced, productName: (pricingMeta.productName || meta.productName || "Payment").toString(), payFullSelected: pricingMeta.payFull === "true" };
 });
 
 
@@ -10911,6 +10973,9 @@ function serializeTeamMember(doc, ownerUid, tenant, ownerUserData) {
     smsMonthlyUsageCount: sms.smsMonthlyUsageForMember(d, tenant).count,
     smsMonthlyLimit: sms.smsMonthlyUsageForMember(d, tenant).limit,
     smsMonthlyUsageRemaining: sms.smsMonthlyUsageForMember(d, tenant).remaining,
+    igStatus: (d.igStatus || "off").toString(),
+    igUsername: (d.igUsername || "").toString(),
+    igProvisionError: (d.igProvisionError || "").toString(),
     personalConfirmationType: personalRaw,
     effectiveConfirmationType: (effective.confirmationType || "").toString(),
   };
@@ -11904,6 +11969,47 @@ exports.listTenantMembers = functions
     members,
     ...messaging,
   };
+});
+
+/**
+ * Insights → Tips: tipped payments since `fromMs` (owner, or a manager allowed to see earnings).
+ * Returns { tips: [{ createdMs, tipCents, serviceCents, staffUid }] } — tips go 100% to staff.
+ */
+exports.getTipsSummary = functions.https.onCall(async (data, context) => {
+  if (!context.auth) {
+    throw new functions.https.HttpsError("unauthenticated", "Must be signed in");
+  }
+  const ctx = await getMemberAccessContext(context.auth.uid);
+  const perms = ctx.managerPermissions || {};
+  if (!ctx.isOwner && !(ctx.accessRole === "manager" && perms.viewEarningsReports === true)) {
+    throw new functions.https.HttpsError("permission-denied", "Only people who can see earnings can see tips.");
+  }
+  let fromMs = Number(data && data.fromMs);
+  if (!Number.isFinite(fromMs) || fromMs <= 0) fromMs = Date.now() - 60 * 864e5;
+  // Never more than ~2 years back.
+  fromMs = Math.max(fromMs, Date.now() - 800 * 864e5);
+  const snap = await db
+    .collection("tenants")
+    .doc(ctx.tenantId)
+    .collection("paymentLedger")
+    .where("createdAt", ">=", admin.firestore.Timestamp.fromMillis(fromMs))
+    .limit(5000)
+    .get();
+  const tips = [];
+  snap.forEach((doc) => {
+    const l = doc.data() || {};
+    const tip = Math.max(0, Math.round(Number(l.tipCents) || 0));
+    if (tip <= 0) return;
+    if (l.refundedAt || l.status === "refunded") return;
+    const created = l.createdAt && l.createdAt.toMillis ? l.createdAt.toMillis() : 0;
+    tips.push({
+      createdMs: created,
+      tipCents: tip,
+      serviceCents: Math.max(0, Math.round(Number(l.serviceCents) || 0)),
+      staffUid: (l.attributedMemberUid || ctx.tenant.ownerUid || "").toString(),
+    });
+  });
+  return { tips };
 });
 
 /**
@@ -13655,6 +13761,9 @@ function serializeMessagingFields(tenant, ownerUserData, lineSummary) {
     smsPhonePurchasingBlockedDuringTestFlight:
       sms.isSmsPhonePurchasingBlockedDuringTestFlight(tenant) === true,
     smsPhonePurchaseBlockMessage: (sms.smsPhonePurchaseBlockReason(tenant) || "").toString(),
+    igStatus: (tenant.igStatus || "off").toString(),
+    igUsername: (tenant.igUsername || "").toString(),
+    igProvisionError: (tenant.igProvisionError || "").toString(),
   };
 }
 
@@ -17171,6 +17280,8 @@ const { registerBookingDepositFunctions } = require("./bookingDeposit");
 registerBookingDepositFunctions(exports, { stripeSecretKey, resolveTenantBySlug });
 
 const balances = require("./balances");
+// Copies on bookings (client contact, service name, team member name) follow edits to the original.
+require("./syncCopies").registerSyncCopies(exports);
 balances.registerBalanceFunctions(exports, { getMemberAccessContext, sms, stripeSecretKey, twilioAccountSid: sms.twilioAccountSid, twilioAuthToken: sms.twilioAuthToken });
 
 registerMcpFunctions(exports, { stripeSecretKey, Stripe, twilioAccountSid: sms.twilioAccountSid, twilioAuthToken: sms.twilioAuthToken });
@@ -17234,3 +17345,10 @@ async function notifyOwnerAboutAccount({ tenantId, tenant, title, body, emailSub
     console.warn("notifyOwnerAboutAccount email", tenantId, e.message || e);
   }
 }
+
+exports.metaInstagramWebhook = instagram.metaInstagramWebhook;
+exports.instagramOAuthCallback = instagram.instagramOAuthCallback;
+exports.startInstagramConnect = instagram.startInstagramConnect;
+exports.disconnectInstagram = instagram.disconnectInstagram;
+exports.sendClientInstagramMessage = instagram.sendClientInstagramMessage;
+exports.refreshInstagramTokens = instagram.refreshInstagramTokens;

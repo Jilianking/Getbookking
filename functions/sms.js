@@ -1662,6 +1662,7 @@ async function notifyInboundClientSms(tenantId, opts) {
   const trimmedBodyPreview = rawBodyPreview.trim();
   const assignedMemberUid = ((opts && opts.assignedMemberUid) || "").toString().trim();
   const smsLineScope = ((opts && opts.smsLineScope) || "tenant").toString().trim();
+  const pushType = ((opts && opts.pushType) || "sms_message").toString().trim() || "sms_message";
   if (!tenantId || !threadId) return;
 
   let displayName = ((opts && opts.clientName) || "").toString().trim();
@@ -1701,6 +1702,14 @@ async function notifyInboundClientSms(tenantId, opts) {
         /* optional */
       }
     }
+  }
+
+  const fallbackName = ((opts && opts.fallbackName) || "").toString().trim();
+  if (
+    (!displayName || looksLikePhoneLabel(displayName) || isPlaceholderContactName(displayName)) &&
+    fallbackName
+  ) {
+    displayName = fallbackName;
   }
 
   if (!displayName || looksLikePhoneLabel(displayName) || isPlaceholderContactName(displayName)) {
@@ -1769,7 +1778,7 @@ async function notifyInboundClientSms(tenantId, opts) {
           body: alertBody,
         },
         data: {
-          type: "sms_message",
+          type: pushType,
           tenantId: String(tenantId),
           threadId: String(threadId),
         },

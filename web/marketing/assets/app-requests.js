@@ -103,6 +103,8 @@
       assignedUid: String(d.assignedMemberUid || "").trim(),
       assignedName: String(d.assignedMemberName || "").trim(),
       paidCents: typeof d.paidCents === "number" ? d.paidCents : 0,
+      serviceId: String(d.serviceId || ""),
+      depositRequestCents: typeof d.depositRequestCents === "number" ? d.depositRequestCents : 0,
       source: String(d.source || "").trim(),
       answers: d.formResponses && typeof d.formResponses === "object" ? d.formResponses : {},
     };
@@ -335,19 +337,27 @@
         '<div class="app-field"><label for="reqDate">Date</label><input id="reqDate" type="date" value="' + dateVal + '"></div>' +
         '<div class="app-field"><label for="reqTime">Time</label><input id="reqTime" type="time" value="' + timeVal + '"></div>' +
         "</div>" +
-        '<div class="app-field"><label for="reqStaff">With</label><select id="reqStaff">' + memberOptions(r.assignedUid) + "</select></div>" +
-        '<div class="app-field app-req-deposit"><label for="reqDeposit">Deposit to hold the time (optional)</label>' +
-        '<div class="app-deposit-amt"><input id="reqDeposit" type="text" inputmode="decimal" placeholder="0.00" autocomplete="off"><span>USD</span></div>' +
-        '<p class="app-hint">With an amount, the client gets a text with a payment link and the booking waits for the deposit.</p></div>';
+        '<div class="app-field"><label for="reqStaff">With</label><select id="reqStaff">' + memberOptions(r.assignedUid) + "</select></div>";
+      // Deposit booking types only (Deposit to confirm, Approve and deposit), like the iPhone app.
+      if (needsDeposit()) {
+        var dflt = depositDefault(r);
+        html += '<div class="app-field app-req-deposit"><label for="reqDeposit">Deposit to hold the time</label>' +
+          '<div class="app-deposit-amt"><input id="reqDeposit" type="text" inputmode="decimal" placeholder="0.00" autocomplete="off" value="' + (dflt ? dflt.toFixed(2) : "") + '"><span>USD</span></div>' +
+          '<p class="app-hint">The client gets a text with a payment link. The booking waits for the deposit.</p></div>';
+      }
     } else if (open && charter) {
       html += '<p class="app-hint">Schedule charter trips from the Calendar so you can pick the boat.</p>';
     }
     if (!mayAct) html += '<p class="app-hint">Only the owner or a manager with permission can confirm or decline requests.</p>';
-    html += '<p class="app-sheet-error hidden" id="reqError"></p>';
+    if (waiting && r.status === "pending_deposit") {
+      html += '<p class="app-hint">Waiting for a ' + (r.depositRequestCents ? money(r.depositRequestCents) + " " : "") + "deposit. If the client didn't get the link, resend it.</p>";
+    }
+    html += '<p class="app-sheet-error hidden" id="reqError"></p><div id="reqLinkBox"></div>';
     body.innerHTML = html;
 
     var actions = [];
     if (open && !charter) actions.push('<button type="button" class="app-btn app-btn--primary" data-req-act="confirm">Confirm</button>');
+    if (waiting && r.status === "pending_deposit") actions.push('<button type="button" class="app-btn app-btn--primary" data-req-act="resend">Resend deposit link</button>');
     if (open || waiting) actions.push('<button type="button" class="app-btn app-btn--ghost" data-req-act="decline">' + (waiting ? "Cancel request" : "Decline") + "</button>");
     if (r.status === "confirmed") actions.push('<button type="button" class="app-btn app-btn--ghost" data-req-act="calendar">Open in calendar</button>');
     if (r.status === "confirmed" && mayAct) actions.push('<button type="button" class="app-btn app-btn--ghost" data-req-act="cancel">Cancel booking</button>');
@@ -375,6 +385,7 @@
   function fail(msg) {
     var e = $("reqError");
     if (e) {
+      e.classList.remove("is-ok");
       e.textContent = msg;
       e.classList.remove("hidden");
     }
@@ -391,6 +402,58 @@
     return fns().httpsCallable("updateBookingRequestStatus")(payload);
   }
 
+  function needsDeposit() {
+    var dash = global.ShopAppDashboard || {};
+    return !!(dash.requiresDeposit && dash.requiresDeposit(state.session));
+  }
+
+  function depositDefault(r) {
+    var dash = global.ShopAppDashboard || {};
+    return dash.defaultDepositFor ? dash.defaultDepositFor(state.session, r.serviceId, r.service) : null;
+  }
+
+  /** After a deposit link: close when it was texted, otherwise show why and the link to copy. */
+  function depositOutcome(res) {
+    if (res && res.texted) return setOpen("");
+    busy(false);
+    fail("Saved, and the booking is waiting for the deposit, but the text didn't send: " + ((res && res.error) || "unknown reason") + " Copy the link and send it another way.");
+    var box = $("reqLinkBox");
+    if (box && res && res.url) {
+      box.innerHTML = '<div class="app-pay-linkbox"><input type="text" readonly value="' + esc(res.url) + '" aria-label="Deposit link"><button type="button" class="app-btn app-btn--ghost" id="reqCopyLink">Copy</button></div>';
+      $("reqCopyLink").addEventListener("click", function () {
+        var input = box.querySelector("input");
+        if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(res.url).catch(function () { input.select(); });
+        else { input.select(); document.execCommand("copy"); }
+        $("reqCopyLink").textContent = "Copied";
+      });
+    }
+  }
+
+  function resendDeposit(r) {
+    var dash = global.ShopAppDashboard || {};
+    var cents = r.depositRequestCents || Math.round((depositDefault(r) || 0) * 100);
+    if (!cents) {
+      var typed = global.prompt("Deposit amount (USD)", "");
+      var n = parseFloat(String(typed || "").replace(/[^0-9.]/g, ""));
+      if (!(n >= 0.5)) return;
+      cents = Math.round(n * 100);
+    }
+    if (!dash.sendDepositLink) return fail("Deposit links aren't available right now.");
+    busy(true);
+    dash.sendDepositLink(r.id, r.name, r.phone, cents / 100, { serviceName: r.service, start: r.start }).then(function (res) {
+      if (res && res.texted) {
+        busy(false);
+        var e = $("reqError");
+        if (e) { e.textContent = "Deposit link texted again."; e.classList.remove("hidden"); e.classList.add("is-ok"); }
+        return;
+      }
+      depositOutcome(res);
+    }).catch(function (e) {
+      busy(false);
+      fail((e && e.message) || "Couldn't make the deposit link.");
+    });
+  }
+
   function confirmRequest(r) {
     var date = ($("reqDate") || {}).value;
     var time = ($("reqTime") || {}).value;
@@ -402,8 +465,8 @@
     var m = (state.session.members || []).filter(function (x) { return x.uid === uid; })[0] || {};
     var name = (m.displayName || m.firstName || (uid === state.session.user.uid ? state.session.user.displayName : "") || "Staff").trim();
     var amountRaw = String(($("reqDeposit") || {}).value || "").replace(/[^0-9.]/g, "");
-    var amount = amountRaw ? parseFloat(amountRaw) : 0;
-    if (amountRaw && !(amount >= 0.5)) return fail("Deposit must be at least $0.50, or leave it empty.");
+    var amount = needsDeposit() ? (amountRaw ? parseFloat(amountRaw) : 0) : 0;
+    if (needsDeposit() && !(amount >= 0.5)) return fail("Enter the deposit amount (at least $0.50).");
     var dash = global.ShopAppDashboard || {};
     if (amount && !dash.sendDepositLink) return fail("Deposit links aren't available right now.");
     busy(true);
@@ -417,9 +480,8 @@
     }).then(function () {
       return setStatus(r.id, amount ? "pending_deposit" : "confirmed");
     }).then(function () {
-      if (amount) return dash.sendDepositLink(r.id, r.name, r.phone, amount);
-    }).then(function () {
-      setOpen("");
+      if (!amount) return setOpen("");
+      return dash.sendDepositLink(r.id, r.name, r.phone, amount, { serviceName: r.service, start: start }).then(depositOutcome);
     }).catch(function (e) {
       fail((e && e.message) || "Could not confirm this request.");
     });
@@ -429,6 +491,7 @@
     var r = byId(state.openId);
     if (!r) return;
     if (act === "confirm") return confirmRequest(r);
+    if (act === "resend") return resendDeposit(r);
     if (act === "calendar") {
       setOpen("");
       if (global.ShopAppDashboard && ShopAppDashboard.goTo && r.start) ShopAppDashboard.goTo(r.start);

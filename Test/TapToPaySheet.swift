@@ -19,6 +19,11 @@ struct TapToPaySheet: View {
     @EnvironmentObject private var sessionStore: TenantSessionStore
     var drawerState: DrawerState
     var onDismiss: () -> Void
+    /// Collect from a booking: amount, client, and the booking the payment belongs to.
+    var presetAmountCents: Int? = nil
+    var presetBookingId: String? = nil
+    var presetClient: Client? = nil
+    @State private var didApplyPreset = false
 
     @State private var amountCentsInput = 0
     @State private var noteText = ""
@@ -111,6 +116,7 @@ struct TapToPaySheet: View {
     }
 
     private var linkedBookingRequestId: String? {
+        if let presetBookingId, !presetBookingId.isEmpty { return presetBookingId }
         guard let phone = selectedClient?.phone else { return nil }
         return BookingRequestPaymentLookup.bookingRequestId(
             forClientPhone: phone,
@@ -181,6 +187,15 @@ struct TapToPaySheet: View {
                         }
                         .accessibilityLabel("More options")
                     }
+                }
+            }
+            .onAppear {
+                guard !didApplyPreset else { return }
+                didApplyPreset = true
+                if let presetAmountCents, presetAmountCents > 0 { amountCentsInput = presetAmountCents }
+                if let presetClient {
+                    let ten = PhoneFormatting.last10Digits(from: presetClient.phone)
+                    selectedClient = sessionStore.customers.first { ten != nil && PhoneFormatting.last10Digits(from: $0.phone) == ten } ?? presetClient
                 }
             }
             .sheet(isPresented: $showClientPicker) {

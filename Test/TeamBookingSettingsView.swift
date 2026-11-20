@@ -67,7 +67,8 @@ struct TeamBookingSettingsView: View {
             DepositBalanceSettingsSection(
                 model: depositBalance,
                 showsDeposit: settingsViewModel.confirmationType.requiresDeposit,
-                isCharter: isCharterPlan
+                isCharter: isCharterPlan,
+                showsBalance: settingsViewModel.confirmationType != .payInFull
             )
 
             if isCalendarType {

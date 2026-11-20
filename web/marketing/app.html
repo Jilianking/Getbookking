@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap" rel="stylesheet" />
   <base href="/" />
-  <link rel="stylesheet" href="/assets/app.css?v=83" />
+  <link rel="stylesheet" href="/assets/app.css?v=93" />
 </head>
 <body>
   <div id="gateLoading" class="app-gate">
@@ -160,11 +160,11 @@
             <aside class="app-dash-side">
               <article class="app-card" id="dashDue">
                 <div class="app-card-head">
-                  <h2>Payments due</h2>
+                  <h2 id="dueTitle">Balances due</h2>
                   <a class="app-btn app-btn--warm" data-route="payments" href="/app/payments">All payments</a>
                 </div>
                 <div id="dueList"></div>
-                <p class="app-empty" id="dueEmpty">No outstanding invoices. Unpaid balances and overdue deposits show up here.</p>
+                <p class="app-empty" id="dueEmpty">Nothing owed. Bookings with a balance or a deposit waiting show up here, today's first.</p>
               </article>
               <article class="app-card">
                 <div class="app-card-head">
@@ -325,6 +325,7 @@
         <div id="calDetailView">
           <p class="app-detail-status" id="calDetailStatus"></p>
           <dl class="app-detail-list" id="calDetailList"></dl>
+          <section class="app-pay hidden" id="calDetailPay" aria-label="Payment"></section>
           <div class="app-cal-confirm hidden" id="calConfirmBox" role="alertdialog" aria-live="polite">
             <p id="calConfirmText"></p>
             <label class="app-shop-visible hidden" id="calConfirmNotifyRow">
@@ -335,6 +336,7 @@
           <p class="app-sheet-error hidden" id="calDetailError"></p>
           <div class="app-sheet-actions app-cal-detail-actions" id="calDetailActions">
             <button type="button" class="app-btn app-btn--ghost app-cal-delete hidden" id="calDetailDelete">Delete</button>
+            <button type="button" class="app-btn app-btn--ghost hidden" id="calDetailNoShow">Mark no-show</button>
             <button type="button" class="app-btn app-btn--ghost hidden" id="calDetailCancelAppt">Cancel appointment</button>
             <button type="button" class="app-btn app-btn--ghost hidden" id="calDetailEdit">Edit</button>
             <button type="button" class="app-btn app-btn--ghost" id="calDetailDone">Close</button>
@@ -659,9 +661,14 @@
         <div class="app-greeting app-pay-head">
           <div>
             <h1>Insights</h1>
-            <p>How your business is doing: revenue, bookings, clients, and your busiest days.</p>
+            <p>How your business is doing: money, your schedule, and your clients.</p>
           </div>
           <div class="app-seg" role="tablist" aria-label="Time range" id="insRange"></div>
+        </div>
+        <div class="app-ins-custom hidden" id="insCustom">
+          <label>From <input type="date" id="insFrom" /></label>
+          <label>To <input type="date" id="insTo" /></label>
+          <span class="app-hint">Compared with the same number of days before.</span>
         </div>
         <div id="insBody"></div>
       </section>
@@ -1183,17 +1190,18 @@
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-storage-compat.js"></script>
   <script src="/js/firebase-config.js"></script>
   <script src="/assets/app-session.js?v=7"></script>
-  <script src="/assets/app-dashboard.js?v=33"></script>
-  <script src="/assets/app-requests.js?v=6"></script>
-  <script src="/assets/app-dash-charts.js?v=6"></script>
+  <script src="/assets/app-balance.js?v=2"></script>
+  <script src="/assets/app-dashboard.js?v=37"></script>
+  <script src="/assets/app-requests.js?v=7"></script>
+  <script src="/assets/app-dash-charts.js?v=7"></script>
   <script src="/assets/app-team.js?v=5"></script>
   <script src="/assets/app-profile.js?v=1"></script>
-  <script src="/assets/app-messages.js?v=9"></script>
-  <script src="/assets/app-insights.js?v=3"></script>
+  <script src="/assets/app-messages.js?v=11"></script>
+  <script src="/assets/app-insights.js?v=10"></script>
   <script src="/assets/app-payments.js?v=15"></script>
   <script src="/assets/app-payouts.js?v=2"></script>
-  <script src="/assets/app-clients.js?v=5"></script>
+  <script src="/assets/app-clients.js?v=6"></script>
   <script src="/assets/app-shop.js?v=5"></script>
-  <script src="/assets/app.js?v=31"></script>
+  <script src="/assets/app.js?v=32"></script>
 </body>
 </html>

@@ -6861,6 +6861,7 @@ function depositPayPageHtml(tenant) {
     '<div class="card" id="bk-pay-card" style="padding:28px 24px">' +
     '<p id="bk-pay-business" style="margin:0 0 8px;font-size:13px;letter-spacing:.04em;text-transform:uppercase;opacity:.6">' + esc(name) + '</p>' +
     '<h1 id="bk-pay-title" style="margin:0 0 18px;font-size:22px">Payment</h1>' +
+    '<div id="bk-pay-choice" style="display:none;margin:0 0 16px" role="radiogroup" aria-label="How much to pay"></div>' +
     '<div id="bk-pay-summary" style="display:none;margin-bottom:16px;font-size:15px">' +
     '<div style="display:flex;justify-content:space-between;margin:6px 0"><span>Service</span><span id="bk-pay-service"></span></div>' +
     '<div style="display:flex;justify-content:space-between;margin:6px 0"><span>Processing &amp; service fees</span><span id="bk-pay-fee"></span></div>' +
@@ -6992,28 +6993,30 @@ function bindDepositPayPage(tenant) {
         if (button) button.disabled = false;
       });
     }
-    if (data.tipsAllowed && Number(data.serviceCents) > 0) {
-      var tipsWrap = document.getElementById('bk-pay-tips');
-      var tipBtns = document.getElementById('bk-pay-tip-btns');
-      var customWrap = document.getElementById('bk-pay-tip-custom');
+    // Tip buttons for an amount (rebuilt when the client switches to paying in full).
+    var tipsWrap = document.getElementById('bk-pay-tips');
+    var tipBtns = document.getElementById('bk-pay-tip-btns');
+    var customWrap = document.getElementById('bk-pay-tip-custom');
+    var tipsWired = false;
+    function showTips(svc) {
+      if (!tipsWrap || !tipBtns || !(svc > 0)) return;
       var pcts = Array.isArray(data.tipPercents) ? data.tipPercents : [15, 20, 25];
-      var svc = Number(data.serviceCents) || 0;
-      var html = pcts.map(function(p) {
+      tipBtns.innerHTML = pcts.map(function(p) {
         var c = Math.round(svc * p / 100);
         return '<button type="button" class="btn" data-tip="' + c + '" style="padding:8px 4px;line-height:1.2">' +
           p + '%<br><small style="opacity:.75">' + esc(money(c)) + '</small></button>';
       }).join('') + '<button type="button" class="btn" data-tip="custom" style="padding:8px 4px">Custom</button>';
-      if (tipBtns) tipBtns.innerHTML = html;
-      if (tipsWrap) {
-        tipsWrap.style.display = '';
-        var none = document.createElement('button');
-        none.type = 'button';
-        none.textContent = 'No tip';
-        none.style.cssText = 'margin-top:6px;background:none;border:0;padding:4px 0;font:inherit;font-size:14px;opacity:.7;cursor:pointer;text-decoration:underline';
-        none.addEventListener('click', function() { if (customWrap) customWrap.style.display = 'none'; applyTip(0, null); });
-        tipsWrap.appendChild(none);
-      }
-      if (tipBtns) tipBtns.addEventListener('click', function(ev) {
+      tipsWrap.style.display = '';
+      if (customWrap) customWrap.style.display = 'none';
+      if (tipsWired) return;
+      tipsWired = true;
+      var none = document.createElement('button');
+      none.type = 'button';
+      none.textContent = 'No tip';
+      none.style.cssText = 'margin-top:6px;background:none;border:0;padding:4px 0;font:inherit;font-size:14px;opacity:.7;cursor:pointer;text-decoration:underline';
+      none.addEventListener('click', function() { if (customWrap) customWrap.style.display = 'none'; applyTip(0, null); });
+      tipsWrap.appendChild(none);
+      tipBtns.addEventListener('click', function(ev) {
         var b = ev.target.closest('button[data-tip]');
         if (!b) return;
         if (b.getAttribute('data-tip') === 'custom') {
@@ -7029,6 +7032,57 @@ function bindDepositPayPage(tenant) {
       if (applyBtn) applyBtn.addEventListener('click', function() {
         var v = parseFloat(String((document.getElementById('bk-pay-tip-input') || {}).value || '').replace(/[^0-9.]/g, ''));
         applyTip(isFinite(v) && v > 0 ? v * 100 : 0, tipBtns && tipBtns.querySelector('[data-tip="custom"]'));
+      });
+    }
+    function hideTips() {
+      if (tipsWrap) tipsWrap.style.display = 'none';
+      if (customWrap) customWrap.style.display = 'none';
+    }
+    if (data.tipsAllowed && Number(data.serviceCents) > 0) showTips(Number(data.serviceCents) || 0);
+
+    // Deposit link: pay the deposit, or pay the whole thing now (the server sets the amount).
+    var choice = document.getElementById('bk-pay-choice');
+    if (choice && data.payFull && data.payFull.available) {
+      var pf = data.payFull;
+      var owedAfter = Math.max(0, pf.fullCents - pf.depositCents);
+      var option = function(id, title, sub, cents, on) {
+        return '<label style="display:flex;gap:10px;align-items:flex-start;padding:11px 12px;margin:0 0 8px;border:' + (on ? '2px solid #2c2018' : '1px solid #ddd') +
+          ';border-radius:12px;cursor:pointer"><input type="radio" name="bk-pay-amount" value="' + id + '"' + (on ? ' checked' : '') +
+          ' style="margin-top:3px;accent-color:#2c2018"><span style="flex:1"><strong style="display:block">' + esc(title) + '</strong><small style="opacity:.7">' +
+          esc(sub) + '</small></span><strong>' + esc(money(cents)) + '</strong></label>';
+      };
+      var paintChoice = function(full) {
+        choice.innerHTML =
+          option('deposit', 'Pay deposit', 'Holds your booking. ' + money(owedAfter) + ' left to pay later.', pf.depositCents, !full) +
+          option('full', 'Pay in full', 'Nothing left to pay later.', pf.fullCents, full);
+      };
+      paintChoice(!!pf.selected);
+      choice.style.display = '';
+      choice.addEventListener('change', function(ev) {
+        var full = ev.target && ev.target.value === 'full';
+        paintChoice(full);
+        showPayError('');
+        if (button) button.disabled = true;
+        functions.httpsCallable('repriceCustomerCheckout')({
+          tenantSlug: tenant.slug,
+          paymentIntentId: pi,
+          method: (payState && payState.method) || 'card',
+          payFull: full
+        }).then(function(res) {
+          var priced = (res && res.data) || {};
+          payState = Object.assign({}, payState, priced);
+          var title = document.getElementById('bk-pay-title');
+          if (title && priced.productName) title.textContent = priced.productName;
+          paintSummary(payState);
+          // Tips are offered on a full payment (when the shop takes tips), not on a deposit.
+          if (full && data.tipsEnabled) showTips(Number(priced.serviceCents) || 0); else hideTips();
+          return elements.fetchUpdates();
+        }).catch(function(err) {
+          paintChoice(!full);
+          showPayError(formatFirebaseHttpsError(err));
+        }).then(function() {
+          if (button) button.disabled = false;
+        });
       });
     }
     var depositReprice = bindCheckoutMethodReprice({

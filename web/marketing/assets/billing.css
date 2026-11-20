@@ -634,3 +634,10 @@
   border-radius: 50%;
   animation: bill-checkout-spin 0.7s linear infinite;
 }
+
+/* Domain search loading */
+.bill-spinner { display: inline-block; width: 14px; height: 14px; margin-right: 8px; vertical-align: -2px; border: 2px solid rgba(255, 255, 255, 0.45); border-top-color: #fff; border-radius: 50%; animation: bill-spin 0.7s linear infinite; }
+.bill-spinner--dark { margin: 0; width: 18px; height: 18px; border-color: rgba(43, 33, 27, 0.15); border-top-color: rgba(43, 33, 27, 0.7); }
+.bill-domain-loading .bill-invoice-title { color: var(--text-secondary); }
+@keyframes bill-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .bill-spinner { animation-duration: 2s; } }

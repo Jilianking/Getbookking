@@ -190,6 +190,10 @@
       paid: !!(data.stripePaymentIntentId || data.paymentIntentId || data.paidAt || data.depositPaidAt),
       // Reply to a reminder text: "confirmed" (C) or "reschedule" (R).
       reminderReply: data.rescheduleRequestedAt ? "reschedule" : data.clientConfirmedAt ? "confirmed" : "",
+      // The shop marked that the client didn't show up (Insights counts these).
+      noShow: !!data.noShowAt,
+      // Price and payments for the Payment section and the "$ due" tag (see app-balance.js).
+      raw: data,
       assignedName: String(data.assignedMemberName || "").trim(),
       assignedUid: String(data.assignedMemberUid || "").trim(),
       readAt: toDate(data.readAt),
@@ -220,6 +224,7 @@
       ? ' data-cal-ms="' + opts.start.getTime() + '"'
       : "";
     if (opts.reqId) startAttr += ' data-req-id="' + esc(opts.reqId) + '"';
+    if (opts.bookingId) startAttr += ' data-booking-id-open="' + esc(opts.bookingId) + '"';
     return (
       '<button type="button" class="app-row' +
       (unread ? "" : " is-read") +
@@ -277,6 +282,14 @@
       }
       var ms = parseInt(btn.getAttribute("data-cal-ms") || "", 10);
       goCalendar(ms ? new Date(ms) : null);
+      // Balances due: open the booking's details (Payment section) on the calendar.
+      var openId = btn.getAttribute("data-booking-id-open");
+      if (openId) {
+        setTimeout(function () {
+          var booking = bookingById(openId);
+          if (booking) setDetailOpen(true, booking);
+        }, 60);
+      }
     });
   }
 
@@ -350,32 +363,55 @@
         booked;
     }
 
+    // Balances due: deposits waiting and money still owed — today first (collect before they leave),
+    // then the next 7 days, then past visits that were never paid off (last 30 days).
+    var dueUntil = new Date(todayStart);
+    dueUntil.setDate(dueUntil.getDate() + 8);
+    var dueFrom = new Date(todayStart);
+    dueFrom.setDate(dueFrom.getDate() - 30);
     var due = scopedList
-      .filter(function (b) {
-        return DUE_STATUSES[b.status];
-      })
-      .sort(function (a, b) {
-        return (a.start || 0) - (b.start || 0);
-      });
-    var dueHtml = due
-      .slice(0, 6)
+      .filter(function (b) { return b.start && b.start >= dueFrom && b.start < dueUntil && !b.noShow; })
       .map(function (b) {
+        var waiting = !!DUE_STATUSES[b.status];
+        var cents = waiting
+          ? Number(b.raw && b.raw.depositRequestCents) || 0
+          : (global.ShopAppBalance && b.raw ? ShopAppBalance.dueCents(b.raw, b.status, servicePriceFor(b)) : 0);
+        return { b: b, waiting: waiting, cents: cents };
+      })
+      .filter(function (x) { return x.waiting || x.cents > 0; })
+      .sort(function (x, y) {
+        var rank = function (r) { return sameDay(r.b.start, now) ? 0 : r.b.start > now ? 1 : 2; };
+        var dr = rank(x) - rank(y);
+        if (dr) return dr;
+        return rank(x) === 2 ? y.b.start - x.b.start : x.b.start - y.b.start;
+      });
+    var dueTotal = due.reduce(function (a, x) { return a + (x.waiting ? 0 : x.cents); }, 0);
+    var dueMoney = function (c) { return global.ShopAppBalance ? ShopAppBalance.money(c) : "$" + Math.round(c / 100); };
+    var dueHtml = due
+      .slice(0, 8)
+      .map(function (x) {
+        var b = x.b;
         var bits = [];
         if (b.serviceName) bits.push(b.serviceName);
-        bits.push(STATUS_LABEL[b.status] || b.status);
-        return rowHtml(b, {
-          unread: true,
-          sub: bits.join(" · "),
-          meta: b.start ? formatWhen(b.start) : "",
-          start: b.start,
-        });
+        bits.push(x.waiting ? "Awaiting deposit" + (x.cents ? " " + dueMoney(x.cents) : "") : dueMoney(x.cents) + " due");
+        var past = !sameDay(b.start, now) && b.start < now;
+        var meta = sameDay(b.start, now)
+          ? "Today " + formatTime(b.start)
+          : past ? b.start.toLocaleDateString("en-US", { month: "short", day: "numeric" }) + " · unpaid" : formatWhen(b.start);
+        return rowHtml(b, { unread: !past, sub: bits.join(" · "), meta: meta, start: b.start, bookingId: b.id });
       })
       .join("");
+    var dueHead = $("dueTitle");
+    if (dueHead) {
+      dueHead.textContent = "Balances due" + (due.length ? " · " + due.length + (dueTotal ? " · " + dueMoney(dueTotal) : "") : "");
+    }
     paintList(
       "dueList",
       "dueEmpty",
       dueHtml,
-      "No outstanding invoices. Unpaid balances and overdue deposits show up here."
+      charter
+        ? "Nothing owed. Trips with a balance or a deposit waiting show up here, today's departures first."
+        : "Nothing owed. Appointments with a balance or a deposit waiting show up here, today's first."
     );
 
     var upcoming = occupying
@@ -718,21 +754,26 @@
     if (will) will.classList.toggle("hidden", !state.willSend);
   }
 
-  function sendDepositLink(requestId, name, phone, amount) {
+  /**
+   * Makes a deposit link for a booking and texts it to the client.
+   * Resolves { url, texted, error }: when the text can't go out (no phone, no texting, client unsubscribed),
+   * the link still comes back so the shop can send it another way. Rejects only if the link can't be made.
+   * opts: { serviceName, start, shopName }.
+   */
+  function sendDepositLink(requestId, name, phone, amount, opts) {
+    opts = opts || {};
     var cents = Math.round(amount * 100);
     if (cents < 50) {
-      return Promise.reject(
-        new Error("Deposit must be at least $0.50 to send a payment link.")
-      );
-    }
-    var to = e164US(phone);
-    if (!to) {
-      return Promise.reject(
-        new Error("Client has no phone number — deposit link was not sent.")
-      );
+      return Promise.reject(new Error("Deposit must be at least $0.50 to send a payment link."));
     }
     var fns = firebase.app().functions(REGION);
-    var dollars = (cents / 100).toFixed(2);
+    var dollars = cents % 100 ? (cents / 100).toFixed(2) : String(cents / 100);
+    // Remember the amount so "Resend deposit link" asks for the same deposit.
+    var session = calState.session;
+    if (session && session.tenantId) {
+      firebase.firestore().collection("tenants").doc(session.tenantId).collection("bookingRequests").doc(requestId)
+        .update({ depositRequestCents: cents }).catch(function () {});
+    }
     return fns
       .httpsCallable("createDepositLink")({
         serviceAmountCents: cents,
@@ -740,18 +781,44 @@
       })
       .then(function (res) {
         var url = res && res.data && res.data.url;
-        if (!url) throw new Error("Could not create deposit link.");
+        if (!url) throw new Error("Could not create the deposit link.");
+        var to = e164US(phone);
+        if (!to) return { url: url, texted: false, error: "This client has no phone number." };
+        if (!shopCanSms(calState.session || opts.session)) return { url: url, texted: false, error: "Texting isn't set up for your shop." };
+        var first = firstName(name);
+        var what = opts.serviceName || "appointment";
+        var whenText = opts.start ? " on " + formatWhen(opts.start).replace(" · ", " at ") : "";
+        var shop = opts.shopName || shopLabel(calState.session);
+        var body = "Hi" + (first ? " " + first : "") + ", to hold your " + what + whenText + " with " + shop +
+          ", pay the $" + dollars + " deposit here: " + url;
         return fns.httpsCallable("sendClientSms")({
           to: to,
-          body: "Deposit: $" + dollars + "\nPay here: " + url,
+          body: body,
           clientName: name,
           threadId: to,
           paymentKind: "deposit",
           amountCents: cents,
           paymentUrl: url,
           threadPreview: "Deposit · $" + dollars,
+        }).then(function () {
+          return { url: url, texted: true };
+        }).catch(function (e) {
+          var msg = String((e && e.message) || "");
+          if (/opt|unsubscrib|stop/i.test(msg)) msg = "This client unsubscribed from texts (replied STOP).";
+          return { url: url, texted: false, error: msg || "The text didn't send." };
         });
       });
+  }
+
+  /** Default deposit (dollars) for a booking: the service's own deposit when the shop sets one per service. */
+  function defaultDepositFor(session, serviceId, serviceName) {
+    var wf = (session && session.tenant && session.tenant.workflow) || {};
+    if (wf.depositPerService === true) {
+      var svc = (calState.services || []).filter(function (x) { return (serviceId && x.id === serviceId) || (!serviceId && x.name === serviceName); })[0];
+      if (svc && svc.depositAmount > 0) return svc.depositAmount;
+    }
+    var amt = accessOf(session).depositAmount;
+    return amt && amt > 0 ? amt : null;
   }
 
   function occupyingAll(session) {
@@ -1013,14 +1080,51 @@
       height +
       'px">' +
       "<strong>" +
-      esc(b.customerName) + replyMark(b) +
+      esc(b.customerName) + replyMark(b) + dueMark(b) +
       "</strong><span>" +
       esc(sub) +
       "</span></button>"
     );
   }
 
+  function servicePriceFor(b) {
+    var list = calState.services || [];
+    var svc = list.filter(function (x) { return (b.serviceId && x.id === b.serviceId) || (!b.serviceId && x.name === b.serviceName); })[0];
+    return svc ? svc.priceCents : 0;
+  }
+
+  function dueMark(b) {
+    if (!global.ShopAppBalance || !b.raw) return "";
+    var due = ShopAppBalance.dueCents(b.raw, b.status, servicePriceFor(b));
+    return due ? ' <i class="app-cal-due" title="Balance still to pay">' + esc(ShopAppBalance.money(due)) + " due</i>" : "";
+  }
+
+  function paintPay(booking) {
+    var host = $("calDetailPay");
+    if (!host || !global.ShopAppBalance || !booking) return;
+    var session = calState.session;
+    var uid = session && session.user && session.user.uid;
+    ShopAppBalance.render({
+      host: host,
+      id: booking.id,
+      raw: booking.raw || {},
+      status: booking.status,
+      booking: booking,
+      session: session,
+      servicePriceCents: servicePriceFor(booking),
+      may: mayManageBookings(session) || (!!uid && booking.assignedUid === uid),
+      canText: shopCanSms(session),
+      shopName: shopLabel(session),
+      whenText: booking.start ? formatWhen(booking.start).replace(" · ", " at ") : "",
+      defaultDepositCents: Math.round((defaultDepositFor(session, booking.serviceId, booking.serviceName) || 0) * 100),
+      resendDeposit: function (cents) {
+        return sendDepositLink(booking.id, booking.customerName, booking.customerPhone, cents / 100, { serviceName: booking.serviceName, start: booking.start });
+      },
+    });
+  }
+
   function replyMark(b) {
+    if (b.noShow) return ' <i class="app-cal-reply is-noshow" title="No-show">✕</i>';
     if (b.reminderReply === "confirmed") return ' <i class="app-cal-reply is-ok" title="Client confirmed">✓</i>';
     if (b.reminderReply === "reschedule") return ' <i class="app-cal-reply is-resched" title="Wants to reschedule">↻</i>';
     return "";
@@ -1098,7 +1202,7 @@
             return '<button type="button" class="app-cal-tw-chip' + (b.status !== "confirmed" ? " is-hold" : "") +
               (serviceColor(b) ? " has-svc" : "") +
               '" style="--member:' + r.color + ";" + svcStyle(b) + '" data-booking-id="' + esc(b.id) + '"><time>' + esc(formatTime(b.start)) +
-              "</time><span>" + esc(b.customerName) + replyMark(b) + (b.serviceName ? " · " + esc(b.serviceName) : "") + "</span></button>";
+              "</time><span>" + esc(b.customerName) + replyMark(b) + dueMark(b) + (b.serviceName ? " · " + esc(b.serviceName) : "") + "</span></button>";
           }).join("");
         row += '<div class="app-cal-tw-cell' + (sameDay(d, today) ? " is-today" : "") + '" data-cal-day="' + isoDate(d) +
           '" data-col-day="' + isoDate(d) + '" data-col-uid="' + esc(r.key === "unassigned" ? "" : r.key) + '" data-col-key="' + esc(r.key) + '">' +
@@ -1198,7 +1302,7 @@
             '"' + member + ' data-booking-id="' +
             esc(b.id) +
             '">' +
-            esc(b.customerName) + replyMark(b) +
+            esc(b.customerName) + replyMark(b) + dueMark(b) +
             "</span>"
           );
         })
@@ -1418,7 +1522,7 @@
     if (title) title.textContent = booking.customerName || "Appointment";
     var status = $("calDetailStatus");
     if (status) {
-      status.textContent = STATUS_LABEL[booking.status] || booking.status || "";
+      status.textContent = booking.noShow ? "No-show" : (STATUS_LABEL[booking.status] || booking.status || "");
       status.classList.toggle("hidden", !status.textContent);
     }
     var when = "";
@@ -1440,6 +1544,7 @@
           booking.reminderReply === "reschedule" ? "Wants to reschedule (replied R)" : "");
     }
     paintDetailActions(booking);
+    paintPay(booking);
   }
 
   /* ---------- Edit / cancel / delete an appointment ---------- */
@@ -1498,6 +1603,36 @@
     if (cancel) cancel.classList.toggle("hidden", !(may && live));
     // Charter trips hold boat slots on the server, and paid bookings keep their payment record: cancel those instead.
     if (del) del.classList.toggle("hidden", !(may && booking && !booking.paid && !charter));
+    // No-show: only for appointments that have already started.
+    var noShow = $("calDetailNoShow");
+    if (noShow) {
+      var started = booking && booking.start && booking.start <= new Date();
+      var showable = booking && NO_SHOW_STATUSES.indexOf(booking.status) !== -1;
+      noShow.classList.toggle("hidden", !(may && started && showable));
+      noShow.textContent = booking && booking.noShow ? "Undo no-show" : "Mark no-show";
+    }
+  }
+
+  var NO_SHOW_STATUSES = ["confirmed", "completed", "pending_deposit", "pending_payment"];
+
+  function toggleNoShow() {
+    var booking = detailBooking();
+    if (!booking || calState.detailBusy || !calState.col) return;
+    calState.detailBusy = true;
+    setDetailButtonsDisabled(true);
+    var next = !booking.noShow;
+    calState.col.doc(booking.id).update({
+      noShowAt: next ? firebase.firestore.FieldValue.serverTimestamp() : firebase.firestore.FieldValue.delete(),
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+    }).then(function () {
+      calState.detailBusy = false;
+      setDetailButtonsDisabled(false);
+      booking.noShow = next;
+      setDetailOpen(true, booking);
+      paintCalendar();
+    }).catch(function () {
+      detailFail("calDetailError", "Couldn't save that. Check your connection and try again.");
+    });
   }
 
   function detailFail(id, msg) {
@@ -1511,7 +1646,7 @@
   }
 
   function setDetailButtonsDisabled(on) {
-    ["calDetailEdit", "calDetailCancelAppt", "calDetailDelete", "calDetailDone", "calDetailClose",
+    ["calDetailEdit", "calDetailCancelAppt", "calDetailDelete", "calDetailNoShow", "calDetailDone", "calDetailClose",
       "calConfirmBack", "calConfirmGo", "calEditBack", "calEditSave"].forEach(function (id) {
       var el = $(id);
       if (el) el.disabled = !!on;
@@ -2394,6 +2529,8 @@
             slug: String(d.slug || "").trim(),
             durationMinutes: typeof dur === "number" && dur > 0 ? dur : 60,
             sortOrder: typeof d.sortOrder === "number" ? d.sortOrder : 999,
+            priceCents: isFinite(Number(d.price)) && Number(d.price) > 0 ? Math.round(Number(d.price) * 100) : 0,
+            depositAmount: isFinite(Number(d.depositAmount)) && Number(d.depositAmount) > 0 ? Number(d.depositAmount) : 0,
           });
         });
         list.sort(function (a, b) {
@@ -2404,6 +2541,8 @@
         var setup = $("dashSetup");
         if (setup) setup.classList.toggle("hidden", list.length > 0);
         paintCalendar();
+        // Balances due use service prices for bookings without their own price.
+        if (calState.session && calState.bookings) paint(calState.session, calState.bookings);
       })
       .catch(function () {
         calState.services = [];
@@ -2497,7 +2636,12 @@
     var afterConfirm = function (requestId) {
       var next = Promise.resolve();
       if (deposit.willSend && requestId) {
-        next = sendDepositLink(requestId, name, phone, deposit.amount);
+        next = sendDepositLink(requestId, name, phone, deposit.amount, { serviceName: service.name, start: start }).then(function (res) {
+          if (res && !res.texted) {
+            global.alert("The booking is saved and waiting for the deposit, but the text didn't send: " + res.error +
+              "\n\nOpen the booking and use Resend deposit link to copy the link.");
+          }
+        });
       }
       return next.then(done);
     };
@@ -2788,6 +2932,8 @@
     if (cancelBtn) cancelBtn.addEventListener("click", function () { askConfirm("cancel"); });
     var delBtn = $("calDetailDelete");
     if (delBtn) delBtn.addEventListener("click", function () { askConfirm("delete"); });
+    var noShowBtn = $("calDetailNoShow");
+    if (noShowBtn) noShowBtn.addEventListener("click", toggleNoShow);
     var confirmBack = $("calConfirmBack");
     if (confirmBack) confirmBack.addEventListener("click", function () { showDetailMode("view"); });
     var confirmGo = $("calConfirmGo");
@@ -2925,6 +3071,8 @@
       if (!calState.day) calState.day = startOfDay(new Date());
       paint(session, list);
       paintCalendar();
+      // Keep an open appointment's Payment section current (cash saved, card paid, price changed).
+      if (calState.detailId && calState.detailMode === "view") paintPay(bookingById(calState.detailId));
     }
 
     calState.col = col;
@@ -2946,6 +3094,8 @@
   global.ShopAppDashboard = {
     load: load,
     sendDepositLink: sendDepositLink,
+    requiresDeposit: shopRequiresDeposit,
+    defaultDepositFor: defaultDepositFor,
     openNew: openNewSheet,
     goTo: function (date) {
       calState.day = startOfDay(date instanceof Date ? date : new Date(date));

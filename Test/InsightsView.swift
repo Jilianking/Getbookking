@@ -13,13 +13,499 @@ struct InsightsView: View {
     @StateObject private var viewModel = InsightsViewModel()
     var drawerState: DrawerState
     let sectionTitle: String
+    /// Booked ahead: 0 = deposits + services, 1 = deposits paid, 2 = services still due.
+    @State private var aheadMode = 0
+    @State private var showReport = false
+
+    // MARK: Redesign helpers
+
+    private var access: EffectiveTeamAccess { authViewModel.teamAccess }
+
+    /// Revenue, tips, and team $ are for the owner and managers allowed to see earnings.
+    private var canSeeMoney: Bool {
+        access.isOwner || (access.accessRole == .manager && access.permissions.viewEarningsReports)
+    }
+
+    private var teamMode: Bool { sessionStore.teamMembers.count > 1 }
+    private var seesWholeTeam: Bool { teamMode && (access.isOwner || access.canViewAllBookings) }
+
+    private func recompute() {
+        var names: [String: String] = [:]
+        for m in sessionStore.teamMembers { names[m.uid] = m.displayName }
+        viewModel.recomputeSnapshot(
+            tenant: sessionStore.tenant,
+            staffCount: seesWholeTeam ? sessionStore.teamMembers.count : 1,
+            memberNames: names,
+            teamMode: seesWholeTeam,
+            canSeeMoney: canSeeMoney
+        )
+    }
+
+    private func usd(_ v: Double, compact: Bool = true) -> String {
+        v.formatted(.currency(code: "USD").precision(.fractionLength(compact ? 0 : 2)))
+    }
+
+    /// Axis labels: cents for small amounts so they never read "$0 $0 $1".
+    private func axisUsd(_ v: Double) -> String {
+        let top = max(viewModel.snapshot.revenueBuckets.map(\.value).max() ?? 0, viewModel.snapshot.revenueCompare?.max() ?? 0)
+        return usd(v, compact: top >= 20)
+    }
+
+    private func filterChip(_ text: String, icon: String) -> some View {
+        HStack(spacing: 5) {
+            Image(systemName: icon).font(.caption2)
+            Text(text).font(.caption.weight(.medium)).lineLimit(1)
+            Image(systemName: "chevron.down").font(.system(size: 8, weight: .semibold))
+        }
+        .foregroundStyle(AppDesign.textPrimary)
+        .padding(.horizontal, 11)
+        .padding(.vertical, 7)
+        .background(Capsule().fill(AppDesign.cardBackground))
+        .overlay(Capsule().stroke(AppDesign.chipBorder, lineWidth: 1))
+    }
+
+    @ViewBuilder
+    private var windowPicker: some View {
+        HStack(spacing: 0) {
+            ForEach(InsightsWindow.allCases) { w in
+                let on = viewModel.window == w
+                Button {
+                    withAnimation(.snappy) {
+                        viewModel.grain = nil
+                        viewModel.window = w
+                    }
+                } label: {
+                    Text(w.label)
+                        .font(.subheadline.weight(.medium))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 8)
+                        .foregroundStyle(on ? AppDesign.brandCream : AppDesign.textPrimary)
+                        .background(Capsule().fill(on ? AppDesign.brandDark : Color.clear))
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(3)
+        .background(Capsule().fill(AppDesign.chipBorder.opacity(0.45)))
+        .padding(.horizontal, 16)
+        if viewModel.window == .custom {
+            HStack(spacing: 10) {
+                DatePicker("From", selection: $viewModel.customRangeStart, in: ...Date(), displayedComponents: .date)
+                    .labelsHidden()
+                Text("to").font(.subheadline).foregroundStyle(AppDesign.textSecondary)
+                DatePicker("To", selection: $viewModel.customRangeEnd, in: ...Date(), displayedComponents: .date)
+                    .labelsHidden()
+                Spacer()
+            }
+            .padding(.horizontal, 16)
+        }
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                Menu {
+                    Picker("Compare", selection: $viewModel.compare) {
+                        ForEach(InsightsCompare.allCases) { c in Text(c.label).tag(c) }
+                    }
+                } label: {
+                    filterChip(viewModel.compare.label, icon: "arrow.left.arrow.right")
+                }
+                if seesWholeTeam {
+                    Menu {
+                        Picker("Team member", selection: $viewModel.staffFilter) {
+                            Text("All team").tag("")
+                            ForEach(sessionStore.teamMembers, id: \.uid) { m in Text(m.displayName).tag(m.uid) }
+                        }
+                    } label: {
+                        let name = sessionStore.teamMembers.first { $0.uid == viewModel.staffFilter }?.displayName
+                        filterChip(name ?? "All team", icon: "person")
+                    }
+                }
+                Menu {
+                    Picker("Service", selection: $viewModel.serviceFilter) {
+                        Text("All services").tag("")
+                        ForEach(viewModel.snapshot.serviceNames, id: \.self) { n in Text(n).tag(n) }
+                    }
+                } label: {
+                    filterChip(viewModel.serviceFilter.isEmpty ? "All services" : viewModel.serviceFilter, icon: "scissors")
+                }
+            }
+            .padding(.horizontal, 16)
+        }
+        if viewModel.compare == .custom {
+            HStack(spacing: 10) {
+                Text("Compare with").font(.caption).foregroundStyle(AppDesign.textSecondary)
+                DatePicker("Compare from", selection: $viewModel.compareStart, in: ...Date(), displayedComponents: .date)
+                    .labelsHidden()
+                Text("to").font(.caption).foregroundStyle(AppDesign.textSecondary)
+                DatePicker("Compare to", selection: $viewModel.compareEnd, in: ...Date(), displayedComponents: .date)
+                    .labelsHidden()
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 16)
+        }
+        HStack(alignment: .center) {
+            Text(viewModel.periodLine)
+                .font(.caption2)
+                .foregroundStyle(AppDesign.textSecondary)
+            Spacer(minLength: 8)
+            Button {
+                showReport = true
+            } label: {
+                Label("Build report", systemImage: "doc.text")
+                    .font(.caption.weight(.semibold))
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 7)
+                    .foregroundStyle(AppDesign.brandCream)
+                    .background(Capsule().fill(AppDesign.brandDark))
+            }
+            .buttonStyle(.plain)
+            .disabled(viewModel.isLoading)
+        }
+        .padding(.leading, 20)
+        .padding(.trailing, 16)
+    }
+
+    private var shopName: String {
+        let t = sessionStore.tenant ?? [:]
+        let n = ((t["businessName"] as? String) ?? (t["displayName"] as? String) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        return n.isEmpty ? "Your shop" : n
+    }
+
+    private var reportSheet: some View {
+        var names: [String: String] = [:]
+        for m in sessionStore.teamMembers { names[m.uid] = m.displayName }
+        let tenant = sessionStore.tenant
+        let staffCount = seesWholeTeam ? sessionStore.teamMembers.count : 1
+        let team = seesWholeTeam
+        let money = canSeeMoney
+        let vm = viewModel
+        return InsightsReportSheet(
+            viewModel: viewModel, shopName: shopName, teamMembers: sessionStore.teamMembers,
+            seesWholeTeam: seesWholeTeam, canSeeMoney: canSeeMoney
+        ) { from, to, compare, cmpStart, cmpEnd, staff, service in
+            vm.reportSnapshot(
+                from: from, to: to, compare: compare, compareStart: cmpStart, compareEnd: cmpEnd,
+                staffFilter: staff, serviceFilter: service,
+                tenant: tenant, staffCount: staff.isEmpty ? staffCount : 1, memberNames: names, teamMode: team, canSeeMoney: money
+            )
+        }
+    }
+
+    private var grainPicker: some View {
+        Picker("Group by", selection: Binding(
+            get: { viewModel.snapshot.grain },
+            set: { viewModel.grain = $0 }
+        )) {
+            ForEach(InsightsGrain.allCases) { g in Text(g.label).tag(g) }
+        }
+        .pickerStyle(.segmented)
+        .controlSize(.mini)
+        .frame(maxWidth: 200)
+    }
+
+    private struct Tile: Identifiable {
+        let id: String; let label: String; let value: String
+        var change: Int? = nil; var points: Int? = nil; var lowerIsBetter = false
+        var sub: String? = nil; let anchor: String
+    }
+
+    private var tiles: [Tile] {
+        let s = viewModel.snapshot
+        var t: [Tile] = []
+        if canSeeMoney {
+            t.append(Tile(id: "rev", label: s.revenueIsServiceValue ? "Service value" : "Revenue", value: s.revenue.map { usd($0) } ?? "—", change: s.revenueChangePct, anchor: "money"))
+        }
+        t.append(Tile(id: "book", label: "Visits", value: "\(s.bookings)", change: s.bookingsChangePct, anchor: "schedule"))
+        if canSeeMoney {
+            t.append(Tile(id: "avg", label: "Avg ticket", value: s.avgTicket > 0 ? usd(s.avgTicket) : "—", change: s.avgTicketChangePct, anchor: "money"))
+        }
+        t.append(Tile(id: "noshow", label: "No-shows", value: s.noShowPct.map { "\($0)%" } ?? "—", points: s.noShowChangePts, lowerIsBetter: true, anchor: "appointments"))
+        t.append(Tile(id: "util", label: "Booked time", value: s.utilization.map { "\($0)%" } ?? "—", points: s.utilizationChangePts, anchor: "schedule"))
+        t.append(Tile(id: "ret", label: "Returning", value: s.returningPct.map { "\($0)%" } ?? "—", points: s.returningChangePts, anchor: "clients"))
+        t.append(Tile(id: "up", label: "Upcoming · 7 days", value: canSeeMoney ? usd(s.upcoming7Value) : "\(s.upcoming7Count)",
+                      sub: "\(s.upcoming7Count) \(s.upcoming7Count == 1 ? "appt" : "appts") · from today", anchor: canSeeMoney ? "money" : "schedule"))
+        return t
+    }
+
+    private func row(_ label: String, _ value: String, dot: Color? = nil, points: Int? = nil, lowerIsBetter: Bool = false, change: Int? = nil) -> some View {
+        HStack(spacing: 8) {
+            if let dot { Circle().fill(dot).frame(width: 8, height: 8) }
+            Text(label).font(.subheadline)
+            Spacer()
+            Text(value).font(.subheadline.weight(.semibold))
+            InsightsPointsLabel(pts: points, lowerIsBetter: lowerIsBetter)
+            InsightsChangeLabel(pct: change)
+        }
+    }
+
+    private let doneColor = AppDesign.accentGreen
+    private let cancelColor = Color(hex: "#C9B8A0")
+    private let noShowColor = Color(hex: "#A3432F")
+
+    @ViewBuilder
+    private var insightsContent: some View {
+        let s = viewModel.snapshot
+        let cmpLabel = viewModel.compare.shortLabel
+        ScrollViewReader { proxy in
+            VStack(alignment: .leading, spacing: 12) {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 10) {
+                        ForEach(tiles) { t in
+                            Button {
+                                withAnimation { proxy.scrollTo(t.anchor, anchor: .top) }
+                            } label: {
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text(t.label).font(.caption).foregroundStyle(AppDesign.textSecondary)
+                                    Text(t.value).font(.title3.weight(.bold)).foregroundStyle(AppDesign.textPrimary)
+                                    if let sub = t.sub {
+                                        Text(sub).font(.caption2).foregroundStyle(AppDesign.textSecondary)
+                                    } else if t.points != nil {
+                                        InsightsPointsLabel(pts: t.points, lowerIsBetter: t.lowerIsBetter)
+                                    } else {
+                                        InsightsChangeLabel(pct: t.change, lowerIsBetter: t.lowerIsBetter)
+                                    }
+                                }
+                                .frame(minWidth: 104, alignment: .leading)
+                                .padding(12)
+                                .appCard()
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                    .padding(.horizontal, 16)
+                }
+
+                if canSeeMoney {
+                    InsightsSectionLabel(text: "Money").id("money")
+                    InsightsCard(title: s.revenueIsServiceValue ? "Service value" : "Revenue") {
+                        if viewModel.stripeConnected || s.revenueIsServiceValue {
+                            grainPicker
+                            InsightsBarChart(buckets: s.revenueBuckets, compare: s.revenueCompare, compareLabel: cmpLabel, color: AppDesign.brandWarm) { axisUsd($0) }
+                            if s.revenueIsServiceValue {
+                                Text("Card payments can't be split by team member or service, so this shows the price of those visits.")
+                                    .font(.caption2).foregroundStyle(AppDesign.textSecondary)
+                            }
+                        } else {
+                            Text("Revenue shows here once card payments are set up in Payments.")
+                                .font(.caption).foregroundStyle(AppDesign.textSecondary)
+                        }
+                    }
+                    .padding(.horizontal, 16)
+                    HStack(alignment: .top, spacing: 10) {
+                        InsightsCard(title: "Booked ahead") {
+                            Menu {
+                                Picker("Show", selection: $aheadMode) {
+                                    Text("Deposits + services").tag(0)
+                                    Text("Deposits only").tag(1)
+                                    Text("Services only").tag(2)
+                                }
+                            } label: {
+                                HStack(spacing: 4) {
+                                    Text(aheadMode == 1 ? "Deposits only" : aheadMode == 2 ? "Services only" : "Deposits + services")
+                                        .font(.caption.weight(.semibold))
+                                        .lineLimit(1)
+                                        .minimumScaleFactor(0.85)
+                                    Image(systemName: "chevron.down").font(.system(size: 8, weight: .bold))
+                                }
+                                .foregroundStyle(AppDesign.textPrimary)
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 6)
+                                .background(Capsule().fill(AppDesign.chipBorder.opacity(0.45)))
+                            }
+                            let v7 = aheadMode == 1 ? s.upcoming7Deposits : aheadMode == 2 ? max(0, s.upcoming7Value - s.upcoming7Deposits) : s.upcoming7Value
+                            let v30 = aheadMode == 1 ? s.upcoming30Deposits : aheadMode == 2 ? max(0, s.upcoming30Value - s.upcoming30Deposits) : s.upcoming30Value
+                            Text(usd(v7)).font(.title3.weight(.bold))
+                            Text("Next 7 days · \(s.upcoming7Count) \(s.upcoming7Count == 1 ? "appt" : "appts")").font(.caption).foregroundStyle(AppDesign.textSecondary)
+                            Text("Next 30 days · \(usd(v30))").font(.caption).foregroundStyle(AppDesign.textSecondary)
+                            Text(aheadMode == 1 ? "Deposits already paid" : aheadMode == 2 ? "Still due at appointments" : "Deposits + services")
+                                .font(.caption2).foregroundStyle(AppDesign.textSecondary)
+                            Text("From today").font(.caption2).foregroundStyle(AppDesign.textSecondary)
+                        }
+                        InsightsCard(title: "Tips") {
+                            HStack(spacing: 6) {
+                                Text(usd(s.tipsTotal)).font(.title3.weight(.bold))
+                                InsightsChangeLabel(pct: s.tipsChangePct)
+                            }
+                            Text(s.tipsCount > 0 ? "Avg \(s.tipsAvgPct)% · \(s.tipsCount) \(s.tipsCount == 1 ? "tip" : "tips")" : "Shows as clients tip")
+                                .font(.caption).foregroundStyle(AppDesign.textSecondary)
+                            if seesWholeTeam, viewModel.staffFilter.isEmpty, !s.tipsByStaff.isEmpty {
+                                Text(s.tipsByStaff.map { "\($0.name) \(usd(Double($0.cents) / 100))" }.joined(separator: " · "))
+                                    .font(.caption2).foregroundStyle(AppDesign.textSecondary)
+                            }
+                        }
+                    }
+                    .padding(.horizontal, 16)
+                }
+
+                InsightsSectionLabel(text: "Next 30 days")
+                InsightsCard(title: "Booked ahead · deposits and balances", trailing: "from today") {
+                    InsightsAheadView(s: s, showMoney: canSeeMoney, isCharter: ((sessionStore.tenant?["subscriptionPlan"] as? String) ?? "").lowercased() == "charter")
+                }
+                .padding(.horizontal, 16)
+
+                InsightsSectionLabel(text: "Appointments").id("appointments")
+                InsightsCard(title: "Completed, canceled, no-show") {
+                    let total = s.completed + s.cancelled + s.noShows
+                    if total == 0 {
+                        Text("No past appointments in this range.").font(.caption).foregroundStyle(AppDesign.textSecondary)
+                    } else {
+                        let p = { (n: Int) in Int((Double(n) / Double(total) * 100).rounded()) }
+                        InsightsStackBar(parts: [(Double(s.completed), doneColor), (Double(s.cancelled), cancelColor), (Double(s.noShows), noShowColor)])
+                        row("Completed", "\(s.completed) · \(p(s.completed))%", dot: doneColor)
+                        Divider()
+                        row("Canceled", "\(s.cancelled) · \(p(s.cancelled))%", dot: cancelColor, points: s.cancelChangePts, lowerIsBetter: true)
+                        Divider()
+                        row("No-show", "\(s.noShows) · \(p(s.noShows))%", dot: noShowColor, points: s.noShowChangePts, lowerIsBetter: true)
+                        InsightsHealthyHint(text: "Healthy: no-shows under \(InsightsHealthy.noShow)%", ok: (s.noShowPct ?? 100) < InsightsHealthy.noShow)
+                        Text("Mark a no-show from the appointment's details.").font(.caption2).foregroundStyle(AppDesign.textSecondary)
+                    }
+                }
+                .padding(.horizontal, 16)
+                InsightsCard(title: "Pre-booked") {
+                    if let pb = s.prebookPct {
+                        HStack(spacing: 6) {
+                            Text("\(pb)%").font(.title3.weight(.bold))
+                            InsightsPointsLabel(pts: s.prebookChangePts)
+                        }
+                        Text("Booked their next visit before leaving").font(.caption).foregroundStyle(AppDesign.textSecondary)
+                        InsightsHealthyHint(text: "Healthy is \(InsightsHealthy.prebook)%+", ok: pb >= InsightsHealthy.prebook)
+                    } else {
+                        Text("No past visits in this range yet.").font(.caption).foregroundStyle(AppDesign.textSecondary)
+                    }
+                }
+                .padding(.horizontal, 16)
+
+                InsightsSectionLabel(text: "Schedule").id("schedule")
+                InsightsCard(title: "Booked vs open") {
+                    if let u = s.utilization {
+                        HStack(spacing: 16) {
+                            InsightsGauge(pct: u)
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("\(s.bookedHours) of \(s.openHours) open hours").font(.subheadline)
+                                InsightsPointsLabel(pts: s.utilizationChangePts)
+                                InsightsHealthyHint(text: "Healthy is \(InsightsHealthy.booked)%+", ok: u >= InsightsHealthy.booked)
+                            }
+                        }
+                        .padding(.bottom, 6)
+                    } else {
+                        Text("Set your weekly hours in Scheduling & hours to see this.")
+                            .font(.caption).foregroundStyle(AppDesign.textSecondary)
+                    }
+                }
+                .padding(.horizontal, 16)
+                InsightsCard(title: "Busiest times") {
+                    if s.bookings > 0 {
+                        InsightsHeatmap(heat: s.heat, hours: s.heatHours)
+                    } else {
+                        Text("Nothing in this range yet.").font(.caption).foregroundStyle(AppDesign.textSecondary)
+                    }
+                }
+                .padding(.horizontal, 16)
+                InsightsCard(title: "Visits") {
+                    grainPicker
+                    InsightsBarChart(buckets: s.bookingBuckets, compare: s.bookingCompare, compareLabel: cmpLabel, color: Color(hex: "#C9B8A0")) { "\(Int($0))" }
+                }
+                .padding(.horizontal, 16)
+
+                InsightsSectionLabel(text: "Clients").id("clients")
+                InsightsCard(title: "Coming back") {
+                    let ret = s.returningPct ?? 0
+                    InsightsStackBar(parts: [(Double(ret), AppDesign.brandWarm), (Double(100 - ret), AppDesign.brandCream)])
+                    Text("\(ret)% returning · \(s.newClients) new \(s.newClients == 1 ? "client" : "clients")")
+                        .font(.caption).foregroundStyle(AppDesign.textSecondary)
+                    if let r = s.returningPct {
+                        InsightsHealthyHint(text: "Healthy is \(InsightsHealthy.returning)%+ returning", ok: r >= InsightsHealthy.returning)
+                    }
+                    ForEach([30, 60, 90], id: \.self) { n in
+                        row("Rebooked within \(n) days", (s.rebook[n] ?? nil).map { "\($0)%" } ?? "—")
+                        if n != 90 { Divider() }
+                    }
+                }
+                .padding(.horizontal, 16)
+                InsightsCard(title: "Clients to win back", trailing: "60+ days · from today") {
+                    if s.winBack.isEmpty {
+                        Text("Everyone's been in within the last 60 days.").font(.caption).foregroundStyle(AppDesign.textSecondary)
+                    } else {
+                        ForEach(s.winBack) { w in
+                            HStack {
+                                Text(w.name).font(.subheadline)
+                                Text("· \(w.daysAway) days").font(.caption).foregroundStyle(AppDesign.textSecondary)
+                                Spacer()
+                                if !w.phone.isEmpty {
+                                    // Opens the client's conversation in the app's Messages (shop's texting number).
+                                    Button("Text ›") {
+                                        drawerState.openExistingMessagesThread(phone: w.phone, clientName: w.name, bookingRequestId: nil)
+                                    }
+                                    .font(.subheadline.weight(.semibold))
+                                    .foregroundStyle(AppDesign.brandWarm)
+                                    .buttonStyle(.plain)
+                                }
+                            }
+                            Divider()
+                        }
+                        if s.winBackMore > 0 {
+                            Text("+ \(s.winBackMore) more").font(.caption).foregroundStyle(AppDesign.textSecondary)
+                        }
+                    }
+                }
+                .padding(.horizontal, 16)
+                if !s.topServices.isEmpty {
+                    InsightsCard(title: "Top services") {
+                        ForEach(Array(s.topServices.enumerated()), id: \.offset) { i, item in
+                            row(item.label, "\(item.count)")
+                            if i < s.topServices.count - 1 { Divider() }
+                        }
+                    }
+                    .padding(.horizontal, 16)
+                }
+                if seesWholeTeam, viewModel.staffFilter.isEmpty, !s.team.isEmpty {
+                    InsightsSectionLabel(text: "Team")
+                    InsightsCard(title: "Team members") {
+                        ForEach(Array(s.team.enumerated()), id: \.offset) { i, r in
+                            VStack(alignment: .leading, spacing: 3) {
+                                HStack {
+                                    Text(r.name).font(.subheadline.weight(.semibold))
+                                    Spacer()
+                                    if canSeeMoney { Text(usd(Double(r.valueCents) / 100)).font(.subheadline.weight(.semibold)) }
+                                }
+                                Text("\(r.visits) \(r.visits == 1 ? "visit" : "visits") · \(r.busyPct.map { "\($0)% booked" } ?? "—") · \(r.prebookPct.map { "\($0)% pre-booked" } ?? "pre-booked —")")
+                                    .font(.caption).foregroundStyle(AppDesign.textSecondary)
+                            }
+                            if i < s.team.count - 1 { Divider() }
+                        }
+                    }
+                    .padding(.horizontal, 16)
+                }
+
+                InsightsSectionLabel(text: "How bookings came in")
+                InsightsCard(title: "Online vs. added by you") {
+                    if s.apptTotal == 0 {
+                        Text("No appointments in this range yet.").font(.caption).foregroundStyle(AppDesign.textSecondary)
+                    } else {
+                        let pctOnline = Int((Double(s.onlineCount) / Double(s.apptTotal) * 100).rounded())
+                        InsightsStackBar(parts: [(Double(s.onlineCount), AppDesign.brandWarm), (Double(s.apptTotal - s.onlineCount), cancelColor)])
+                        row("Clients booked themselves on your site", "\(s.onlineCount) · \(pctOnline)%", dot: AppDesign.brandWarm, change: s.onlineChangePct)
+                        Divider()
+                        row("You or your team added them", "\(s.apptTotal - s.onlineCount) · \(100 - pctOnline)%", dot: cancelColor)
+                        Divider()
+                        row("New clients from online booking", "\(s.onlineNewClients)")
+                        Divider()
+                        row("Online no-shows · cancels", "\(s.onlineNoShows) · \(s.onlineCancels)")
+                        if s.onlineCount == 0 {
+                            Text("Share your booking link so clients can book themselves.").font(.caption2).foregroundStyle(AppDesign.textSecondary)
+                        }
+                    }
+                }
+                .padding(.horizontal, 16)
+            }
+        }
+    }
 
     var body: some View {
         NavigationView {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
                     AppScreenTitle(title: sectionTitle)
-                    insightsRangePicker
+                    windowPicker
 
                     if let err = viewModel.loadError {
                         Text(err)
@@ -33,25 +519,7 @@ struct InsightsView: View {
                             .frame(maxWidth: .infinity)
                             .padding(32)
                     } else {
-                        InsightsRevenueChartCard(
-                            weeklyPoints: viewModel.revenueWeeklyPoints,
-                            dailyPoints: viewModel.revenueDailyPoints,
-                            monthlyPoints: viewModel.revenueMonthlyPoints,
-                            periodTotal: viewModel.revenueInRange,
-                            periodLabel: viewModel.displayPeriodLabel,
-                            trendText: viewModel.revenueTrendText,
-                            prefersMonthlyBuckets: viewModel.selectedRange == .thisYear,
-                            prefersDailyBuckets: viewModel.selectedRange == .thisWeek
-                                || viewModel.selectedRange == .thisMonth,
-                            showsConnectPrompt: viewModel.useTenantData && !viewModel.stripeConnected,
-                            usesLegacyRevenue: !viewModel.useTenantData
-                        )
-                        .padding(.horizontal, 16)
-                        bookingsBreakdownCard
-                        if !viewModel.topServiceLabels.isEmpty {
-                            topServicesCard
-                        }
-                        clientsCard
+                        insightsContent
                     }
                 }
                 .padding(.bottom, 24)
@@ -90,6 +558,16 @@ struct InsightsView: View {
             .onChange(of: viewModel.selectedRange) { _, _ in
                 viewModel.recomputeForSelectedRange()
             }
+            .onChange(of: viewModel.window) { _, _ in recompute() }
+            .onChange(of: viewModel.compare) { _, _ in recompute() }
+            .onChange(of: viewModel.compareStart) { _, _ in if viewModel.compare == .custom { recompute() } }
+            .onChange(of: viewModel.compareEnd) { _, _ in if viewModel.compare == .custom { recompute() } }
+            .onChange(of: viewModel.grain) { _, _ in recompute() }
+            .onChange(of: viewModel.staffFilter) { _, _ in recompute() }
+            .onChange(of: viewModel.serviceFilter) { _, _ in recompute() }
+            .onChange(of: viewModel.customRangeStart) { _, _ in if viewModel.window == .custom { recompute() } }
+            .onChange(of: viewModel.customRangeEnd) { _, _ in if viewModel.window == .custom { recompute() } }
+            .onChange(of: viewModel.isLoading) { _, loading in if !loading { recompute() } }
             .onChange(of: viewModel.customRangeStart) { _, _ in
                 guard viewModel.selectedRange == .custom else { return }
                 viewModel.recomputeForSelectedRange()
@@ -100,6 +578,7 @@ struct InsightsView: View {
             }
         }
         .navigationViewStyle(.stack)
+        .sheet(isPresented: $showReport) { reportSheet }
         .task {
             await viewModel.loadData(
                 isDemoMode: authViewModel.isDemoMode,

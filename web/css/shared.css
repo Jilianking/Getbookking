@@ -377,6 +377,20 @@ body:has(#bk-quick-edit-style) em:has(> .bk-copy-empty:only-child) {
   border: 0 !important;
   line-height: 0 !important;
 }
+/*
+  Any heading whose text pieces were all cleared (every template): hide it on the public site.
+  In Edit it shrinks to the app's small "+ Add text" button (WebViewPreview.swift), tap to type it back.
+*/
+:is(h1, h2, h3, h4):has(.bk-copy-empty):not(:has([data-edit-key]:not(.bk-copy-empty))):not(:has([data-bk-empty-slot])) {
+  display: none;
+}
+body:has(#bk-quick-edit-style) :is(h1, h2, h3, h4):has(.bk-copy-empty):not(:has([data-edit-key]:not(.bk-copy-empty))):not(:has([data-bk-empty-slot])) {
+  display: block !important;
+  height: auto !important;
+  min-height: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+}
 /* Already-absolutely-positioned empties (Blade side tagline): overlay only. */
 body:has(#bk-quick-edit-style) .blade-hero-vertical:has(.bk-copy-empty) {
   position: absolute !important;
@@ -1035,3 +1049,8 @@ button.luxe-product-card.luxe-product-card--btn:focus-visible {
   }
   .luxe-shop-grid { grid-template-columns: repeat(2, 1fr); }
 }
+
+/* A section's built-in photo, flipped or hidden from the web editor's Layout (data-own-photo-side). */
+[data-own-photo-side="right"] [data-bk-own-media] { order: 2; }
+[data-own-photo-side="none"] [data-bk-own-media] { display: none !important; }
+[data-own-photo-side="none"] .bk-band-content { grid-template-columns: 1fr !important; }

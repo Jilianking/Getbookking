@@ -811,7 +811,24 @@ struct WebViewRepresentable: UIViewRepresentable {
               }
               function currentText(el) {
                 var raw = (el.innerText != null ? el.innerText : el.textContent) || '';
-                return raw.replace(/^\\s+|\\s+$/g, '');
+                // Enter = new paragraph: keep one line break per paragraph (blank lines collapse to one).
+                return raw.replace(/\\r\\n?/g, '\\n').replace(/[ \\t]*\\n\\s*/g, '\\n').replace(/^\\s+|\\s+$/g, '');
+              }
+              // Show saved text the way the site does: each line break starts a new paragraph.
+              function setTextWithParagraphs(el, val) {
+                var parts = String(val == null ? '' : val).split(/\\n+/);
+                el.textContent = '';
+                parts.forEach(function(part, i) {
+                  if (i > 0) {
+                    var gap = document.createElement('span');
+                    gap.className = 'bk-para-gap';
+                    gap.setAttribute('aria-hidden', 'true');
+                    gap.style.display = 'block';
+                    gap.style.height = '0.75em';
+                    el.appendChild(gap);
+                  }
+                  el.appendChild(document.createTextNode(part));
+                });
               }
               function canonicalTextSaveKey(k) {
                 if (!k) return k;
@@ -825,7 +842,7 @@ struct WebViewRepresentable: UIViewRepresentable {
                 var val = currentText(host);
                 [].forEach.call(document.querySelectorAll('[data-bk-text-field="' + field + '"]'), function(el) {
                   if (el === host) return;
-                  el.textContent = val;
+                  setTextWithParagraphs(el, val);
                   if (val) {
                     el.removeAttribute('data-bk-empty-slot');
                     el.removeAttribute('data-bk-empty-slot-label');
@@ -849,6 +866,11 @@ struct WebViewRepresentable: UIViewRepresentable {
                 if (!k || isSheetOnlyKey(k)) return;
                 ensureRequiredCtaLabel(el);
                 syncSharedTextField(el);
+                // Deleted text: mark it empty right away so its heading / line closes up (shared.css).
+                if (!el.getAttribute('data-bk-empty-slot')) {
+                  if (currentText(el)) el.classList.remove('bk-copy-empty');
+                  else el.classList.add('bk-copy-empty');
+                }
                 var saveKey = canonicalTextSaveKey(k);
                 if (!(saveKey in dirtyPrev)) {
                   dirtyPrev[saveKey] = (saveKey in editBaseline) ? editBaseline[saveKey] : currentText(el);
@@ -901,6 +923,11 @@ struct WebViewRepresentable: UIViewRepresentable {
                 '[data-edit-key^="galleryImage"].s12-hero-img-fallback,[data-edit-key="studio12PhilosophyImage"].s12-hero-img-fallback,[data-edit-key="studio12BookCtaImage"].s12-hero-img-fallback,[data-edit-key="studio12BookCtaImage"].s12-info-book-img-fallback,[data-edit-key="classicAboutImage"].classic-about-photo--empty,[data-edit-key="classicAboutImage"].charter-about-photo--empty,[data-edit-key^="galleryImage"].charter-quote-ph,[data-edit-key^="tm:"][data-edit-key$=":photo"].bk-team-member-initials' +
                 '{cursor:pointer!important;outline:2px dashed rgba(0,122,255,0.68)!important;outline-offset:2px!important;box-shadow:0 0 0 1px rgba(255,255,255,0.75)!important;}' +
                 '@media (max-width:900px){.studio12-page .s12-nav-trailing .s12-nav-book,.studio12-page .s12-nav-trailing a.s12-nav-book[data-edit-key],.studio12-page .s12-nav-trailing a.s12-nav-book[data-cta-key],.studio12-page .s12-nav-trailing a.s12-nav-book[data-bk-empty-slot]{display:none!important;}}' +
+                // Deleted text: a small "+ Add text" button in its place (the area shrinks to it; tap to type it back).
+                '[data-edit-key].bk-copy-empty:empty{display:inline-block!important;height:auto!important;line-height:normal!important;}' +
+                '[data-edit-key].bk-copy-empty:empty::before{content:"+ Add text";display:inline-block;font:500 12px/1.2 -apple-system,system-ui,sans-serif;letter-spacing:0;text-transform:none;font-style:normal;color:#007aff;background:rgba(0,122,255,0.08);border:1px dashed rgba(0,122,255,0.65);border-radius:999px;padding:5px 11px;white-space:nowrap;}' +
+                ':is(h1,h2,h3,h4,p,em,div):has(> [data-edit-key].bk-copy-empty:empty):not(:has([data-edit-key]:not(.bk-copy-empty))){height:auto!important;min-height:0!important;line-height:normal!important;overflow:visible!important;margin-top:4px!important;margin-bottom:4px!important;padding:0!important;font-size:12px!important;}' +
+                ':is(h1,h2,h3,h4):has([data-edit-key].bk-copy-empty):not(:has([data-edit-key]:not(.bk-copy-empty))) br{display:none!important;}' +
                 '[data-bk-color-surface]{outline:none!important;box-shadow:none!important;}' +
                 'html[data-bk-paint-mode] [data-bk-color-surface]{cursor:pointer!important;outline:2px dashed rgba(0,122,255,0.55)!important;outline-offset:0!important;box-shadow:none!important;}' +
                 'html[data-bk-paint-mode] [data-bk-color-surface][data-bk-color-active]{outline:3px dashed rgba(0,122,255,0.88)!important;}' +
@@ -1405,6 +1432,20 @@ struct WebViewRepresentable: UIViewRepresentable {
                   finishActiveInlineNoSave();
                 }, 0);
               }
+              // Enter starts a new paragraph in body text and headings. In buttons, links, the menu, and
+              // short labels (eyebrows, tags, prices) it just finishes editing so they stay on one line.
+              function onDocKeydown(ev) {
+                if (ev.key !== 'Enter' || ev.shiftKey) return;
+                var el = ev.target;
+                if (!el || el.nodeType !== 1 || el.getAttribute('contenteditable') !== 'true') return;
+                var host = el.closest('[data-edit-key]') || el;
+                var key = host.getAttribute('data-edit-key') || '';
+                var oneLine = isRequiredCtaKey(key) ||
+                  !!host.closest('a, button, nav, header, label, [role="button"], [class*="label"], [class*="eyebrow"], [class*="tag"], [class*="price"], [class*="btn"], [class*="cta"], [class*="nav"]');
+                if (!oneLine) return;
+                ev.preventDefault();
+                el.blur();
+              }
               function onDocInput(ev) {
                 var el = ev.target;
                 if (!el || el.nodeType !== 1) return;
@@ -1604,6 +1645,7 @@ struct WebViewRepresentable: UIViewRepresentable {
               document.addEventListener('touchend', onTouchEnd, { capture: true, passive: false });
               document.addEventListener('click', onTap, true);
               document.addEventListener('input', onDocInput, true);
+              document.addEventListener('keydown', onDocKeydown, true);
               window.__bkQuickEditNavigateEditable = function(delta) {
                 var list = editableNavTargets();
                 if (!list.length) return;
@@ -1723,11 +1765,13 @@ struct WebViewRepresentable: UIViewRepresentable {
                     return;
                   }
                   allEditNodes(k).forEach(function(el) {
-                    el.textContent = val;
+                    setTextWithParagraphs(el, val);
                     if (val) {
                       el.removeAttribute('data-bk-empty-slot');
                       el.removeAttribute('data-bk-empty-slot-label');
                       el.classList.remove('bk-copy-empty');
+                    } else {
+                      el.classList.add('bk-copy-empty');
                     }
                   });
                 });
@@ -1948,6 +1992,7 @@ struct WebViewRepresentable: UIViewRepresentable {
                 document.removeEventListener('touchend', onTouchEnd, { capture: true });
                 document.removeEventListener('click', onTap, true);
                 document.removeEventListener('input', onDocInput, true);
+                document.removeEventListener('keydown', onDocKeydown, true);
                 var s = document.getElementById('bk-quick-edit-style');
                 if (s) s.remove();
                 window.__bkQuickEditInstalled = false;

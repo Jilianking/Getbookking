@@ -3799,7 +3799,7 @@ exports.createDepositLink = functions
         ? customDomain
         : `${slug}.getbookking.com`;
     return {
-      url: `https://${host}/pay?pi=${encodeURIComponent(pi.id)}`,
+      url: `https://${host}/pay${data && data.balanceLink === true ? "/balance" : ""}?pi=${encodeURIComponent(pi.id)}`,
       paymentIntentId: pi.id,
       platformFeeCents: splitFee.platformFeeCents,
       studioShareCents: splitFee.studioShareCents,

@@ -50,12 +50,12 @@ html, body {
 
 .design-gate-card {
   width: min(420px, 100%);
-  background: var(--bk-paper);
-  border: 1px solid #cbc7c1;
-  border-radius: 8px;
+  /* No box: just the crown, the title, and the message on the page background. */
+  background: none;
+  border: 0;
   padding: 36px 32px;
   text-align: center;
-  box-shadow: 0 24px 60px -30px rgba(0, 0, 0, 0.35);
+  box-shadow: none;
 }
 
 .design-gate-logo {

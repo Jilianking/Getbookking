@@ -53,6 +53,14 @@ function sectionPhotoFor(tenant, id) {
   return { url: String(p.url), side: p.side === 'right' ? 'right' : 'left' };
 }
 
+/** A section's built-in photo ([data-bk-own-media]): 'right' or 'none' when changed in the editor, else ''. */
+function ownPhotoSideFor(tenant, id) {
+  var all = tenant && tenant.webSectionPhotos;
+  var p = all && typeof all === 'object' ? all[id] : null;
+  if (!p || p.own !== true) return '';
+  return p.side === 'right' || p.side === 'none' ? p.side : '';
+}
+
 function sectionPhotoHtml(photo) {
   return '<div class="bk-sec-photo"><img src="' + esc(photo.url) + '" alt="" loading="lazy"></div>';
 }
@@ -100,14 +108,19 @@ function applySectionPhotoToElement(el, photo) {
 function previewSectionPhotos(map) {
   var tenant = { webSectionPhotos: map || {} };
   [].forEach.call(document.querySelectorAll('[data-bk-section]'), function (el) {
-    applySectionPhotoToElement(el, sectionPhotoFor(tenant, el.getAttribute('data-bk-section')));
+    var id = el.getAttribute('data-bk-section');
+    applySectionPhotoToElement(el, sectionPhotoFor(tenant, id));
+    var own = ownPhotoSideFor(tenant, id);
+    if (own) el.setAttribute('data-own-photo-side', own);
+    else el.removeAttribute('data-own-photo-side');
   });
 }
 
 /** Labels the section's own root element; no wrapper, so the page structure is unchanged. */
-function stampPageSection(html, section, hidden) {
+function stampPageSection(html, section, hidden, ownSide) {
   var attrs = ' data-bk-section="' + esc(section.id) + '" data-bk-section-label="' + esc(section.label || section.id) + '"' +
-    (hidden ? ' data-bk-section-hidden="1"' : '');
+    (hidden ? ' data-bk-section-hidden="1"' : '') +
+    (ownSide ? ' data-own-photo-side="' + esc(ownSide) + '"' : '');
   return html.replace(/^(\s*<[a-zA-Z][a-zA-Z0-9-]*)/, '$1' + attrs);
 }
 
@@ -130,6 +143,6 @@ function renderPageSections(tenant, pageId, list) {
     var hidden = !!(saved && saved.hidden === true);
     if (hidden && !editing) return '';
     var photo = sectionPhotoFor(tenant, section.id);
-    return stampPageSection(photo ? wrapSectionWithPhoto(section.html, photo) : section.html, section, hidden);
+    return stampPageSection(photo ? wrapSectionWithPhoto(section.html, photo) : section.html, section, hidden, ownPhotoSideFor(tenant, section.id));
   }).join('');
 }

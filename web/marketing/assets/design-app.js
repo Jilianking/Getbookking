@@ -264,9 +264,22 @@
         .replace(/\/.*$/, '')
         .replace(/^www\./, '');
     }
-    if (custom) return 'https://' + custom;
+    // www is the main address for custom domains (the bare domain redirects there). Loading the bare
+    // domain would redirect the preview to www and the editor would ignore its clicks as another origin.
+    if (custom) return 'https://www.' + custom;
     if (!slug) return '';
     return 'https://' + slug + '.getbookking.com';
+  }
+
+  /** Same site with or without "www." (a custom domain answers on both). */
+  function sameSiteOrigin(a, b) {
+    if (!a || !b) return false;
+    if (a === b) return true;
+    try {
+      var x = new URL(a), y = new URL(b);
+      return x.protocol === y.protocol && x.port === y.port &&
+        x.hostname.replace(/^www\./, '') === y.hostname.replace(/^www\./, '');
+    } catch (e) { return false; }
   }
 
   function isLocalDesignShell() {
@@ -805,8 +818,26 @@
       '<button type="button" class="design-btn design-btn--ghost design-btn--small" data-sec-photo-upload>Replace photo</button></div></div>';
   }
 
+  function ownPhotoSide(payload) {
+    var sec = payload.section;
+    var p = sec && ((state.tenant && state.tenant.webSectionPhotos) || {})[sec.id];
+    if (p && p.own === true && (p.side === 'right' || p.side === 'none')) return p.side;
+    return payload.ownPhotoSide === 'right' || payload.ownPhotoSide === 'none' ? payload.ownPhotoSide : 'left';
+  }
+
+  function ownPhotoLayoutHtml(payload) {
+    var side = ownPhotoSide(payload);
+    var opt = function (id, label, thumb) {
+      return '<button type="button" class="design-layout-opt' + (side === id ? ' is-on' : '') + '" data-own-side="' + id + '">' +
+        '<span class="design-layout-thumb design-layout-thumb--' + thumb + '" aria-hidden="true"></span>' + label + '</button>';
+    };
+    return '<h2>Layout</h2><div class="design-layout-grid">' + opt('none', 'No photo', 'stack') +
+      opt('left', 'Photo left', 'photoLeft') + opt('right', 'Photo right', 'photoRight') + '</div>';
+  }
+
   function layoutPickerHtml(payload) {
     var sec = payload.section;
+    if (payload.ownPhoto && sec && sec.id && !layoutCardsHtml(payload, false)) return ownPhotoLayoutHtml(payload);
     var withPhoto = sec && sec.id && sectionPhotoAllowed(sec.id);
     var html = layoutCardsHtml(payload, withPhoto);
     if (!html && !withPhoto) return '';
@@ -1038,7 +1069,17 @@
 
   function wireSectionPhotoControls(host, payload) {
     var sec = payload.section;
-    if (!sec || !sectionPhotoAllowed(sec.id)) return;
+    if (!sec || !sec.id) return;
+    // Section with its own photo: flip or hide it (saved with the section photos; left is the default).
+    host.querySelectorAll('[data-own-side]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var side = btn.getAttribute('data-own-side');
+        saveSectionPhoto(sec.id, side === 'left' ? null : { own: true, side: side });
+        payload.ownPhotoSide = side;
+        renderSectionBody(payload);
+      });
+    });
+    if (!sectionPhotoAllowed(sec.id)) return;
     host.querySelectorAll('[data-sec-photo-side]').forEach(function (btn) {
       btn.addEventListener('click', function () {
         var side = btn.getAttribute('data-sec-photo-side');
@@ -3097,10 +3138,10 @@
   function bridgeOriginOk(origin) {
     if (!origin) return false;
     var siteOrigin = previewOrigin();
-    if (siteOrigin && origin === siteOrigin) return true;
+    if (siteOrigin && sameSiteOrigin(origin, siteOrigin)) return true;
     var frame = $('previewFrame');
     if (!frame || !frame.src) return false;
-    try { return new URL(frame.src).origin === origin; } catch (e) { return false; }
+    try { return sameSiteOrigin(new URL(frame.src).origin, origin); } catch (e) { return false; }
   }
 
   function onBridgeMessage(ev) {

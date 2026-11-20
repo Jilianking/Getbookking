@@ -487,11 +487,19 @@ function webCopyHasExplicit(tenant, fullKey) {
   return !!(m && typeof m === 'object' && Object.prototype.hasOwnProperty.call(m, fullKey));
 }
 
+/**
+ * Escaped text where Enter in the editor starts a new paragraph: each line break becomes a paragraph gap
+ * (an empty block, so it works inside headings and <p> without nesting paragraphs).
+ */
+function escParagraphs(text) {
+  return esc(text).replace(/\r\n?/g, '\n').replace(/\n+/g, '<span class="bk-para-gap" style="display:block;height:0.75em" aria-hidden="true"></span>');
+}
+
 /** Escaped inner HTML with `data-edit-key` for app quick-edit (`wc.*` → Firestore `webCopyOverrides`). */
 function wcSpan(tenant, fullKey, fallback) {
   var text = webCopyOverrideText(tenant, fullKey, fallback);
   var emptyAttr = text ? '' : ' class="bk-copy-empty"';
-  return '<span data-edit-key="' + esc(fullKey) + '"' + emptyAttr + '>' + esc(text) + '</span>';
+  return '<span data-edit-key="' + esc(fullKey) + '"' + emptyAttr + '>' + escParagraphs(text) + '</span>';
 }
 
 /** Like `wcSpan` but preserves line breaks (hours, address). */
@@ -557,7 +565,7 @@ function tenantSiteTextOrCompute(tenant, key, computeDefault) {
 function siteTextSpan(editKey, text) {
   if (isSiteTextBlankValue(text)) text = '';
   var emptyAttr = text ? '' : ' class="bk-copy-empty"';
-  return '<span data-edit-key="' + esc(editKey) + '"' + emptyAttr + '>' + esc(text) + '</span>';
+  return '<span data-edit-key="' + esc(editKey) + '"' + emptyAttr + '>' + escParagraphs(text) + '</span>';
 }
 
 /**
@@ -571,7 +579,7 @@ function siteTextSpanWithInlineEm(editKey, text) {
   if (!m) return siteTextSpan(editKey, raw);
   var emptyAttr = (m[1] + m[2] + m[3]).trim() ? '' : ' class="bk-copy-empty"';
   return '<span data-edit-key="' + esc(editKey) + '"' + emptyAttr + '>' +
-    esc(m[1]) + '<em>' + esc(m[2]) + '</em>' + esc(m[3]) +
+    escParagraphs(m[1]) + '<em>' + escParagraphs(m[2]) + '</em>' + escParagraphs(m[3]) +
     '</span>';
 }
 
@@ -3505,6 +3513,14 @@ function sectionPhotoFor(tenant, id) {
   return { url: String(p.url), side: p.side === 'right' ? 'right' : 'left' };
 }
 
+/** A section's built-in photo ([data-bk-own-media]): 'right' or 'none' when changed in the editor, else ''. */
+function ownPhotoSideFor(tenant, id) {
+  var all = tenant && tenant.webSectionPhotos;
+  var p = all && typeof all === 'object' ? all[id] : null;
+  if (!p || p.own !== true) return '';
+  return p.side === 'right' || p.side === 'none' ? p.side : '';
+}
+
 function sectionPhotoHtml(photo) {
   return '<div class="bk-sec-photo"><img src="' + esc(photo.url) + '" alt="" loading="lazy"></div>';
 }
@@ -3552,14 +3568,19 @@ function applySectionPhotoToElement(el, photo) {
 function previewSectionPhotos(map) {
   var tenant = { webSectionPhotos: map || {} };
   [].forEach.call(document.querySelectorAll('[data-bk-section]'), function (el) {
-    applySectionPhotoToElement(el, sectionPhotoFor(tenant, el.getAttribute('data-bk-section')));
+    var id = el.getAttribute('data-bk-section');
+    applySectionPhotoToElement(el, sectionPhotoFor(tenant, id));
+    var own = ownPhotoSideFor(tenant, id);
+    if (own) el.setAttribute('data-own-photo-side', own);
+    else el.removeAttribute('data-own-photo-side');
   });
 }
 
 /** Labels the section's own root element; no wrapper, so the page structure is unchanged. */
-function stampPageSection(html, section, hidden) {
+function stampPageSection(html, section, hidden, ownSide) {
   var attrs = ' data-bk-section="' + esc(section.id) + '" data-bk-section-label="' + esc(section.label || section.id) + '"' +
-    (hidden ? ' data-bk-section-hidden="1"' : '');
+    (hidden ? ' data-bk-section-hidden="1"' : '') +
+    (ownSide ? ' data-own-photo-side="' + esc(ownSide) + '"' : '');
   return html.replace(/^(\s*<[a-zA-Z][a-zA-Z0-9-]*)/, '$1' + attrs);
 }
 
@@ -3582,7 +3603,7 @@ function renderPageSections(tenant, pageId, list) {
     var hidden = !!(saved && saved.hidden === true);
     if (hidden && !editing) return '';
     var photo = sectionPhotoFor(tenant, section.id);
-    return stampPageSection(photo ? wrapSectionWithPhoto(section.html, photo) : section.html, section, hidden);
+    return stampPageSection(photo ? wrapSectionWithPhoto(section.html, photo) : section.html, section, hidden, ownPhotoSideFor(tenant, section.id));
   }).join('');
 }
 
@@ -9033,10 +9054,10 @@ function teamMemberProfileContentHtml(tenant, provider) {
     var key = tmWcKey(field);
     var raw = text == null ? '' : String(text);
     if (!key) {
-      return multiline ? esc(raw).replace(/\n/g, '<br>') : esc(raw);
+      return multiline ? escParagraphs(raw) : esc(raw);
     }
     var emptyAttr = raw ? '' : ' class="bk-copy-empty" data-bk-empty-slot="1"';
-    var inner = multiline ? esc(raw).replace(/\n/g, '<br>') : esc(raw);
+    var inner = multiline ? escParagraphs(raw) : esc(raw);
     return '<span data-edit-key="' + esc(key) + '"' + emptyAttr + '>' + inner + '</span>';
   }
   var siteName = teamMemberSiteName(tenant, provider);
@@ -11764,7 +11785,7 @@ function studio12HomePage(tenant, services) {
     renderPageSections(tenant, 'home', [
       { id: 'philosophy', label: 'Philosophy', html: '<section class="s12-philosophy" data-bk-color-surface="card"' +
     studio12BkSurfaceKeyAttr(tenant, 'studio12.philosophy') + ' data-bk-band-tappable>' +
-    bkColorBandInnerWrap('<div class="s12-fade s12-phil-media">' + philImgCol + '</div>' +
+    bkColorBandInnerWrap('<div class="s12-fade s12-phil-media" data-bk-own-media>' + philImgCol + '</div>' +
     '<div class="s12-fade s12-phil-copy"><div class="s12-phil-label">' + wcSpan(tenant, 'wc.s12.philosophyLabel', 'Our approach') + '</div>' +
     philTitleHtml +
     '<p class="s12-phil-body">' + wcSpan(tenant, 'wc.s12.philBody1', philBody1) + '</p>' +
@@ -14649,7 +14670,7 @@ function charterHowItWorksPage(tenant) {
   var faqHtml = faqs.map(function(f, i) {
     return '<div class="charter-faq-item" data-edit-key="charterFaq:' + i + ':edit">' +
       '<h4>' + '<span data-edit-key="charterFaq:' + i + ':question">' + esc(f.q) + '</span></h4>' +
-      '<p>' + '<span data-edit-key="charterFaq:' + i + ':answer">' + esc(f.a).replace(/\n/g, '<br>') + '</span></p></div>';
+      '<p>' + '<span data-edit-key="charterFaq:' + i + ':answer">' + escParagraphs(f.a) + '</span></p></div>';
   }).join('');
   return '<div class="charter-page">' +
     charterNavHtml(tenant, 'how') +

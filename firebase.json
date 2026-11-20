@@ -8,6 +8,8 @@
       "ignore": ["firebase.json", "**/.*", "**/node_modules/**", "marketing/**", "src/**"],
       "rewrites": [
         { "source": "/join", "destination": "/join.html" },
+        { "source": "/pay", "destination": "/pay.html" },
+        { "source": "/pay/balance", "destination": "/pay-balance.html" },
         { "source": "**", "destination": "/index.html" }
       ],
       "headers": [

@@ -723,6 +723,11 @@ struct BookingRequestDetailView: View {
     @State private var showCancelSheet = false
     @State private var showEditDetailsSheet = false
     @State private var showDeleteConfirm = false
+    /// Collect from the Payment card: balance to charge with Tap to Pay or card.
+    @State private var collectCents: Int?
+    #if TAP_TO_PAY_ENABLED
+    @StateObject private var collectPayments = PaymentsViewModel()
+    #endif
 
     private var shopDisplayName: String {
         let t = sessionStore.tenant ?? [:]
@@ -896,6 +901,25 @@ struct BookingRequestDetailView: View {
         .sheet(isPresented: $showEditDetailsSheet) {
             EditAppointmentDetailsSheet(request: currentRequest, viewModel: viewModel)
         }
+        #if TAP_TO_PAY_ENABLED
+        .sheet(isPresented: Binding(get: { collectCents != nil }, set: { if !$0 { collectCents = nil } }), onDismiss: {
+            Task { await viewModel.refreshRequests(sessionStore: sessionStore) }
+        }) {
+            TapToPaySheet(
+                viewModel: collectPayments,
+                drawerState: drawerState,
+                onDismiss: { collectCents = nil },
+                presetAmountCents: collectCents,
+                presetBookingId: currentRequest.documentId,
+                presetClient: Client(
+                    name: currentRequest.customerName ?? "Client",
+                    email: currentRequest.customerEmail ?? "",
+                    phone: currentRequest.customerPhone
+                )
+            )
+            .environmentObject(sessionStore)
+        }
+        #endif
         .confirmationDialog("Delete this appointment?", isPresented: $showDeleteConfirm, titleVisibility: .visible) {
             Button("Delete", role: .destructive) {
                 Task {
@@ -937,10 +961,40 @@ struct BookingRequestDetailView: View {
             if let notes = request.notes, !notes.isEmpty {
                 notesCard(notes)
             }
+            paymentCard
             contactCard
             approvalActionsCard
             moreActionsCard
         }
+    }
+
+    /// Price, payments, balance due, and Collect / Text pay link / Paid in cash (not for declined requests).
+    @ViewBuilder
+    private var paymentCard: some View {
+        if statusLower != "declined" {
+            BookingPaymentSection(
+                request: currentRequest,
+                viewModel: viewModel,
+                canManage: canManageActions,
+                shopName: shopDisplayName,
+                onCollect: collectAction,
+                defaultDepositCents: Int(((teamAccess.depositAmount ?? viewModel.workflowDepositAmount) ?? 0) * 100),
+                onChanged: { await viewModel.refreshRequests(sessionStore: sessionStore) }
+            )
+        }
+    }
+
+    private var collectAction: ((Int) -> Void)? {
+        #if TAP_TO_PAY_ENABLED
+        return { cents in
+            Task {
+                await collectPayments.loadData(sessionStore: sessionStore)
+                collectCents = cents
+            }
+        }
+        #else
+        return nil
+        #endif
     }
 
     /// Edit details / delete — same options as the web calendar.

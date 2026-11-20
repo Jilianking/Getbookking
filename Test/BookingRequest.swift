@@ -53,6 +53,18 @@ struct BookingRequest: Identifiable {
     var noShowAt: Date? = nil
     /// Who made the booking in the app or on the web portal (empty for online bookings).
     var createdByUid: String? = nil
+    /// Booking balances (functions/balances.js): total price set by the shop, and each payment.
+    var priceCents: Int? = nil
+    var bookingPayments: [BookingPaymentEntry] = []
+    /// Charter trip total (+ add-ons), used as the price when none is set.
+    var tripCents: Int? = nil
+    var addonCents: Int? = nil
+    /// Older bookings (before the payments list): the deposit part of paidCents, and when it was paid.
+    var depositPartCents: Int? = nil
+    var paidAt: Date? = nil
+    var depositPaidAt: Date? = nil
+    /// Deposit the shop asked for when confirming (so "Resend deposit link" asks for the same amount).
+    var depositRequestCents: Int? = nil
 
     var isHoldingSlotForPayment: Bool {
         guard holdUntil != nil else { return false }

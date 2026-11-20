@@ -497,11 +497,6 @@
       if (v === "calendar_slots") v = String(wf.confirmationType || "");
       return v === "deposit_to_confirm" || v === "approve_and_deposit";
     }
-    function syncDep() {
-      depWrap.style.display = takesDeposit(select.value) ? "" : "none";
-    }
-    select.addEventListener("change", syncDep);
-    syncDep();
     form.appendChild(typeLabel);
     form.appendChild(select);
     form.appendChild(depWrap);
@@ -524,6 +519,25 @@
       form.appendChild(sel);
       return sel;
     }
+    // Deposit refunds only matter when the booking type takes a deposit.
+    var depRefund = pick("Deposits when a booking is cancelled", "bkDepRefund", [
+      ["yes", "Refundable"], ["no", "Non-refundable"],
+    ], wf.depositRefundable === false ? "no" : "yes");
+    depWrap.appendChild(depRefund.previousSibling);
+    depWrap.appendChild(depRefund);
+
+    // Balance (money still owed): any booking with a price, except Pay in full (nothing is owed after paying).
+    var balWrap = document.createElement("div");
+    balWrap.className = "set-bal-group";
+    var balHead = document.createElement("p");
+    balHead.className = "set-group-title";
+    balHead.textContent = "Balance (money still owed)";
+    var balHint = document.createElement("p");
+    balHint.className = "set-lead";
+    balHint.textContent = "For bookings with a price. The reminder texts the client what's left to pay.";
+    balWrap.appendChild(balHead);
+    balWrap.appendChild(balHint);
+    form.appendChild(balWrap);
     var balDue = pick("Balance due", "bkBalDue", [
       ["at", charterShop ? "At the trip" : "At the appointment"],
       ["before", charterShop ? "Before departure" : "Before the appointment"],
@@ -531,9 +545,15 @@
     var remindDays = pick("Balance reminder", "bkRemind", [
       [0, "Off"], [1, "1 day before"], [2, "2 days before"], [3, "3 days before"], [7, "1 week before"],
     ], wf.balanceReminderDays != null ? wf.balanceReminderDays : (charterShop ? 2 : 1));
-    var depRefund = pick("Deposits when a booking is cancelled", "bkDepRefund", [
-      ["yes", "Refundable"], ["no", "Non-refundable"],
-    ], wf.depositRefundable === false ? "no" : "yes");
+    [balDue.previousSibling, balDue, remindDays.previousSibling, remindDays].forEach(function (el) { balWrap.appendChild(el); });
+
+    function syncDep() {
+      depWrap.style.display = takesDeposit(select.value) ? "" : "none";
+      var v = select.value === "calendar_slots" ? String(wf.confirmationType || "") : select.value;
+      balWrap.style.display = v === "pay_in_full" ? "none" : "";
+    }
+    select.addEventListener("change", syncDep);
+    syncDep();
 
     if (isTeam()) {
       form.appendChild(toggleRow(
@@ -678,15 +698,33 @@
     body.appendChild(backdrop);
     body.appendChild(modal);
 
-    function setModal(open) {
+    // The service being edited, or null when adding a new one.
+    var editing = null;
+
+    function setModal(open, item) {
       backdrop.classList.toggle("hidden", !open);
       modal.classList.toggle("hidden", !open);
       document.body.classList.toggle("acct-modal-open", open);
       if (open) {
+        editing = item || null;
         form.reset();
         var msg = form.querySelector(".set-msg");
         if (msg) msg.remove();
+        modal.querySelector(".acct-modal-head h2").textContent = (editing ? "Edit " : "New ") + noun;
+        form.querySelector(".set-save").textContent = editing ? "Save changes" : "Add " + noun;
+        if (editing) {
+          var d = editing.data;
+          form.querySelector("#svcName").value = d.name || "";
+          var dur = Number(d.durationMinutes);
+          form.querySelector("#svcDurOn").checked = dur > 0;
+          form.querySelector("#svcDur").value = dur > 0 ? dur : 60;
+          var price = Number(d.price);
+          form.querySelector("#svcPriceOn").checked = price > 0;
+          form.querySelector("#svcPrice").value = price > 0 ? price : "";
+        }
         form.querySelector("#svcName").focus();
+      } else {
+        editing = null;
       }
     }
     addBtn.addEventListener("click", function () { setModal(true); });
@@ -723,6 +761,12 @@
           if (d.durationMinutes) bits.push(d.durationMinutes + " min");
           if (d.price) bits.push("$" + Number(d.price));
           rowEl.innerHTML = "<p><strong>" + esc(d.name || "Untitled") + "</strong><span>" + esc(bits.join(" · ")) + "</span></p>";
+          var edit = document.createElement("button");
+          edit.type = "button";
+          edit.textContent = "Edit";
+          edit.className = "set-item-edit";
+          edit.addEventListener("click", function () { setModal(true, item); });
+          rowEl.appendChild(edit);
           var rm = document.createElement("button");
           rm.type = "button";
           rm.textContent = "Remove";
@@ -749,12 +793,26 @@
         isActive: true,
         sortOrder: Date.now(),
       };
-      if (includeDur) payload.durationMinutes = Math.max(5, Number(form.querySelector("#svcDur").value) || 60);
-      if (showPrice) {
-        var price = Number(form.querySelector("#svcPrice").value);
-        if (price > 0) payload.price = price;
+      var dur = includeDur ? Math.max(5, Number(form.querySelector("#svcDur").value) || 60) : null;
+      var price = showPrice ? Number(form.querySelector("#svcPrice").value) : 0;
+      if (showPrice && !(price > 0)) return showMsg(form, "Enter a price, or turn off Show starting price.", false);
+      var col = db.collection("tenants").doc(state.tenantId).collection("services");
+      var save;
+      if (editing) {
+        // Keep the slug so existing booking links keep working.
+        var del = firebase.firestore.FieldValue.delete();
+        save = col.doc(editing.id).update({
+          name: name,
+          durationMinutes: dur || del,
+          price: showPrice ? Math.round(price * 100) / 100 : del,
+          updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+        });
+      } else {
+        if (dur) payload.durationMinutes = dur;
+        if (showPrice) payload.price = Math.round(price * 100) / 100;
+        save = col.add(payload);
       }
-      db.collection("tenants").doc(state.tenantId).collection("services").add(payload).then(function () {
+      save.then(function () {
         setModal(false);
         load();
       }).catch(function (err) { showMsg(form, callableError(err), false); });

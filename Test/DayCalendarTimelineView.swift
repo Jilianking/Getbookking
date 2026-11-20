@@ -259,6 +259,7 @@ private struct DayTimelineEventCard: View {
                                 .font(.caption)
                                 .foregroundStyle(AppDesign.textSecondary)
                             ReminderReplyBadge(reply: event.reminderReply)
+                            BalanceDueTag(cents: event.balanceDueCents)
                         }
                         Spacer(minLength: 8)
                         AppStatusPill(text: event.status.calendarLabel, soft: true)

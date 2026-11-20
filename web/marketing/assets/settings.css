@@ -201,3 +201,8 @@
 /* Appointment reminders */
 .set-subhead { margin: 18px 0 2px; font-size: 13px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--text-secondary, #6b5e4a); }
 .set-hint { margin: 0 0 6px; font-size: 13px; color: var(--text-tertiary, #9a8a7a); line-height: 1.45; }
+
+/* Booking settings: Balance group */
+.set-bal-group { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; padding-top: 12px; border-top: 1px solid var(--border); }
+.set-group-title { margin: 0; font-weight: 600; font-size: 14px; }
+.set-bal-group .set-lead { margin: 0 0 4px; }

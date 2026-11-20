@@ -3779,3 +3779,35 @@ body.is-cal-dragging, body.is-cal-dragging * { cursor: grabbing !important; user
 .app-rep-error.hidden { display: none; }
 .app-rep-foot { display: flex; justify-content: flex-end; gap: 10px; padding: 12px 20px 18px; border-top: 1px solid var(--line); }
 @media (max-width: 560px) { .app-rep-checks { grid-template-columns: 1fr; } }
+
+/* Booking Payment section + "$ due" tag */
+.app-cal-due { font-style: normal; font-size: 10px; font-weight: 700; margin-left: 4px; padding: 1px 5px; border-radius: 999px; background: #F6E7C8; color: #7A5418; white-space: nowrap; }
+.app-pay { margin: 14px 0 4px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 14px; background: var(--paper); }
+.app-pay.hidden { display: none; }
+.app-pay-title { margin: 0 0 6px; font-size: 12px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.app-pay-row { display: flex; align-items: baseline; gap: 10px; padding: 6px 0; border-bottom: 1px solid var(--line); font-size: 14px; }
+.app-pay-row > span { flex: 1; min-width: 0; }
+.app-pay-row em { font-style: normal; color: var(--muted); font-size: 12px; }
+.app-pay-row strong { font-weight: 600; white-space: nowrap; }
+.app-pay-row.is-paid > span { color: var(--muted); }
+.app-pay-row.is-total { border-bottom: 0; border-top: 1px solid var(--text); margin-top: 2px; font-weight: 600; }
+.app-pay-row.is-total strong { font-size: 16px; }
+.app-pay-row.is-done { color: var(--sage); }
+.app-pay-link { border: 0; background: none; padding: 0; font: inherit; font-size: 13px; font-weight: 600; color: var(--warm); cursor: pointer; }
+.app-pay-link.is-danger { color: #a3432f; }
+.app-pay-link:disabled { opacity: 0.5; cursor: default; }
+.app-pay-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.app-pay-actions .app-btn { flex: 1 1 140px; }
+.app-pay-note { margin: 8px 0 0; font-size: 12px; color: var(--muted); }
+.app-pay-msg { margin: 8px 0 0; font-size: 13px; color: #a3432f; }
+.app-pay-msg.is-ok { color: var(--sage); }
+.app-pay-form { padding: 10px 0 4px; }
+.app-pay-form label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); }
+.app-pay-input { display: flex; align-items: center; border: 1px solid var(--line); border-radius: 10px; background: var(--card); padding: 0 10px; }
+.app-pay-input i { font-style: normal; color: var(--muted); }
+.app-pay-input input { flex: 1; border: 0; background: none; padding: 9px 6px; font: inherit; font-size: 15px; color: var(--text); outline: none; min-width: 0; }
+.app-pay-form-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; }
+.app-pay-linkbox { display: flex; gap: 8px; margin-top: 8px; }
+.app-pay-linkbox input { flex: 1; min-width: 0; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--card); font: inherit; font-size: 12px; color: var(--text); }
+
+.app-sheet-error.is-ok { color: var(--sage); }

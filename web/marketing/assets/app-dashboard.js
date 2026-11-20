@@ -192,6 +192,8 @@
       reminderReply: data.rescheduleRequestedAt ? "reschedule" : data.clientConfirmedAt ? "confirmed" : "",
       // The shop marked that the client didn't show up (Insights counts these).
       noShow: !!data.noShowAt,
+      // Price and payments for the Payment section and the "$ due" tag (see app-balance.js).
+      raw: data,
       assignedName: String(data.assignedMemberName || "").trim(),
       assignedUid: String(data.assignedMemberUid || "").trim(),
       readAt: toDate(data.readAt),
@@ -720,21 +722,26 @@
     if (will) will.classList.toggle("hidden", !state.willSend);
   }
 
-  function sendDepositLink(requestId, name, phone, amount) {
+  /**
+   * Makes a deposit link for a booking and texts it to the client.
+   * Resolves { url, texted, error }: when the text can't go out (no phone, no texting, client unsubscribed),
+   * the link still comes back so the shop can send it another way. Rejects only if the link can't be made.
+   * opts: { serviceName, start, shopName }.
+   */
+  function sendDepositLink(requestId, name, phone, amount, opts) {
+    opts = opts || {};
     var cents = Math.round(amount * 100);
     if (cents < 50) {
-      return Promise.reject(
-        new Error("Deposit must be at least $0.50 to send a payment link.")
-      );
-    }
-    var to = e164US(phone);
-    if (!to) {
-      return Promise.reject(
-        new Error("Client has no phone number — deposit link was not sent.")
-      );
+      return Promise.reject(new Error("Deposit must be at least $0.50 to send a payment link."));
     }
     var fns = firebase.app().functions(REGION);
-    var dollars = (cents / 100).toFixed(2);
+    var dollars = cents % 100 ? (cents / 100).toFixed(2) : String(cents / 100);
+    // Remember the amount so "Resend deposit link" asks for the same deposit.
+    var session = calState.session;
+    if (session && session.tenantId) {
+      firebase.firestore().collection("tenants").doc(session.tenantId).collection("bookingRequests").doc(requestId)
+        .update({ depositRequestCents: cents }).catch(function () {});
+    }
     return fns
       .httpsCallable("createDepositLink")({
         serviceAmountCents: cents,
@@ -742,18 +749,44 @@
       })
       .then(function (res) {
         var url = res && res.data && res.data.url;
-        if (!url) throw new Error("Could not create deposit link.");
+        if (!url) throw new Error("Could not create the deposit link.");
+        var to = e164US(phone);
+        if (!to) return { url: url, texted: false, error: "This client has no phone number." };
+        if (!shopCanSms(calState.session || opts.session)) return { url: url, texted: false, error: "Texting isn't set up for your shop." };
+        var first = firstName(name);
+        var what = opts.serviceName || "appointment";
+        var whenText = opts.start ? " on " + formatWhen(opts.start).replace(" · ", " at ") : "";
+        var shop = opts.shopName || shopLabel(calState.session);
+        var body = "Hi" + (first ? " " + first : "") + ", to hold your " + what + whenText + " with " + shop +
+          ", pay the $" + dollars + " deposit here: " + url;
         return fns.httpsCallable("sendClientSms")({
           to: to,
-          body: "Deposit: $" + dollars + "\nPay here: " + url,
+          body: body,
           clientName: name,
           threadId: to,
           paymentKind: "deposit",
           amountCents: cents,
           paymentUrl: url,
           threadPreview: "Deposit · $" + dollars,
+        }).then(function () {
+          return { url: url, texted: true };
+        }).catch(function (e) {
+          var msg = String((e && e.message) || "");
+          if (/opt|unsubscrib|stop/i.test(msg)) msg = "This client unsubscribed from texts (replied STOP).";
+          return { url: url, texted: false, error: msg || "The text didn't send." };
         });
       });
+  }
+
+  /** Default deposit (dollars) for a booking: the service's own deposit when the shop sets one per service. */
+  function defaultDepositFor(session, serviceId, serviceName) {
+    var wf = (session && session.tenant && session.tenant.workflow) || {};
+    if (wf.depositPerService === true) {
+      var svc = (calState.services || []).filter(function (x) { return (serviceId && x.id === serviceId) || (!serviceId && x.name === serviceName); })[0];
+      if (svc && svc.depositAmount > 0) return svc.depositAmount;
+    }
+    var amt = accessOf(session).depositAmount;
+    return amt && amt > 0 ? amt : null;
   }
 
   function occupyingAll(session) {
@@ -1015,11 +1048,47 @@
       height +
       'px">' +
       "<strong>" +
-      esc(b.customerName) + replyMark(b) +
+      esc(b.customerName) + replyMark(b) + dueMark(b) +
       "</strong><span>" +
       esc(sub) +
       "</span></button>"
     );
+  }
+
+  function servicePriceFor(b) {
+    var list = calState.services || [];
+    var svc = list.filter(function (x) { return (b.serviceId && x.id === b.serviceId) || (!b.serviceId && x.name === b.serviceName); })[0];
+    return svc ? svc.priceCents : 0;
+  }
+
+  function dueMark(b) {
+    if (!global.ShopAppBalance || !b.raw) return "";
+    var due = ShopAppBalance.dueCents(b.raw, b.status, servicePriceFor(b));
+    return due ? ' <i class="app-cal-due" title="Balance still to pay">' + esc(ShopAppBalance.money(due)) + " due</i>" : "";
+  }
+
+  function paintPay(booking) {
+    var host = $("calDetailPay");
+    if (!host || !global.ShopAppBalance || !booking) return;
+    var session = calState.session;
+    var uid = session && session.user && session.user.uid;
+    ShopAppBalance.render({
+      host: host,
+      id: booking.id,
+      raw: booking.raw || {},
+      status: booking.status,
+      booking: booking,
+      session: session,
+      servicePriceCents: servicePriceFor(booking),
+      may: mayManageBookings(session) || (!!uid && booking.assignedUid === uid),
+      canText: shopCanSms(session),
+      shopName: shopLabel(session),
+      whenText: booking.start ? formatWhen(booking.start).replace(" · ", " at ") : "",
+      defaultDepositCents: Math.round((defaultDepositFor(session, booking.serviceId, booking.serviceName) || 0) * 100),
+      resendDeposit: function (cents) {
+        return sendDepositLink(booking.id, booking.customerName, booking.customerPhone, cents / 100, { serviceName: booking.serviceName, start: booking.start });
+      },
+    });
   }
 
   function replyMark(b) {
@@ -1101,7 +1170,7 @@
             return '<button type="button" class="app-cal-tw-chip' + (b.status !== "confirmed" ? " is-hold" : "") +
               (serviceColor(b) ? " has-svc" : "") +
               '" style="--member:' + r.color + ";" + svcStyle(b) + '" data-booking-id="' + esc(b.id) + '"><time>' + esc(formatTime(b.start)) +
-              "</time><span>" + esc(b.customerName) + replyMark(b) + (b.serviceName ? " · " + esc(b.serviceName) : "") + "</span></button>";
+              "</time><span>" + esc(b.customerName) + replyMark(b) + dueMark(b) + (b.serviceName ? " · " + esc(b.serviceName) : "") + "</span></button>";
           }).join("");
         row += '<div class="app-cal-tw-cell' + (sameDay(d, today) ? " is-today" : "") + '" data-cal-day="' + isoDate(d) +
           '" data-col-day="' + isoDate(d) + '" data-col-uid="' + esc(r.key === "unassigned" ? "" : r.key) + '" data-col-key="' + esc(r.key) + '">' +
@@ -1201,7 +1270,7 @@
             '"' + member + ' data-booking-id="' +
             esc(b.id) +
             '">' +
-            esc(b.customerName) + replyMark(b) +
+            esc(b.customerName) + replyMark(b) + dueMark(b) +
             "</span>"
           );
         })
@@ -1443,6 +1512,7 @@
           booking.reminderReply === "reschedule" ? "Wants to reschedule (replied R)" : "");
     }
     paintDetailActions(booking);
+    paintPay(booking);
   }
 
   /* ---------- Edit / cancel / delete an appointment ---------- */
@@ -2427,6 +2497,8 @@
             slug: String(d.slug || "").trim(),
             durationMinutes: typeof dur === "number" && dur > 0 ? dur : 60,
             sortOrder: typeof d.sortOrder === "number" ? d.sortOrder : 999,
+            priceCents: isFinite(Number(d.price)) && Number(d.price) > 0 ? Math.round(Number(d.price) * 100) : 0,
+            depositAmount: isFinite(Number(d.depositAmount)) && Number(d.depositAmount) > 0 ? Number(d.depositAmount) : 0,
           });
         });
         list.sort(function (a, b) {
@@ -2530,7 +2602,12 @@
     var afterConfirm = function (requestId) {
       var next = Promise.resolve();
       if (deposit.willSend && requestId) {
-        next = sendDepositLink(requestId, name, phone, deposit.amount);
+        next = sendDepositLink(requestId, name, phone, deposit.amount, { serviceName: service.name, start: start }).then(function (res) {
+          if (res && !res.texted) {
+            global.alert("The booking is saved and waiting for the deposit, but the text didn't send: " + res.error +
+              "\n\nOpen the booking and use Resend deposit link to copy the link.");
+          }
+        });
       }
       return next.then(done);
     };
@@ -2960,6 +3037,8 @@
       if (!calState.day) calState.day = startOfDay(new Date());
       paint(session, list);
       paintCalendar();
+      // Keep an open appointment's Payment section current (cash saved, card paid, price changed).
+      if (calState.detailId && calState.detailMode === "view") paintPay(bookingById(calState.detailId));
     }
 
     calState.col = col;
@@ -2981,6 +3060,8 @@
   global.ShopAppDashboard = {
     load: load,
     sendDepositLink: sendDepositLink,
+    requiresDeposit: shopRequiresDeposit,
+    defaultDepositFor: defaultDepositFor,
     openNew: openNewSheet,
     goTo: function (date) {
       calState.day = startOfDay(date instanceof Date ? date : new Date(date));

@@ -393,6 +393,7 @@ struct EventRow: View {
                 .font(.subheadline)
                 .foregroundStyle(AppDesign.textSecondary)
             ReminderReplyBadge(reply: event.reminderReply)
+            BalanceDueTag(cents: event.balanceDueCents)
             HStack {
                 AppStatusPill(text: event.status.calendarLabel, soft: true)
                 Spacer()

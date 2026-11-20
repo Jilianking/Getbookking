@@ -522,7 +522,15 @@ class FirebaseService: ObservableObject {
                 clientConfirmedAt: (d["clientConfirmedAt"] as? Timestamp)?.dateValue(),
                 rescheduleRequestedAt: (d["rescheduleRequestedAt"] as? Timestamp)?.dateValue(),
                 noShowAt: (d["noShowAt"] as? Timestamp)?.dateValue(),
-                createdByUid: d["createdByUid"] as? String
+                createdByUid: d["createdByUid"] as? String,
+                priceCents: BookingRequest.intField(d["priceCents"]),
+                bookingPayments: BookingPaymentEntry.parse(d["payments"]),
+                tripCents: BookingRequest.intField(d["tripCents"]),
+                addonCents: BookingRequest.intField(d["addonCents"]),
+                depositPartCents: BookingRequest.intField(d["depositPartCents"]),
+                paidAt: (d["paidAt"] as? Timestamp)?.dateValue(),
+                depositPaidAt: (d["depositPaidAt"] as? Timestamp)?.dateValue(),
+                depositRequestCents: BookingRequest.intField(d["depositRequestCents"])
             )
         }
         if status != nil {

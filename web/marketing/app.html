@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap" rel="stylesheet" />
   <base href="/" />
-  <link rel="stylesheet" href="/assets/app.css?v=88" />
+  <link rel="stylesheet" href="/assets/app.css?v=90" />
 </head>
 <body>
   <div id="gateLoading" class="app-gate">
@@ -325,6 +325,7 @@
         <div id="calDetailView">
           <p class="app-detail-status" id="calDetailStatus"></p>
           <dl class="app-detail-list" id="calDetailList"></dl>
+          <section class="app-pay hidden" id="calDetailPay" aria-label="Payment"></section>
           <div class="app-cal-confirm hidden" id="calConfirmBox" role="alertdialog" aria-live="polite">
             <p id="calConfirmText"></p>
             <label class="app-shop-visible hidden" id="calConfirmNotifyRow">
@@ -1189,8 +1190,9 @@
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-storage-compat.js"></script>
   <script src="/js/firebase-config.js"></script>
   <script src="/assets/app-session.js?v=7"></script>
-  <script src="/assets/app-dashboard.js?v=34"></script>
-  <script src="/assets/app-requests.js?v=6"></script>
+  <script src="/assets/app-balance.js?v=2"></script>
+  <script src="/assets/app-dashboard.js?v=36"></script>
+  <script src="/assets/app-requests.js?v=7"></script>
   <script src="/assets/app-dash-charts.js?v=7"></script>
   <script src="/assets/app-team.js?v=5"></script>
   <script src="/assets/app-profile.js?v=1"></script>

@@ -14,6 +14,8 @@ struct Event: Codable, Identifiable {
     var documents: [String]?
     /// "confirmed" (client replied C) or "reschedule" (replied R) to a reminder text.
     var reminderReply: String? = nil
+    /// Money still to pay on the booking ("$100 due"), when the shop is tracking it.
+    var balanceDueCents: Int? = nil
     
     enum EventType: String, Codable {
         case appointment = "appointment"

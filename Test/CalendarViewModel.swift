@@ -70,6 +70,8 @@ class CalendarViewModel: ObservableObject {
             }
 
             let bookings = try await firebaseService.fetchTenantBookingRequests(tenantId: tenantId)
+            // Service prices back the "$ due" tag when a booking has a deposit but no price of its own.
+            await BookingBalance.loadServicePrices(tenantId: tenantId)
             let tenant = try? await firebaseService.fetchTenant(tenantId: tenantId)
             let isCharter = SubscriptionPlan.normalized(
                 fromFirestore: tenant?["subscriptionPlan"] as? String
@@ -148,7 +150,8 @@ class CalendarViewModel: ObservableObject {
             notes: booking.notes,
             color: ServiceColors.hex(serviceId: booking.serviceId, serviceName: booking.serviceName),
             documents: nil,
-            reminderReply: booking.rescheduleRequestedAt != nil ? "reschedule" : (booking.clientConfirmedAt != nil ? "confirmed" : nil)
+            reminderReply: booking.rescheduleRequestedAt != nil ? "reschedule" : (booking.clientConfirmedAt != nil ? "confirmed" : nil),
+            balanceDueCents: BookingBalance.dueCents(booking)
         )
     }
 

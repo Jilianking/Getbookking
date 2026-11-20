@@ -206,3 +206,11 @@
 .set-bal-group { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; padding-top: 12px; border-top: 1px solid var(--border); }
 .set-group-title { margin: 0; font-weight: 600; font-size: 14px; }
 .set-bal-group .set-lead { margin: 0 0 4px; }
+
+/* Money boxes: "$" inside, no number arrows */
+.set-money { display: flex; align-items: center; gap: 6px; border: 1px solid var(--border); border-radius: 12px; background: #fff; padding: 0 12px; }
+.set-money:focus-within { border-color: #c9a24f; box-shadow: 0 0 0 3px rgba(201, 162, 79, 0.18); }
+.set-money span { color: var(--text-secondary); font-size: 15px; }
+.set-money input { flex: 1; min-width: 0; border: 0 !important; background: transparent !important; box-shadow: none !important; outline: none; padding: 12px 0 !important; font: inherit; font-size: 16px; }
+.set-dep-row .set-money { max-width: 140px; padding: 0 10px; }
+.set-dep-row .set-money input { padding: 8px 0 !important; text-align: right; }

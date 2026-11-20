@@ -102,6 +102,34 @@
     return err.message || String(err);
   }
 
+  /** Dollar amount from a money box ("45", "$45", "1,200.5" → number), or NaN. */
+  function moneyVal(v) {
+    var n = parseFloat(String(v == null ? "" : v).replace(/[^0-9.]/g, ""));
+    return isFinite(n) ? n : NaN;
+  }
+
+  /** Turns an input into a money box: "$" inside, no arrows, decimal keyboard, tidied to 0.00 on blur. */
+  function moneyBox(input) {
+    input.type = "text";
+    input.setAttribute("inputmode", "decimal");
+    input.setAttribute("autocomplete", "off");
+    if (!input.placeholder) input.placeholder = "0.00";
+    var n0 = moneyVal(input.value);
+    if (input.value && isFinite(n0)) input.value = n0.toFixed(2);
+    input.addEventListener("blur", function () {
+      var n = moneyVal(input.value);
+      input.value = input.value.trim() && isFinite(n) ? n.toFixed(2) : "";
+    });
+    var wrap = document.createElement("div");
+    wrap.className = "set-money";
+    var sign = document.createElement("span");
+    sign.textContent = "$";
+    sign.setAttribute("aria-hidden", "true");
+    wrap.appendChild(sign);
+    wrap.appendChild(input);
+    return wrap;
+  }
+
   function showMsg(root, text, ok) {
     var p = root.querySelector(".set-msg");
     if (!p) {
@@ -435,12 +463,10 @@
     var depLabel = document.createElement("label");
     depLabel.textContent = "Deposit amount";
     var dep = document.createElement("input");
-    dep.type = "number";
-    dep.min = "0";
-    dep.step = "0.01";
     dep.value = wf.depositAmount ? String(wf.depositAmount) : "";
+    dep.setAttribute("aria-label", "Deposit amount");
     depWrap.appendChild(depLabel);
-    depWrap.appendChild(dep);
+    depWrap.appendChild(moneyBox(dep));
 
     // Different deposit per service: lists every service with its own deposit (blank = the default above).
     var perSvc = toggleRow(
@@ -475,14 +501,11 @@
           var name = document.createElement("span");
           name.textContent = sv.name || "Service";
           var inp = document.createElement("input");
-          inp.type = "number";
-          inp.min = "0";
-          inp.step = "0.01";
-          inp.placeholder = dep.value ? "$" + dep.value : "Default";
+          inp.placeholder = dep.value || "Default";
           inp.value = Number(sv.depositAmount) > 0 ? String(sv.depositAmount) : (dep.value || "");
           inp.setAttribute("aria-label", "Deposit for " + (sv.name || "service"));
           row.appendChild(name);
-          row.appendChild(inp);
+          row.appendChild(moneyBox(inp));
           svcList.appendChild(row);
           svcInputs.push({ id: d.id, input: inp, was: Number(sv.depositAmount) || 0 });
         });
@@ -607,7 +630,7 @@
         payload.confirmationType = chosen;
       }
       if (takesDeposit(chosen)) {
-        var amount = Number(dep.value);
+        var amount = moneyVal(dep.value);
         if (amount > 0) payload.depositAmount = amount;
       }
       save.disabled = true;
@@ -625,7 +648,7 @@
         var batch = db.batch();
         var changed = 0;
         svcInputs.forEach(function (row) {
-          var v = Number(row.input.value);
+          var v = moneyVal(row.input.value);
           var next = v > 0 ? Math.round(v * 100) / 100 : null;
           if ((next || 0) === row.was) return;
           batch.update(db.collection("tenants").doc(state.tenantId).collection("services").doc(row.id), { depositAmount: next });
@@ -692,9 +715,18 @@
       '<label class="set-toggle"><div><strong>Include duration</strong></div><input type="checkbox" id="svcDurOn" /></label>' +
       '<label>Duration (minutes)</label><input type="number" id="svcDur" min="5" step="5" value="60" />' +
       '<label class="set-toggle"><div><strong>Show starting price</strong></div><input type="checkbox" id="svcPriceOn" /></label>' +
-      '<label>Price</label><input type="number" id="svcPrice" min="0" step="0.01" />' +
+      '<label for="svcPrice">Price</label><div class="set-money"><span aria-hidden="true">$</span><input type="text" id="svcPrice" inputmode="decimal" placeholder="0.00" autocomplete="off" /></div>' +
       '<div class="set-actions"><button type="button" class="set-cancel">Cancel</button><button type="submit" class="set-save">Add ' + noun + '</button></div>';
     modal.querySelector(".acct-modal-card").appendChild(form);
+    // Typing a price turns on "Show starting price"; leaving the box tidies it to 0.00.
+    var priceInput = form.querySelector("#svcPrice");
+    priceInput.addEventListener("input", function () {
+      if (priceInput.value.trim()) form.querySelector("#svcPriceOn").checked = true;
+    });
+    priceInput.addEventListener("blur", function () {
+      var n = moneyVal(priceInput.value);
+      priceInput.value = priceInput.value.trim() && isFinite(n) ? n.toFixed(2) : "";
+    });
     body.appendChild(backdrop);
     body.appendChild(modal);
 
@@ -720,7 +752,7 @@
           form.querySelector("#svcDur").value = dur > 0 ? dur : 60;
           var price = Number(d.price);
           form.querySelector("#svcPriceOn").checked = price > 0;
-          form.querySelector("#svcPrice").value = price > 0 ? price : "";
+          form.querySelector("#svcPrice").value = price > 0 ? price.toFixed(2) : "";
         }
         form.querySelector("#svcName").focus();
       } else {
@@ -794,7 +826,7 @@
         sortOrder: Date.now(),
       };
       var dur = includeDur ? Math.max(5, Number(form.querySelector("#svcDur").value) || 60) : null;
-      var price = showPrice ? Number(form.querySelector("#svcPrice").value) : 0;
+      var price = showPrice ? moneyVal(form.querySelector("#svcPrice").value) : 0;
       if (showPrice && !(price > 0)) return showMsg(form, "Enter a price, or turn off Show starting price.", false);
       var col = db.collection("tenants").doc(state.tenantId).collection("services");
       var save;
@@ -1148,14 +1180,12 @@
     var depLabel = document.createElement("label");
     depLabel.textContent = "Deposit amount";
     var dep = document.createElement("input");
-    dep.type = "number";
-    dep.min = "0";
-    dep.step = "0.01";
     dep.value = state.userData.workflow && state.userData.workflow.depositAmount ? String(state.userData.workflow.depositAmount) : "";
+    dep.setAttribute("aria-label", "Deposit amount");
     form.appendChild(label);
     form.appendChild(select);
     form.appendChild(depLabel);
-    form.appendChild(dep);
+    form.appendChild(moneyBox(dep));
     var actions = document.createElement("div");
     actions.className = "set-actions";
     var save = document.createElement("button");
@@ -1171,7 +1201,7 @@
         responseTimeHours: (state.userData.workflow && state.userData.workflow.responseTimeHours) || 24,
       };
       if (select.value === "deposit_to_confirm" || select.value === "approve_and_deposit") {
-        var amount = Number(dep.value);
+        var amount = moneyVal(dep.value);
         if (amount > 0) wfData.depositAmount = amount;
       }
       db.collection("users").doc(state.user.uid).set({ workflow: wfData }, { merge: true }).then(function () {

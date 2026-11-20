@@ -476,20 +476,23 @@ struct InsightsView: View {
                     .padding(.horizontal, 16)
                 }
 
-                InsightsSectionLabel(text: "Online bookings")
-                InsightsCard(title: "From your website") {
+                InsightsSectionLabel(text: "How bookings came in")
+                InsightsCard(title: "Online vs. added by you") {
                     if s.apptTotal == 0 {
                         Text("No appointments in this range yet.").font(.caption).foregroundStyle(AppDesign.textSecondary)
                     } else {
                         let pctOnline = Int((Double(s.onlineCount) / Double(s.apptTotal) * 100).rounded())
                         InsightsStackBar(parts: [(Double(s.onlineCount), AppDesign.brandWarm), (Double(s.apptTotal - s.onlineCount), cancelColor)])
-                        row("From your website", "\(s.onlineCount) · \(pctOnline)%", dot: AppDesign.brandWarm, change: s.onlineChangePct)
+                        row("Clients booked themselves on your site", "\(s.onlineCount) · \(pctOnline)%", dot: AppDesign.brandWarm, change: s.onlineChangePct)
                         Divider()
-                        row("Booked by you", "\(s.apptTotal - s.onlineCount) · \(100 - pctOnline)%", dot: cancelColor)
+                        row("You or your team added them", "\(s.apptTotal - s.onlineCount) · \(100 - pctOnline)%", dot: cancelColor)
                         Divider()
-                        row("New clients who booked online", "\(s.onlineNewClients)")
+                        row("New clients from online booking", "\(s.onlineNewClients)")
                         Divider()
                         row("Online no-shows · cancels", "\(s.onlineNoShows) · \(s.onlineCancels)")
+                        if s.onlineCount == 0 {
+                            Text("Share your booking link so clients can book themselves.").font(.caption2).foregroundStyle(AppDesign.textSecondary)
+                        }
                     }
                 }
                 .padding(.horizontal, 16)

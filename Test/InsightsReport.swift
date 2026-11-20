@@ -19,7 +19,7 @@ enum InsightsReportSection: String, CaseIterable, Identifiable {
         case .schedule: return "Schedule"
         case .clients: return "Clients"
         case .team: return "Team members"
-        case .online: return "Online bookings"
+        case .online: return "How bookings came in"
         case .ahead: return "Next 30 days (deposits and balances)"
         case .details: return "Detail lists (every appointment, payment, and tip)"
         }
@@ -495,10 +495,10 @@ private struct ReportOnline: View {
     let s: InsightsSnapshot
     var body: some View {
         let pctOnline = s.apptTotal > 0 ? Int((Double(s.onlineCount) / Double(s.apptTotal) * 100).rounded()) : 0
-        ReportTitled(title: "Online bookings") {
-            ReportKV(label: "From your website", value: "\(s.onlineCount) · \(pctOnline)%", change: pctChange(s.onlineChangePct))
-            ReportKV(label: "Booked by you", value: "\(s.apptTotal - s.onlineCount) · \(s.apptTotal > 0 ? 100 - pctOnline : 0)%")
-            ReportKV(label: "New clients who booked online", value: "\(s.onlineNewClients)")
+        ReportTitled(title: "How bookings came in") {
+            ReportKV(label: "Clients booked themselves on your site", value: "\(s.onlineCount) · \(pctOnline)%", change: pctChange(s.onlineChangePct))
+            ReportKV(label: "You or your team added them", value: "\(s.apptTotal - s.onlineCount) · \(s.apptTotal > 0 ? 100 - pctOnline : 0)%")
+            ReportKV(label: "New clients from online booking", value: "\(s.onlineNewClients)")
             ReportKV(label: "Online no-shows · cancels", value: "\(s.onlineNoShows) · \(s.onlineCancels)")
         }
     }

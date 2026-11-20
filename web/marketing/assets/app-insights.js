@@ -1,7 +1,7 @@
 /**
  * Shop portal Insights: how the shop is doing over a chosen range.
  * Toolbar (compare, team member, service, download), summary tiles, then Money, Appointments,
- * Schedule, Clients, and Online bookings sections. Every number covers only the chosen dates
+ * Schedule, Clients, and How bookings came in sections. Every number covers only the chosen dates
  * (Booked ahead and Win back look forward from today).
  * Revenue comes from the same Stripe source as the iPhone app; tips from the payment ledger;
  * bookings, clients, and booked time from the shop's booking requests and weekly hours.
@@ -835,8 +835,8 @@
     // Team.
     if (seesWholeTeam() && !state.staff) html += section("Team") + '<div class="app-ins-grid">' + card("Team members", teamTable(cur, from, now, byClient, seeMoney), "is-wide") + "</div>";
 
-    // Online bookings.
-    html += section("Online bookings") + '<div class="app-ins-grid">' + card("From your website", onlineCard(cur, prev, first, from, now), "is-wide") + "</div>";
+    // How bookings came in: clients booking themselves online vs. added by the shop.
+    html += section("How bookings came in") + '<div class="app-ins-grid">' + card("Online vs. added by you", onlineCard(cur, prev, first, from, now), "is-wide") + "</div>";
 
     host.innerHTML = html;
     if (c.wireTips) host.querySelectorAll(".app-ins-body").forEach(function (b) { c.wireTips(b); });
@@ -985,11 +985,11 @@
     var pctOnline = Math.round((s.online / s.total) * 100);
     return stack([[pctOnline, "is-online"], [100 - pctOnline, "is-byyou"]]) +
       '<div class="app-ins-rows">' +
-      '<div><span><i class="app-ins-dot is-online"></i>From your website</span><strong>' + s.online + " · " + pctOnline + "% " + delta(s.online, ps && ps.online) + "</strong></div>" +
-      '<div><span><i class="app-ins-dot is-byyou"></i>Booked by you</span><strong>' + s.byYou + " · " + (100 - pctOnline) + "%</strong></div>" +
-      "<div><span>New clients who booked online</span><strong>" + s.newClients + " " + delta(s.newClients, ps && ps.newClients) + "</strong></div>" +
+      '<div><span><i class="app-ins-dot is-online"></i>Clients booked themselves on your site</span><strong>' + s.online + " · " + pctOnline + "% " + delta(s.online, ps && ps.online) + "</strong></div>" +
+      '<div><span><i class="app-ins-dot is-byyou"></i>You or your team added them</span><strong>' + s.byYou + " · " + (100 - pctOnline) + "%</strong></div>" +
+      "<div><span>New clients from online booking</span><strong>" + s.newClients + " " + delta(s.newClients, ps && ps.newClients) + "</strong></div>" +
       "<div><span>Online no-shows · cancels</span><strong>" + s.noShows + " · " + s.cancels + "</strong></div>" +
-      "</div>";
+      "</div>" + (s.online ? "" : '<p class="app-hint">Share your booking link so clients can book themselves.</p>');
   }
 
   /* ── Report builder (PDF or CSV) ── */
@@ -1001,7 +1001,7 @@
     { id: "schedule", label: "Schedule" },
     { id: "clients", label: "Clients" },
     { id: "team", label: "Team members", team: true },
-    { id: "online", label: "Online bookings" },
+    { id: "online", label: "How bookings came in" },
     { id: "ahead", label: "Next 30 days (deposits and balances)" },
     { id: "details", label: "Detail lists (every appointment, payment, and tip)" },
   ];
@@ -1183,10 +1183,10 @@
     }
     if (on.online) {
       var o = m.online;
-      row([]); row(["Online bookings"]);
-      row(["From your website", o.online, pctText(o.online, m.onlinePrev && m.onlinePrev.online)]);
-      row(["Booked by you", o.byYou]);
-      row(["New clients who booked online", o.newClients]);
+      row([]); row(["How bookings came in"]);
+      row(["Clients booked themselves on your site", o.online, pctText(o.online, m.onlinePrev && m.onlinePrev.online)]);
+      row(["You or your team added them", o.byYou]);
+      row(["New clients from online booking", o.newClients]);
       row(["Online no-shows", o.noShows]);
       row(["Online cancels", o.cancels]);
     }
@@ -1307,10 +1307,10 @@
     if (on.online) {
       var o = m.online;
       var pctOn = o.total ? Math.round((o.online / o.total) * 100) : 0;
-      h += '<section><h2>Online bookings</h2><table class="kv">' + tableRows([
-        ["From your website", o.online + " · " + pctOn + "%" + chg(pctText(o.online, m.onlinePrev && m.onlinePrev.online))],
-        ["Booked by you", o.byYou + " · " + (o.total ? 100 - pctOn : 0) + "%"],
-        ["New clients who booked online", o.newClients],
+      h += '<section><h2>How bookings came in</h2><table class="kv">' + tableRows([
+        ["Clients booked themselves on your site", o.online + " · " + pctOn + "%" + chg(pctText(o.online, m.onlinePrev && m.onlinePrev.online))],
+        ["You or your team added them", o.byYou + " · " + (o.total ? 100 - pctOn : 0) + "%"],
+        ["New clients from online booking", o.newClients],
         ["Online no-shows · cancels", o.noShows + " · " + o.cancels],
       ]) + "</table></section>";
     }

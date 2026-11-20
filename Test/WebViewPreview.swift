@@ -811,7 +811,24 @@ struct WebViewRepresentable: UIViewRepresentable {
               }
               function currentText(el) {
                 var raw = (el.innerText != null ? el.innerText : el.textContent) || '';
-                return raw.replace(/^\\s+|\\s+$/g, '');
+                // Enter = new paragraph: keep one line break per paragraph (blank lines collapse to one).
+                return raw.replace(/\\r\\n?/g, '\\n').replace(/[ \\t]*\\n\\s*/g, '\\n').replace(/^\\s+|\\s+$/g, '');
+              }
+              // Show saved text the way the site does: each line break starts a new paragraph.
+              function setTextWithParagraphs(el, val) {
+                var parts = String(val == null ? '' : val).split(/\\n+/);
+                el.textContent = '';
+                parts.forEach(function(part, i) {
+                  if (i > 0) {
+                    var gap = document.createElement('span');
+                    gap.className = 'bk-para-gap';
+                    gap.setAttribute('aria-hidden', 'true');
+                    gap.style.display = 'block';
+                    gap.style.height = '0.75em';
+                    el.appendChild(gap);
+                  }
+                  el.appendChild(document.createTextNode(part));
+                });
               }
               function canonicalTextSaveKey(k) {
                 if (!k) return k;
@@ -825,7 +842,7 @@ struct WebViewRepresentable: UIViewRepresentable {
                 var val = currentText(host);
                 [].forEach.call(document.querySelectorAll('[data-bk-text-field="' + field + '"]'), function(el) {
                   if (el === host) return;
-                  el.textContent = val;
+                  setTextWithParagraphs(el, val);
                   if (val) {
                     el.removeAttribute('data-bk-empty-slot');
                     el.removeAttribute('data-bk-empty-slot-label');
@@ -1415,6 +1432,20 @@ struct WebViewRepresentable: UIViewRepresentable {
                   finishActiveInlineNoSave();
                 }, 0);
               }
+              // Enter starts a new paragraph in body text and headings. In buttons, links, the menu, and
+              // short labels (eyebrows, tags, prices) it just finishes editing so they stay on one line.
+              function onDocKeydown(ev) {
+                if (ev.key !== 'Enter' || ev.shiftKey) return;
+                var el = ev.target;
+                if (!el || el.nodeType !== 1 || el.getAttribute('contenteditable') !== 'true') return;
+                var host = el.closest('[data-edit-key]') || el;
+                var key = host.getAttribute('data-edit-key') || '';
+                var oneLine = isRequiredCtaKey(key) ||
+                  !!host.closest('a, button, nav, header, label, [role="button"], [class*="label"], [class*="eyebrow"], [class*="tag"], [class*="price"], [class*="btn"], [class*="cta"], [class*="nav"]');
+                if (!oneLine) return;
+                ev.preventDefault();
+                el.blur();
+              }
               function onDocInput(ev) {
                 var el = ev.target;
                 if (!el || el.nodeType !== 1) return;
@@ -1614,6 +1645,7 @@ struct WebViewRepresentable: UIViewRepresentable {
               document.addEventListener('touchend', onTouchEnd, { capture: true, passive: false });
               document.addEventListener('click', onTap, true);
               document.addEventListener('input', onDocInput, true);
+              document.addEventListener('keydown', onDocKeydown, true);
               window.__bkQuickEditNavigateEditable = function(delta) {
                 var list = editableNavTargets();
                 if (!list.length) return;
@@ -1733,7 +1765,7 @@ struct WebViewRepresentable: UIViewRepresentable {
                     return;
                   }
                   allEditNodes(k).forEach(function(el) {
-                    el.textContent = val;
+                    setTextWithParagraphs(el, val);
                     if (val) {
                       el.removeAttribute('data-bk-empty-slot');
                       el.removeAttribute('data-bk-empty-slot-label');
@@ -1960,6 +1992,7 @@ struct WebViewRepresentable: UIViewRepresentable {
                 document.removeEventListener('touchend', onTouchEnd, { capture: true });
                 document.removeEventListener('click', onTap, true);
                 document.removeEventListener('input', onDocInput, true);
+                document.removeEventListener('keydown', onDocKeydown, true);
                 var s = document.getElementById('bk-quick-edit-style');
                 if (s) s.remove();
                 window.__bkQuickEditInstalled = false;

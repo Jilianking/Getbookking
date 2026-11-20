@@ -353,11 +353,19 @@ function webCopyHasExplicit(tenant, fullKey) {
   return !!(m && typeof m === 'object' && Object.prototype.hasOwnProperty.call(m, fullKey));
 }
 
+/**
+ * Escaped text where Enter in the editor starts a new paragraph: each line break becomes a paragraph gap
+ * (an empty block, so it works inside headings and <p> without nesting paragraphs).
+ */
+function escParagraphs(text) {
+  return esc(text).replace(/\r\n?/g, '\n').replace(/\n+/g, '<span class="bk-para-gap" style="display:block;height:0.75em" aria-hidden="true"></span>');
+}
+
 /** Escaped inner HTML with `data-edit-key` for app quick-edit (`wc.*` → Firestore `webCopyOverrides`). */
 function wcSpan(tenant, fullKey, fallback) {
   var text = webCopyOverrideText(tenant, fullKey, fallback);
   var emptyAttr = text ? '' : ' class="bk-copy-empty"';
-  return '<span data-edit-key="' + esc(fullKey) + '"' + emptyAttr + '>' + esc(text) + '</span>';
+  return '<span data-edit-key="' + esc(fullKey) + '"' + emptyAttr + '>' + escParagraphs(text) + '</span>';
 }
 
 /** Like `wcSpan` but preserves line breaks (hours, address). */
@@ -423,7 +431,7 @@ function tenantSiteTextOrCompute(tenant, key, computeDefault) {
 function siteTextSpan(editKey, text) {
   if (isSiteTextBlankValue(text)) text = '';
   var emptyAttr = text ? '' : ' class="bk-copy-empty"';
-  return '<span data-edit-key="' + esc(editKey) + '"' + emptyAttr + '>' + esc(text) + '</span>';
+  return '<span data-edit-key="' + esc(editKey) + '"' + emptyAttr + '>' + escParagraphs(text) + '</span>';
 }
 
 /**
@@ -437,7 +445,7 @@ function siteTextSpanWithInlineEm(editKey, text) {
   if (!m) return siteTextSpan(editKey, raw);
   var emptyAttr = (m[1] + m[2] + m[3]).trim() ? '' : ' class="bk-copy-empty"';
   return '<span data-edit-key="' + esc(editKey) + '"' + emptyAttr + '>' +
-    esc(m[1]) + '<em>' + esc(m[2]) + '</em>' + esc(m[3]) +
+    escParagraphs(m[1]) + '<em>' + escParagraphs(m[2]) + '</em>' + escParagraphs(m[3]) +
     '</span>';
 }
 

@@ -1049,3 +1049,8 @@ button.luxe-product-card.luxe-product-card--btn:focus-visible {
   }
   .luxe-shop-grid { grid-template-columns: repeat(2, 1fr); }
 }
+
+/* A section's built-in photo, flipped or hidden from the web editor's Layout (data-own-photo-side). */
+[data-own-photo-side="right"] [data-bk-own-media] { order: 2; }
+[data-own-photo-side="none"] [data-bk-own-media] { display: none !important; }
+[data-own-photo-side="none"] .bk-band-content { grid-template-columns: 1fr !important; }

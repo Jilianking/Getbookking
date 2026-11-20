@@ -733,7 +733,7 @@ function studio12HomePage(tenant, services) {
     renderPageSections(tenant, 'home', [
       { id: 'philosophy', label: 'Philosophy', html: '<section class="s12-philosophy" data-bk-color-surface="card"' +
     studio12BkSurfaceKeyAttr(tenant, 'studio12.philosophy') + ' data-bk-band-tappable>' +
-    bkColorBandInnerWrap('<div class="s12-fade s12-phil-media">' + philImgCol + '</div>' +
+    bkColorBandInnerWrap('<div class="s12-fade s12-phil-media" data-bk-own-media>' + philImgCol + '</div>' +
     '<div class="s12-fade s12-phil-copy"><div class="s12-phil-label">' + wcSpan(tenant, 'wc.s12.philosophyLabel', 'Our approach') + '</div>' +
     philTitleHtml +
     '<p class="s12-phil-body">' + wcSpan(tenant, 'wc.s12.philBody1', philBody1) + '</p>' +

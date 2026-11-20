@@ -801,6 +801,9 @@
     try { hex = cssColorToHex(window.getComputedStyle(el).backgroundColor); } catch (e) { hex = ''; }
     return {
       label: label,
+      // Built-in photo (e.g. Studio 12 Philosophy): Layout flips or hides it instead of adding one.
+      ownPhoto: !!(el.querySelector && el.querySelector('[data-bk-own-media]')),
+      ownPhotoSide: (el.getAttribute && el.getAttribute('data-own-photo-side')) || 'left',
       theme: document.documentElement.getAttribute('data-bk-theme') || '',
       align: headingAlign(el),
       section: pageSectionInfo(el),
@@ -1093,6 +1096,9 @@
 
   function disable() {
     if (editingEl) commitInlineEdit();
+    // Edit off: no selected-section outline or label left on the page.
+    clearSelection();
+    clearHoverTarget();
     if (active) {
       active = false;
       document.removeEventListener('pointerdown', onPointerDown, true);

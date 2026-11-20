@@ -102,6 +102,8 @@ struct MessageComposerBar: View {
     @FocusState.Binding var fieldFocused: Bool
     /// Fired when tray / draft-photo chrome collapses so the thread can pin to the latest message.
     var onComposerChromeChanged: (() -> Void)? = nil
+    /// Instagram replies are text only, inside the 24-hour window.
+    var instagramThread: Bool = false
 
     @StateObject private var paymentsViewModel = PaymentsViewModel()
     @StateObject private var requestsViewModel = RequestsViewModel()
@@ -125,6 +127,9 @@ struct MessageComposerBar: View {
     }
 
     private var visibleIcons: [MessageComposerIcon] {
+        if instagramThread {
+            return usablePresets.isEmpty ? [] : [.quickReplies]
+        }
         var icons = MessageComposerIcon.stackOrder
         if usablePresets.isEmpty {
             icons.removeAll { $0 == .quickReplies }
@@ -152,7 +157,9 @@ struct MessageComposerBar: View {
             }
 
             HStack(alignment: .bottom, spacing: 10) {
-                plusToggleButton
+                if !visibleIcons.isEmpty {
+                    plusToggleButton
+                }
 
                 VStack(alignment: .leading, spacing: 8) {
                     if quickRepliesExpanded, !usablePresets.isEmpty {

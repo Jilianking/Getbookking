@@ -222,6 +222,15 @@ class MessagesViewModel: ObservableObject {
     ) async -> Bool {
         let normalizedThreadId = PhoneFormatting.smsThreadId(threadId)
         let summary = summary(for: normalizedThreadId)
+        if summary?.isInstagram == true || PhoneFormatting.isInstagramThreadId(normalizedThreadId) {
+            return await sendInstagramReply(
+                threadId: normalizedThreadId,
+                content: content,
+                clientName: clientName ?? summary?.clientName,
+                isDemoMode: isDemoMode,
+                sessionStore: sessionStore
+            )
+        }
         var finalClientId = clientId.flatMap { PhoneFormatting.e164US($0) }
             ?? summary.map { $0.clientPhoneForSend }
         var finalClientName = clientName?.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -336,6 +345,57 @@ class MessagesViewModel: ObservableObject {
             return true
         } catch {
             print("Error sending message: \(error)")
+            await MainActor.run {
+                isSending = false
+                lastError = error.localizedDescription
+            }
+            return false
+        }
+    }
+
+    private func sendInstagramReply(
+        threadId: String,
+        content: String,
+        clientName: String?,
+        isDemoMode: Bool,
+        sessionStore: TenantSessionStore?
+    ) async -> Bool {
+        let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            await MainActor.run { lastError = "Enter a message." }
+            return false
+        }
+        let summary = summary(for: threadId)
+        let message = Message(
+            id: nil,
+            clientId: summary?.igScopedUserId ?? threadId,
+            clientName: (clientName?.trimmingCharacters(in: .whitespacesAndNewlines)).flatMap { $0.isEmpty ? nil : $0 }
+                ?? summary?.clientName
+                ?? "Instagram",
+            content: trimmed,
+            sender: .admin,
+            createdAt: Date(),
+            read: false,
+            threadId: threadId
+        )
+        await MainActor.run {
+            isSending = true
+            lastError = nil
+        }
+        if isDemoMode, let sessionStore, sessionStore.isDemoSession {
+            sessionStore.appendDemoOutboundMessage(threadId: threadId, message: message)
+            _ = await loadMessages(for: threadId, isDemoMode: true, sessionStore: sessionStore)
+            await loadThreads(isDemoMode: true, sessionStore: sessionStore)
+            await MainActor.run { isSending = false }
+            return true
+        }
+        do {
+            let returnedThreadId = try await firebaseService.sendMessage(message)
+            _ = await loadMessages(for: returnedThreadId)
+            await loadThreads()
+            await MainActor.run { isSending = false }
+            return true
+        } catch {
             await MainActor.run {
                 isSending = false
                 lastError = error.localizedDescription
@@ -464,7 +524,10 @@ class MessagesViewModel: ObservableObject {
 
     /// Inbox / thread title: prefer a saved customer name over a phone-only thread label.
     func resolvedDisplayName(for summary: SmsThreadSummary) -> String {
-        ClientsViewModel.displayName(
+        if summary.isInstagram {
+            return summary.clientName
+        }
+        return ClientsViewModel.displayName(
             stored: summary.clientName,
             phone: summary.clientPhoneForSend,
             clients: composeClients

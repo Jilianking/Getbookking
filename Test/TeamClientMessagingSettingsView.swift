@@ -24,6 +24,7 @@ struct TeamClientMessagingSettingsView: View {
     @State private var showAssignNumberConfirm = false
     @State private var removeLinePhase: RemoveLinePhase = .idle
     @State private var didCopySmsPhone = false
+    @State private var showDisconnectInstagramConfirm = false
 
     private enum RemoveLinePhase: Equatable {
         case idle
@@ -35,6 +36,7 @@ struct TeamClientMessagingSettingsView: View {
         List {
             clientMessagingSection
             if viewModel.isTenantOwner, !authViewModel.isDemoMode {
+                instagramSection
                 smsLinesSection
             }
             usageSection
@@ -136,7 +138,22 @@ struct TeamClientMessagingSettingsView: View {
         }
         .onChange(of: scenePhase) { _, phase in
             guard phase == .active else { return }
-            Task { await viewModel.syncBillingAfterWebIfNeeded() }
+            Task {
+                await viewModel.syncBillingAfterWebIfNeeded()
+                await viewModel.reloadInstagramAfterWebIfNeeded()
+            }
+        }
+        .confirmationDialog(
+            "Disconnect Instagram?",
+            isPresented: $showDisconnectInstagramConfirm,
+            titleVisibility: .visible
+        ) {
+            Button("Disconnect", role: .destructive) {
+                Task { await viewModel.disconnectInstagram(scope: "tenant") }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("New DMs stop here. Conversations already in Messages stay.")
         }
         .onReceive(NotificationCenter.default.publisher(for: .inAppSafariBillingDismissed)) { _ in
             Task { await viewModel.syncBillingAfterWebIfNeeded() }
@@ -349,13 +366,7 @@ struct TeamClientMessagingSettingsView: View {
             Text(Constants.App.paidFeatureUpgradeMessage)
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
-            startSubscriptionPrimaryButton
-            if let msg = viewModel.errorMessage, !msg.isEmpty {
-                Text(msg)
-                    .font(.caption)
-                    .foregroundStyle(.red)
-            }
-            billingSecondaryLinks
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 
@@ -364,60 +375,27 @@ struct TeamClientMessagingSettingsView: View {
             Text(Constants.App.paidFeatureUpgradeMessage)
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
-            startSubscriptionPrimaryButton
-            if let msg = viewModel.errorMessage, !msg.isEmpty {
-                Text(msg)
-                    .font(.caption)
-                    .foregroundStyle(.red)
-            }
-            billingSecondaryLinks
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 
-    private var startSubscriptionPrimaryButton: some View {
-        Button {
-            showStartSubscriptionConfirm = true
-        } label: {
-            HStack {
-                if viewModel.isOpeningBillingWebsite || viewModel.isStartingSubscription {
-                    ProgressView()
-                        .scaleEffect(0.9)
-                }
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Start paid plan")
-                        .font(.headline)
-                    Text(viewModel.tenantSubscriptionPlan.displayName)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                Spacer(minLength: 0)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-        }
-        .buttonStyle(.borderedProminent)
-        .disabled(
-            viewModel.isOpeningBillingWebsite ||
-            viewModel.isStartingSubscription ||
-            viewModel.isSyncingBilling ||
-            viewModel.isOpeningBillingPortal
+    @ViewBuilder
+    private var instagramSection: some View {
+        InstagramConnectionSection(
+            status: viewModel.igStatus,
+            username: viewModel.igUsername,
+            provisionError: viewModel.igProvisionError,
+            isOwner: true,
+            paid: viewModel.subscriptionPaid,
+            isWorking: viewModel.isConnectingInstagram
+                || viewModel.isDisconnectingInstagram
+                || viewModel.isStartingSubscription
+                || viewModel.isOpeningBillingWebsite,
+            errorMessage: viewModel.errorMessage,
+            onConnect: { Task { await viewModel.connectInstagram(scope: "tenant") } },
+            onDisconnect: { showDisconnectInstagramConfirm = true },
+            onStartPaidPlan: { showStartSubscriptionConfirm = true }
         )
-    }
-
-    private var billingSecondaryLinks: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Button {
-                Task { await viewModel.openClientPaymentsStripeAccount() }
-            } label: {
-                HStack {
-                    if viewModel.isOpeningBillingPortal { ProgressView().scaleEffect(0.9) }
-                    Text("View Stripe account")
-                        .font(.subheadline)
-                }
-            }
-            .disabled(viewModel.isOpeningBillingPortal || viewModel.isOpeningBillingWebsite)
-        }
-        .foregroundStyle(.secondary)
-        .padding(.top, 4)
     }
 
     private var activeSmsContent: some View {
@@ -1028,6 +1006,109 @@ struct TeamClientMessagingSettingsView: View {
                 }
                 .buttonStyle(.borderless)
             }
+        }
+    }
+}
+
+struct InstagramConnectionSection: View {
+    let status: String
+    let username: String
+    let provisionError: String
+    let isOwner: Bool
+    let paid: Bool
+    let isWorking: Bool
+    let errorMessage: String?
+    let onConnect: () -> Void
+    let onDisconnect: () -> Void
+    let onStartPaidPlan: () -> Void
+
+    private var normalizedStatus: String {
+        status.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    }
+
+    private var handle: String {
+        let trimmed = username.trimmingCharacters(in: .whitespacesAndNewlines).replacingOccurrences(of: "@", with: "")
+        return trimmed.isEmpty ? "" : "@\(trimmed)"
+    }
+
+    private var isConnected: Bool {
+        normalizedStatus == "connected" && !handle.isEmpty
+    }
+
+    var body: some View {
+        Section {
+            if !paid {
+                Text(isOwner ? Constants.App.instagramPaidUpgradeMessage : Constants.App.instagramAskOwnerMessage)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                if isOwner {
+                    Button(action: onStartPaidPlan) {
+                        Text("Start paid plan")
+                            .font(.headline)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(isWorking)
+                }
+            } else if isConnected {
+                Label(handle, systemImage: "checkmark.circle.fill")
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(AppDesign.accentGreen)
+                if !provisionError.isEmpty {
+                    Text(provisionError)
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Button("Disconnect", role: .destructive, action: onDisconnect)
+                    .disabled(isWorking)
+            } else if isWorking {
+                HStack {
+                    ProgressView()
+                    Text("Connecting Instagram…")
+                        .font(.subheadline)
+                }
+            } else {
+                if normalizedStatus == "failed" || normalizedStatus == "expired" {
+                    Text(provisionError.isEmpty ? "Instagram could not be connected." : provisionError)
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                        .fixedSize(horizontal: false, vertical: true)
+                } else if normalizedStatus == "connecting" {
+                    Text("Finish signing in with Instagram, or start again.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                } else if !provisionError.isEmpty {
+                    Text(provisionError)
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Button(action: onConnect) {
+                    Text(normalizedStatus == "off" ? "Connect Instagram" : "Connect again")
+                        .font(.headline)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(isWorking)
+            }
+            if let errorMessage, !errorMessage.isEmpty {
+                Text(errorMessage)
+                    .font(.caption)
+                    .foregroundStyle(.red)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        } header: {
+            Text("Instagram")
+        } footer: {
+            Text(
+                isConnected
+                    ? "Clients message you first. You can reply for 24 hours after their last message."
+                    : "Connect a professional Instagram. New messages show up in Messages."
+            )
+            .font(.caption2)
         }
     }
 }

@@ -800,7 +800,7 @@ final class TenantSessionStore: ObservableObject {
 
     static func parseTeamMembers(_ raw: [[String: Any]]?, ownerUid: String?) -> [TenantTeamMember] {
         guard let raw else { return [] }
-        return raw.compactMap { row in
+        return raw.compactMap { row -> TenantTeamMember? in
             guard let uid = row["uid"] as? String else { return nil }
             let role = TeamAccessRole.fromFirestore(row["accessRole"] as? String ?? row["role"] as? String)
             let fn = (row["firstName"] as? String) ?? ""
@@ -830,7 +830,10 @@ final class TenantSessionStore: ObservableObject {
                     smsMonthlyLimit: (row["smsMonthlyLimit"] as? Int) ?? 1000,
                     memberSettings: TeamMemberSettings(),
                     personalConfirmationType: parsePersonalConfirmationType(row),
-                    effectiveConfirmationType: parseEffectiveConfirmationType(row)
+                    effectiveConfirmationType: parseEffectiveConfirmationType(row),
+                    igStatus: (row["igStatus"] as? String) ?? "off",
+                    igUsername: (row["igUsername"] as? String) ?? "",
+                    igProvisionError: (row["igProvisionError"] as? String) ?? ""
                 )
             }
             return TenantTeamMember(
@@ -855,7 +858,10 @@ final class TenantSessionStore: ObservableObject {
                 smsMonthlyLimit: (row["smsMonthlyLimit"] as? Int) ?? 1000,
                 memberSettings: TeamMemberSettings(dictionary: row["memberSettings"] as? [String: Any]),
                 personalConfirmationType: parsePersonalConfirmationType(row),
-                effectiveConfirmationType: parseEffectiveConfirmationType(row)
+                effectiveConfirmationType: parseEffectiveConfirmationType(row),
+                igStatus: (row["igStatus"] as? String) ?? "off",
+                igUsername: (row["igUsername"] as? String) ?? "",
+                igProvisionError: (row["igProvisionError"] as? String) ?? ""
             )
         }
     }

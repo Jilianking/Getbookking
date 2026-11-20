@@ -1,0 +1,51 @@
+---
+description: Desktop web Design editor (separate from iOS) — canvas-only preview, click-to-type, copy vs identity
+globs: web/js/design-bridge.js,web/marketing/design.html,web/marketing/assets/design-app.js,web/marketing/assets/design.css
+alwaysApply: false
+---
+
+# Desktop web Design editor
+
+Separate product surface from the iPhone Design / quick-edit system. Do **not** change `WebViewPreview.swift`, Design Swift views, or iOS quick-edit to “make web work.”
+
+## Isolation
+- Shell: `web/marketing/design.html` + `design-app.js` + `design.css`
+- Bridge: `web/js/design-bridge.js` — only arms when framed with `?bk_design=1` / Design shell parent messages
+- Dormant for normal visitors and the iOS WKWebView
+- Build on `feature/web-design-editor` until ready to merge/deploy
+- Shop Website opens full-screen `/design` (same tab, same auth). **Done** (mark) returns to `/app`. Canvas is the live tenant template — not a fake builder site.
+
+## Preview is a canvas, not a website
+- In Design mode the iframe must **not** navigate, submit forms, open drawers/lightboxes, or run booking/shop flows
+- Block `a[href]` clicks, form submit, `location.assign` / `replace`, `window.open`, `history.pushState` / `replaceState`
+- Pointer-events off for site chrome (links, forms, inputs, sidebar); on only for editable text, photos, and color bands
+- Brand / CTA links that wrap `data-edit-key` (e.g. Luxe site name → `/home`) open inline edit — never follow the href
+- Page changes only via the Design shell left rail (Home / Book / …), not by clicking the site
+
+## Interaction (Squarespace-simple)
+- **Text:** single click → type in place (`contenteditable`). Clicks inside the active field must not restart edit. Place caret after focus.
+- **Photos:** double-click or inspector → upload/crop
+- **Colors:** click band → inspector (role-level in v1; independent `webSurfaceColors` later)
+- Escape: blur/commit if editing, else deselect
+- Commit text on blur; ⌘/Ctrl+S saves pending; Enter allows newlines in multi-line
+
+## Outline policy
+- Dashed outline **only** if the web editor can save the field
+- No outline for unsupported keys (`svc:`, `s12Process:`, `charterFaq:`, `tm:`, `*:edit`) — edit those in the iPhone app for now
+- Selection chrome follows the active target; inspector mirrors selection
+
+## Copy vs identity
+- Website Design may write **website copy** only (`webCopyOverrides` / `wc.*`)
+- Site name keys (`displayName`, `displayName.*`) → `wc.site.displayName` — never tenant identity `displayName` / businessName
+- Allowed direct site text fields are the theme optional fields + about/tagline/contact (see `SITE_TEXT_FIELDS` in `design-app.js`)
+- Show override when set; otherwise fall back to identity for display
+
+## Paint (when expanding)
+- Follow `edit-template` card/chrome independence
+- Edit/design mode must not restamp keyed fills, CTA fills, or text
+- Classic / Blade / Luxe / Stonecut / Studio 12 keyed paint stays frozen unless asked to reopen; Charter keyed paint is live
+
+## Preview / save
+- Inline typing updates the iframe immediately; inspector `input` patches via `text-patch`
+- Do not full-reload the preview on every keystroke
+- Save persists `state.pending` to the tenant doc

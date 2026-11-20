@@ -59,6 +59,14 @@ async function patchBookings(queries, patchFor) {
   return changed;
 }
 
+function millis(v) {
+  if (!v) return 0;
+  if (typeof v.toMillis === "function") return v.toMillis();
+  if (typeof v.seconds === "number") return v.seconds * 1000;
+  const d = new Date(v);
+  return isNaN(d.getTime()) ? 0 : d.getTime();
+}
+
 function memberNames(u) {
   const composed = `${str(u.firstName)} ${str(u.lastName)}`.trim();
   return { composed, display: str(u.displayName) || str(u.name) };
@@ -71,6 +79,9 @@ function registerSyncCopies(exportsObj) {
     .onUpdate(async (change, context) => {
       const before = change.before.data() || {};
       const after = change.after.data() || {};
+      // Only the shop's own edits (the edit screens stamp contactEditedAt). A client booking online
+      // also updates this record with whatever they typed; that must not rename their other bookings.
+      if (!millis(after.contactEditedAt) || millis(after.contactEditedAt) === millis(before.contactEditedAt)) return null;
       const name = str(after.name);
       const email = str(after.email).toLowerCase();
       const phone = str(after.phone);

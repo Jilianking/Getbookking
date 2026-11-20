@@ -501,11 +501,18 @@ class FirebaseService: ObservableObject {
     func fetchTenantBookingRequests(
         tenantId: String,
         limit: Int? = nil,
-        status: String? = nil
+        status: String? = nil,
+        startsFrom: Date? = nil,
+        startsBefore: Date? = nil
     ) async throws -> [BookingRequest] {
         var query: Query = db.collection("tenants").document(tenantId)
             .collection("bookingRequests")
-        if let status {
+        if let startsFrom, let startsBefore {
+            // By appointment date (e.g. Balances due), whenever the booking was created.
+            query = query
+                .whereField("requestedStartTime", isGreaterThanOrEqualTo: Timestamp(date: startsFrom))
+                .whereField("requestedStartTime", isLessThan: Timestamp(date: startsBefore))
+        } else if let status {
             query = query.whereField("status", isEqualTo: status.uppercased())
         } else {
             query = query.order(by: "createdAt", descending: true)

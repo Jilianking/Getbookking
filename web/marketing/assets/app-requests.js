@@ -440,7 +440,7 @@
     }
     if (!dash.sendDepositLink) return fail("Deposit links aren't available right now.");
     busy(true);
-    dash.sendDepositLink(r.id, r.name, r.phone, cents / 100, { serviceName: r.service, start: r.start }).then(function (res) {
+    dash.sendDepositLink(r.id, r.name, r.phone, cents / 100, { serviceName: r.service, start: r.start, session: state.session }).then(function (res) {
       if (res && res.texted) {
         busy(false);
         var e = $("reqError");
@@ -481,7 +481,7 @@
       return setStatus(r.id, amount ? "pending_deposit" : "confirmed");
     }).then(function () {
       if (!amount) return setOpen("");
-      return dash.sendDepositLink(r.id, r.name, r.phone, amount, { serviceName: r.service, start: start }).then(depositOutcome);
+      return dash.sendDepositLink(r.id, r.name, r.phone, amount, { serviceName: r.service, start: start, session: state.session }).then(depositOutcome);
     }).catch(function (e) {
       fail((e && e.message) || "Could not confirm this request.");
     });

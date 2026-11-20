@@ -7,6 +7,8 @@ struct DashboardView: View {
     @EnvironmentObject var appTour: AppTourCoordinator
     @ObservedObject var viewModel: DashboardViewModel
     @StateObject private var paymentsViewModel = PaymentsViewModel()
+    /// Bookings in the Balances due date window (fetched by appointment date).
+    @State private var balanceWindowBookings: [BookingRequest] = []
     @StateObject private var requestsViewModel = RequestsViewModel()
     @StateObject private var clientsViewModel = ClientsViewModel()
     @State private var selectedBookingRequest: BookingRequest?
@@ -164,10 +166,11 @@ struct DashboardView: View {
                             onOpen: { openBookingRequest($0) }
                         )
                         .padding(.horizontal)
-                        .task(id: sessionStore.tenantId ?? "") {
-                            if let tid = sessionStore.tenantId, BookingBalance.servicePrices.isEmpty {
+                        .task(id: "\(sessionStore.tenantId ?? "")-\(sessionStore.bookingRequests.count)") {
+                            if let tid = sessionStore.tenantId {
                                 await BookingBalance.loadServicePrices(tenantId: tid)
                             }
+                            await loadBalanceWindow()
                         }
                     }
 
@@ -420,14 +423,32 @@ struct DashboardView: View {
     }
     #endif
 
-    /// Bookings this person can see, for the Balances due card.
+    /// Bookings this person can see, for the Balances due card: recent bookings plus every booking in the
+    /// card's date window (30 days back to 8 ahead), so ones created long ago aren't missed.
     private var balanceBookings: [BookingRequest] {
         let uid: String? = Auth.auth().currentUser?.uid
-        return sessionStore.bookingRequests.scopedForTeamAccess(
+        var seen = Set<String>()
+        var merged: [BookingRequest] = []
+        for b in balanceWindowBookings + sessionStore.bookingRequests {
+            let key = b.documentId ?? b.id
+            if seen.insert(key).inserted { merged.append(b) }
+        }
+        return merged.scopedForTeamAccess(
             authViewModel.teamAccess,
             currentUserUid: uid,
             roster: sessionStore.teamMembers
         )
+    }
+
+    private func loadBalanceWindow() async {
+        guard let tid = sessionStore.tenantId else { return }
+        let cal = Calendar.current
+        let today = cal.startOfDay(for: Date())
+        let from = cal.date(byAdding: .day, value: -30, to: today) ?? today
+        let until = cal.date(byAdding: .day, value: 9, to: today) ?? today
+        if let list = try? await FirebaseService().fetchTenantBookingRequests(tenantId: tid, startsFrom: from, startsBefore: until) {
+            balanceWindowBookings = list
+        }
     }
 
     private var isCharterShop: Bool {

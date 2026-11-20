@@ -1,6 +1,7 @@
 import Foundation
 import Combine
 import FirebaseAuth
+import FirebaseFirestore
 
 class ClientsViewModel: ObservableObject {
     @Published var clients: [Client] = []
@@ -190,6 +191,11 @@ class ClientsViewModel: ObservableObject {
             let existingPhone = clients.first(where: { $0.id == clientId })?.phone
             if let tid = profile?.tenantId {
                 let before = clients.first(where: { $0.id == clientId })
+                var updates = updates
+                if updates["name"] != nil || updates["email"] != nil || updates["phone"] != nil {
+                    // Marks a shop edit so the server copies it onto this client's bookings.
+                    updates["contactEditedAt"] = FieldValue.serverTimestamp()
+                }
                 try await firebaseService.updateTenantCustomer(tenantId: tid, customerId: clientId, updates: updates)
                 // Keep bookings' copy of the contact in step (calendar, booking details, reminder texts).
                 if updates["name"] != nil || updates["email"] != nil || updates["phone"] != nil {

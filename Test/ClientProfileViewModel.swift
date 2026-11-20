@@ -401,6 +401,8 @@ final class ClientProfileViewModel: ObservableObject {
         var updates: [String: Any] = [
             "name": name.trimmingCharacters(in: .whitespacesAndNewlines),
             "email": email.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(),
+            // Marks a shop edit: the server copies it onto this client's bookings (functions/syncCopies.js).
+            "contactEditedAt": FieldValue.serverTimestamp(),
         ]
         if let phone = PhoneFormatting.normalizedForStorage(phone) {
             updates["phone"] = phone

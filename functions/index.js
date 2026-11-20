@@ -5885,11 +5885,12 @@ async function refundBookingPaymentIfNeeded(args) {
     : balances.refundPlan(booking || {}, tenant || {});
   const primaryPi = (booking.stripePaymentIntentId || "").toString().trim();
   const results = [];
+  const keepBy = plan.keepCentsByPi || {};
   if (!plan.keepPrimary) {
-    results.push(await refundOneBookingPayment({ ...args, piId: primaryPi, keySuffix: "" }));
+    results.push(await refundOneBookingPayment({ ...args, piId: primaryPi, keySuffix: "", keepCents: keepBy[primaryPi] || 0 }));
   }
   for (const piId of plan.extra) {
-    results.push(await refundOneBookingPayment({ ...args, piId, keySuffix: "_" + piId }));
+    results.push(await refundOneBookingPayment({ ...args, piId, keySuffix: "_" + piId, keepCents: keepBy[piId] || 0 }));
   }
   const refundAttempt =
     Math.max(0, Math.round(Number(booking.cancelRefundAttempts) || 0)) + 1;
@@ -5917,6 +5918,7 @@ async function refundOneBookingPayment({
   requestId,
   piId: piIdIn,
   keySuffix,
+  keepCents,
 }) {
   const piId = (piIdIn || "").toString().trim();
   const refundAttempt =
@@ -5972,12 +5974,17 @@ async function refundOneBookingPayment({
         refundError: "No charge found for this payment.",
       };
     }
+    // Nothing left to refund after keeping the deposit part (a 0 amount would mean "refund it all").
+    if (keepCents > 0 && (pi.amount || 0) - keepCents <= 0) {
+      return { refunded: false, depositKept: true, refundAttempt, chargeId: String(chargeId) };
+    }
     const result = await refundConnectCharge({
       stripe,
       stripeAccountId,
       tenantId,
       chargeId: String(chargeId),
-      amountCents: null,
+      // Keep the non-refundable deposit part of a pay-in-full payment; otherwise refund it all.
+      amountCents: keepCents > 0 ? Math.max(0, (pi.amount || 0) - keepCents) : null,
       reason: "requested_by_customer",
       idempotencyKey: `cancel_booking_${tenantId}_${requestId}_${refundAttempt}${keySuffix || ""}`,
       queueIfUnsettled: true,

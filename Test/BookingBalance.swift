@@ -314,7 +314,7 @@ struct BookingPaymentSection: View {
         .padding(16)
         .appCard()
         .task(id: request.serviceId ?? request.serviceName ?? "") {
-            if let tid = request.tenantId ?? viewModel.tenantId, BookingBalance.servicePrices.isEmpty {
+            if let tid = request.tenantId ?? viewModel.tenantId {
                 await BookingBalance.loadServicePrices(tenantId: tid)
             }
             servicePriceCents = BookingBalance.servicePrice(for: request)

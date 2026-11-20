@@ -369,7 +369,14 @@
     dueUntil.setDate(dueUntil.getDate() + 8);
     var dueFrom = new Date(todayStart);
     dueFrom.setDate(dueFrom.getDate() - 30);
-    var due = scopedList
+    // Newest bookings plus the date-window query (older-created bookings), without duplicates.
+    var dueSeen = {};
+    var duePool = scopedList.concat(scoped(calState.windowBookings || [], session)).filter(function (b) {
+      if (dueSeen[b.id]) return false;
+      dueSeen[b.id] = true;
+      return true;
+    });
+    var due = duePool
       .filter(function (b) { return b.start && b.start >= dueFrom && b.start < dueUntil && !b.noShow; })
       .map(function (b) {
         var waiting = !!DUE_STATUSES[b.status];
@@ -769,7 +776,7 @@
     var fns = firebase.app().functions(REGION);
     var dollars = cents % 100 ? (cents / 100).toFixed(2) : String(cents / 100);
     // Remember the amount so "Resend deposit link" asks for the same deposit.
-    var session = calState.session;
+    var session = opts.session || calState.session;
     if (session && session.tenantId) {
       firebase.firestore().collection("tenants").doc(session.tenantId).collection("bookingRequests").doc(requestId)
         .update({ depositRequestCents: cents }).catch(function () {});
@@ -784,11 +791,11 @@
         if (!url) throw new Error("Could not create the deposit link.");
         var to = e164US(phone);
         if (!to) return { url: url, texted: false, error: "This client has no phone number." };
-        if (!shopCanSms(calState.session || opts.session)) return { url: url, texted: false, error: "Texting isn't set up for your shop." };
+        if (!shopCanSms(opts.session || calState.session)) return { url: url, texted: false, error: "Texting isn't set up for your shop." };
         var first = firstName(name);
         var what = opts.serviceName || "appointment";
         var whenText = opts.start ? " on " + formatWhen(opts.start).replace(" · ", " at ") : "";
-        var shop = opts.shopName || shopLabel(calState.session);
+        var shop = opts.shopName || shopLabel(opts.session || calState.session);
         var body = "Hi" + (first ? " " + first : "") + ", to hold your " + what + whenText + " with " + shop +
           ", pay the $" + dollars + " deposit here: " + url;
         return fns.httpsCallable("sendClientSms")({
@@ -1099,9 +1106,10 @@
     return due ? ' <i class="app-cal-due" title="Balance still to pay">' + esc(ShopAppBalance.money(due)) + " due</i>" : "";
   }
 
-  function paintPay(booking) {
+  function paintPay(booking, fromSnapshot) {
     var host = $("calDetailPay");
     if (!host || !global.ShopAppBalance || !booking) return;
+    if (fromSnapshot && ShopAppBalance.isEditing(booking.id)) return;
     var session = calState.session;
     var uid = session && session.user && session.user.uid;
     ShopAppBalance.render({
@@ -3072,11 +3080,26 @@
       paint(session, list);
       paintCalendar();
       // Keep an open appointment's Payment section current (cash saved, card paid, price changed).
-      if (calState.detailId && calState.detailMode === "view") paintPay(bookingById(calState.detailId));
+      if (calState.detailId && calState.detailMode === "view") paintPay(bookingById(calState.detailId), true);
     }
 
     calState.col = col;
     calState.applySnap = applySnap;
+
+    // Balances due needs every booking in its date window, including ones created long ago.
+    var dueFrom = startOfDay(new Date());
+    dueFrom.setDate(dueFrom.getDate() - 30);
+    var dueTo = startOfDay(new Date());
+    dueTo.setDate(dueTo.getDate() + 9);
+    col
+      .where("requestedStartTime", ">=", firebase.firestore.Timestamp.fromDate(dueFrom))
+      .where("requestedStartTime", "<", firebase.firestore.Timestamp.fromDate(dueTo))
+      .onSnapshot(function (snap) {
+        var list = [];
+        snap.forEach(function (doc) { list.push(mapDoc(doc)); });
+        calState.windowBookings = list;
+        if (calState.bookings) paint(session, calState.bookings);
+      }, function () { calState.windowBookings = []; });
 
     col
       .orderBy("createdAt", "desc")

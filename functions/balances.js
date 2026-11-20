@@ -186,6 +186,9 @@ async function recordCardPaymentOnBooking(tenantId, bookingRequestId, pi, opts) 
       : meta.payFull === "true" ? "payment"
         : (opts && opts.role) || (String(meta.paymentKind) === "deposit" ? "deposit" : "payment");
     const entry = {
+      ...(meta.payFull === "true" && parseInt(meta.depositOriginalCents, 10) > 0
+        ? { depositCents: parseInt(meta.depositOriginalCents, 10) }
+        : {}),
       kind,
       role,
       cents: Number.isFinite(service) && service > 0 ? service : pi.amount || 0,
@@ -235,11 +238,17 @@ function refundPlan(d, tenant) {
   const primary = String(d.stripePaymentIntentId || "").trim();
   const list = paymentList(d).filter((p) => String(p.pi || "").startsWith("pi_") && !(Number(p.refundedCents) >= Number(p.cents)));
   const keep = (p) => !settings.depositRefundable && p.role === "deposit";
+  // Paid in full from a deposit link: refund all but the deposit part when deposits are non-refundable.
+  const keepPart = (p) => (!settings.depositRefundable && !keep(p) && Number(p.depositCents) > 0 ? Number(p.depositCents) : 0);
   const primaryEntry = list.find((p) => p.pi === primary);
+  const keepCentsByPi = {};
+  list.forEach((p) => { if (keepPart(p)) keepCentsByPi[p.pi] = keepPart(p); });
   return {
     keepPrimary: primaryEntry ? keep(primaryEntry) : false,
     extra: list.filter((p) => p.pi !== primary && !keep(p)).map((p) => p.pi),
-    keptDepositCents: list.filter(keep).reduce((s, p) => s + (Number(p.cents) || 0), 0),
+    keepCentsByPi,
+    keptDepositCents: list.filter(keep).reduce((s, p) => s + (Number(p.cents) || 0), 0) +
+      Object.keys(keepCentsByPi).reduce((s, k) => s + keepCentsByPi[k], 0),
   };
 }
 

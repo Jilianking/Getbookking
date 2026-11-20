@@ -256,5 +256,8 @@
     });
   }
 
-  global.ShopAppBalance = { render: render, model: model, dueCents: dueCents, money: money };
+  /** True while a price or cash form is open for this booking (live updates wait so typing isn't lost). */
+  function isEditing(id) { return ui.id === id && ui.mode !== "view"; }
+
+  global.ShopAppBalance = { render: render, model: model, dueCents: dueCents, money: money, isEditing: isEditing };
 })(window);

@@ -746,6 +746,72 @@ class FirebaseService: ObservableObject {
         try await db.collection("tenants").document(tenantId).collection("customers").document(customerId).setData(data, merge: true)
     }
 
+    /// After a contact edit: copies the new name / email / phone onto that client's bookings, so the calendar,
+    /// booking details, the website, and reminder texts all use the current details. Matches bookings by the
+    /// customer id, the old email, or the old phone (in the formats bookings store it). Returns how many changed.
+    @discardableResult
+    func syncCustomerContactToBookings(
+        tenantId: String,
+        customerId: String,
+        oldEmail: String?,
+        oldPhone: String?,
+        name: String,
+        email: String,
+        phone: String?
+    ) async throws -> Int {
+        let col = db.collection("tenants").document(tenantId).collection("bookingRequests")
+        var docs: [String: DocumentSnapshot] = [:]
+        func collect(_ q: Query) async {
+            if let snap = try? await q.getDocuments() {
+                for d in snap.documents { docs[d.documentID] = d }
+            }
+        }
+        await collect(col.whereField("customerId", isEqualTo: customerId))
+        let oldMail = (oldEmail ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        if !oldMail.isEmpty {
+            await collect(col.whereField("customerEmail", in: Array(Set([oldMail, oldMail.lowercased()]))))
+        }
+        // The old phone, plus the number the client record was first filed under (its id is often the
+        // original phone's 10 digits), so a number changed before this sync existed still finds its bookings.
+        var tens: [String] = []
+        if let ten = PhoneFormatting.last10Digits(from: oldPhone) { tens.append(ten) }
+        if customerId.count == 10, customerId.allSatisfy(\.isNumber), !tens.contains(customerId) { tens.append(customerId) }
+        for ten in tens {
+            var forms = Set([ten, "+1" + ten, "1" + ten, PhoneFormatting.displayUS(ten)])
+            if ten == PhoneFormatting.last10Digits(from: oldPhone),
+               let raw = oldPhone?.trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty { forms.insert(raw) }
+            await collect(col.whereField("customerPhone", in: Array(forms.prefix(10))))
+        }
+        let cleanName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanEmail = email.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        var batch = db.batch()
+        var pending = 0
+        var changed = 0
+        for (_, doc) in docs {
+            let d = doc.data() ?? [:]
+            var patch: [String: Any] = [:]
+            if !cleanName.isEmpty, (d["customerName"] as? String) != cleanName { patch["customerName"] = cleanName }
+            if !cleanEmail.isEmpty, ((d["customerEmail"] as? String) ?? "").lowercased() != cleanEmail { patch["customerEmail"] = cleanEmail }
+            if let phone, !phone.isEmpty,
+               PhoneFormatting.last10Digits(from: d["customerPhone"] as? String) != PhoneFormatting.last10Digits(from: phone) {
+                patch["customerPhone"] = phone
+            }
+            if ((d["customerId"] as? String) ?? "").isEmpty { patch["customerId"] = customerId }
+            guard !patch.isEmpty else { continue }
+            patch["updatedAt"] = Timestamp(date: Date())
+            batch.updateData(patch, forDocument: doc.reference)
+            pending += 1
+            changed += 1
+            if pending >= 400 {
+                try await batch.commit()
+                batch = db.batch()
+                pending = 0
+            }
+        }
+        if pending > 0 { try await batch.commit() }
+        return changed
+    }
+
     /// Patches `clientName` on SMS threads that match the customer's phone (inbox + thread titles).
     func updateSmsThreadsClientName(phone: String?, name: String) async throws {
         let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)

@@ -189,7 +189,21 @@ class ClientsViewModel: ObservableObject {
             let profile = try await firebaseService.fetchProviderProfile(uid: uid)
             let existingPhone = clients.first(where: { $0.id == clientId })?.phone
             if let tid = profile?.tenantId {
+                let before = clients.first(where: { $0.id == clientId })
                 try await firebaseService.updateTenantCustomer(tenantId: tid, customerId: clientId, updates: updates)
+                // Keep bookings' copy of the contact in step (calendar, booking details, reminder texts).
+                if updates["name"] != nil || updates["email"] != nil || updates["phone"] != nil {
+                    let changed = (try? await firebaseService.syncCustomerContactToBookings(
+                        tenantId: tid,
+                        customerId: clientId,
+                        oldEmail: before?.email,
+                        oldPhone: before?.phone,
+                        name: (updates["name"] as? String) ?? before?.name ?? "",
+                        email: (updates["email"] as? String) ?? before?.email ?? "",
+                        phone: (updates["phone"] as? String) ?? before?.phone
+                    )) ?? 0
+                    if changed > 0 { NotificationCenter.default.post(name: .bookingContactsChanged, object: nil) }
+                }
             } else {
                 try await firebaseService.updateClient(clientId, updates: updates)
             }

@@ -36,6 +36,12 @@
  * META_WEBHOOK_VERIFY_TOKEN. Paid plans only. Webhook and OAuth URLs are in instagram.js.
  * Subscribe the webhook in Meta only after metaInstagramWebhook is deployed.
  *
+ * Meta ads: same META_APP_SECRET (Facebook app secret). Paid owners only.
+ * Redirect URI: https://us-central1-<PROJECT>.cloudfunctions.net/metaAdsOAuthCallback
+ * Permissions: ads_read, ads_management, business_management, pages_show_list,
+ * pages_read_engagement, pages_manage_ads. The token stays in
+ * tenants/{id}/private/metaAds.
+ *
  * Custom domains (Namecheap): set secret NAMECHEAP_API_KEY and params
  * NAMECHEAP_API_USER, NAMECHEAP_CLIENT_IP; optional NAMECHEAP_USERNAME,
  * NAMECHEAP_API_HOST (sandbox default), NAMECHEAP_NAMESERVER_1/2.
@@ -70,6 +76,7 @@ const {
 } = require("./signupPayloads");
 const sms = require("./sms");
 const instagram = require("./instagram");
+const metaAds = require("./metaAds");
 const teamPaymentSplit = require("./teamPaymentSplit");
 const {
   isDemoShowcaseStripeAccountId,
@@ -17359,3 +17366,12 @@ exports.startInstagramConnect = instagram.startInstagramConnect;
 exports.disconnectInstagram = instagram.disconnectInstagram;
 exports.sendClientInstagramMessage = instagram.sendClientInstagramMessage;
 exports.refreshInstagramTokens = instagram.refreshInstagramTokens;
+exports.startMetaAdsConnect = metaAds.startMetaAdsConnect;
+exports.metaAdsOAuthCallback = metaAds.metaAdsOAuthCallback;
+exports.disconnectMetaAds = metaAds.disconnectMetaAds;
+exports.selectMetaAdAccount = metaAds.selectMetaAdAccount;
+exports.getMetaAdsConnection = metaAds.getMetaAdsConnection;
+exports.getMetaAdsInsights = metaAds.getMetaAdsInsights;
+exports.listMetaCampaigns = metaAds.listMetaCampaigns;
+exports.publishMetaCampaign = metaAds.publishMetaCampaign;
+exports.refreshMetaAdsTokens = metaAds.refreshMetaAdsTokens;

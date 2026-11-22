@@ -1,6 +1,6 @@
 # Plan: Meta ads for a business
 
-Status: **planned, not started**. Branch: `meta-ads`.
+Status: **server integration built** in `functions/metaAds.js`. Insights and the campaign screens are not built yet.
 
 Instagram DMs stay as they are. This is a second connect on the same Meta app
 (`1548817268385887`). Instagram login uses a different app id (`1646058753784138`

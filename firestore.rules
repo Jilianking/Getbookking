@@ -169,6 +169,15 @@ service cloud.firestore {
           'igConnectedAt',
           'igConnectedByUid',
           'igProvisionError',
+          'metaAdsStatus',
+          'metaAdAccountId',
+          'metaAdAccountName',
+          'metaAdsCurrency',
+          'metaAdsConnectedAt',
+          'metaAdsConnectedByUid',
+          'metaAdsProvisionError',
+          'metaAdsToken',
+          'metaAdsTokenExpiresAt',
           'smsLastSoloReplacementInvoiceId',
           'smsLastSoloReplacementAt',
           'smsSoloReplacementAuthorizationId',
@@ -257,6 +266,15 @@ service cloud.firestore {
           'igConnectedAt',
           'igConnectedByUid',
           'igProvisionError',
+          'metaAdsStatus',
+          'metaAdAccountId',
+          'metaAdAccountName',
+          'metaAdsCurrency',
+          'metaAdsConnectedAt',
+          'metaAdsConnectedByUid',
+          'metaAdsProvisionError',
+          'metaAdsToken',
+          'metaAdsTokenExpiresAt',
           'smsLastSoloReplacementInvoiceId',
           'smsLastSoloReplacementAt',
           'smsSoloReplacementAuthorizationId',
@@ -379,6 +397,15 @@ service cloud.firestore {
           'igConnectedAt',
           'igConnectedByUid',
           'igProvisionError',
+          'metaAdsStatus',
+          'metaAdAccountId',
+          'metaAdAccountName',
+          'metaAdsCurrency',
+          'metaAdsConnectedAt',
+          'metaAdsConnectedByUid',
+          'metaAdsProvisionError',
+          'metaAdsToken',
+          'metaAdsTokenExpiresAt',
           'customDomain',
           'customDomainWww',
           'customDomainStatus'
@@ -444,6 +471,11 @@ service cloud.firestore {
 
       // Ledger is Functions-only (settlement / reporting).
       match /paymentLedger/{ledgerId} {
+        allow read, write: if false;
+      }
+
+      // Meta ads token. Cloud Functions only.
+      match /private/{docId} {
         allow read, write: if false;
       }
     }

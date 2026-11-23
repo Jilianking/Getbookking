@@ -508,13 +508,14 @@
     var extra = "";
     if (status === "failed" || status === "expired") {
       extra = note((state.connection && state.connection.error) || "Meta ads could not be connected.");
-    } else if (status === "connecting" || state.waiting) {
-      extra = note("Connecting Meta ads… Finish in the Meta window, then come back here.");
+    } else if (state.waiting) {
+      extra = note("Finish in the Meta window, then come back here.");
     }
+    var again = status === "failed" || status === "expired";
     return '<div class="app-card app-ads-card">' + extra +
       '<p class="app-hint">New campaign, then Campaign, Ad set, and Ad.</p>' +
       '<button type="button" class="app-btn app-btn--primary" onclick="ShopAppAds.connect()" ' +
-      (state.busy ? "disabled" : "") + ">" + (status === "off" ? "Connect Meta ads" : "Connect again") + "</button></div>";
+      (state.busy ? "disabled" : "") + ">" + (again ? "Connect again" : "Connect Meta ads") + "</button></div>";
   }
 
   function accountPicker(lead) {

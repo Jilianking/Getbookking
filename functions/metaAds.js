@@ -22,6 +22,8 @@ const metaAppSecret = defineSecret("META_APP_SECRET");
 
 const REGION = "us-central1";
 const STATE_TTL_MS = 15 * 60 * 1000;
+// Must match MetaAdsLoginSession.callbackScheme in Test/AdsView.swift.
+const APP_CALLBACK_SCHEME = "getbookking-meta";
 const REFRESH_WITHIN_MS = 10 * 24 * 60 * 60 * 1000;
 const PAID_MESSAGE =
   "Your free trial includes the website builder. Start your paid Get Bookking plan to connect Meta ads.";
@@ -329,7 +331,7 @@ async function writeSelectedAccount(caller, account) {
 const startMetaAdsConnect = functions
   .region(REGION)
   .runWith({ secrets: runtimeSecrets })
-  .https.onCall(async (_data, context) => {
+  .https.onCall(async (data, context) => {
     if (!context.auth) {
       throw new functions.https.HttpsError("unauthenticated", "Must be signed in.");
     }
@@ -340,8 +342,9 @@ const startMetaAdsConnect = functions
       throw new functions.https.HttpsError("failed-precondition", "Meta ads are not configured yet.");
     }
     await tenantRef(caller.tenantId).set(publicPatch("connecting"), { merge: true });
+    const fromApp = ((data && data.client) || "").toString() === "ios";
     const state = lib.signState(
-      { tenantId: caller.tenantId, uid: caller.uid, exp: Date.now() + STATE_TTL_MS },
+      { tenantId: caller.tenantId, uid: caller.uid, app: fromApp ? 1 : 0, exp: Date.now() + STATE_TTL_MS },
       secret
     );
     const url = new URL(`https://www.facebook.com/${lib.GRAPH_VERSION}/dialog/oauth`);
@@ -358,19 +361,36 @@ const metaAdsOAuthCallback = functions
   .runWith({ secrets: runtimeSecrets })
   .https.onRequest(async (req, res) => {
     const params = req.method === "POST" ? req.body || {} : req.query || {};
+    const secret = secretValue();
+    const state = lib.readState((params.state || "").toString(), secret);
+    const finish = (httpStatus, status, title, message) => {
+      if (state && state.app) {
+        const back = new URL(`${APP_CALLBACK_SCHEME}://meta-ads`);
+        back.searchParams.set("status", status);
+        back.searchParams.set("message", message);
+        res.redirect(302, back.toString());
+        return;
+      }
+      res.status(httpStatus).type("html").send(htmlPage(title, message));
+    };
     const error = (params.error_description || params.error || "").toString().trim();
     if (error) {
-      res.status(400).type("html").send(htmlPage("Meta ads were not connected", error));
+      if (state && state.tenantId) {
+        try {
+          await tenantRef(state.tenantId).set(
+            publicPatch("failed", { metaAdsProvisionError: error.slice(0, 300) }),
+            { merge: true }
+          );
+        } catch (_) {
+          /* status is best-effort */
+        }
+      }
+      finish(400, "failed", "Meta ads were not connected", error);
       return;
     }
     const code = (params.code || "").toString().trim().replace(/#_=_\s*$/, "");
-    const secret = secretValue();
-    const state = lib.readState((params.state || "").toString(), secret);
     if (!code || !state || !state.tenantId || !state.uid) {
-      res
-        .status(400)
-        .type("html")
-        .send(htmlPage("Connect link expired", "Go back to Get Bookking and tap Connect again."));
+      finish(400, "failed", "Connect link expired", "Go back to Get Bookking and tap Connect again.");
       return;
     }
     try {
@@ -413,10 +433,7 @@ const metaAdsOAuthCallback = functions
       const only = active.length === 1 ? active[0] : accounts.length === 1 ? accounts[0] : null;
       if (only) {
         await writeSelectedAccount(caller, only);
-        res
-          .status(200)
-          .type("html")
-          .send(htmlPage("Meta ads connected", `Connected ${only.name}. You can close this and return to Get Bookking.`));
+        finish(200, "connected", "Meta ads connected", `Connected ${only.name}. You can close this and return to Get Bookking.`);
         return;
       }
       await tenantRef(caller.tenantId).set(
@@ -430,15 +447,12 @@ const metaAdsOAuthCallback = functions
         }),
         { merge: true }
       );
-      res
-        .status(200)
-        .type("html")
-        .send(
-          htmlPage(
-            "Choose an ad account",
-            "Meta ads are connected. Go back to Get Bookking and choose which ad account to use."
-          )
-        );
+      finish(
+        200,
+        "choose_account",
+        "Choose an ad account",
+        "Meta ads are connected. Go back to Get Bookking and choose which ad account to use."
+      );
     } catch (e) {
       console.error("metaAdsOAuthCallback", e);
       const message = (e && e.message) || "Meta ads could not be connected. Go back and try again.";
@@ -450,8 +464,7 @@ const metaAdsOAuthCallback = functions
       } catch (_) {
         /* status is best-effort */
       }
-      const status = e instanceof functions.https.HttpsError ? 400 : 400;
-      res.status(status).type("html").send(htmlPage("Meta ads were not connected", message));
+      finish(400, "failed", "Meta ads were not connected", message.toString());
     }
   });
 

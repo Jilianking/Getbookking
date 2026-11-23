@@ -8,12 +8,12 @@
 import SwiftUI
 import UIKit
 import Combine
+import AuthenticationServices
 import FirebaseFunctions
 
 struct AdsView: View {
     @EnvironmentObject var authViewModel: AuthViewModel
     @EnvironmentObject var sessionStore: TenantSessionStore
-    @Environment(\.scenePhase) private var scenePhase
     @StateObject private var viewModel = AdsViewModel()
     @State private var showEditor = false
     @State private var showDisconnect = false
@@ -71,10 +71,6 @@ struct AdsView: View {
             .task {
                 await viewModel.load(isDemoMode: authViewModel.isDemoMode)
             }
-            .onChange(of: scenePhase) { _, phase in
-                guard phase == .active, viewModel.waitingForBrowser else { return }
-                Task { await viewModel.reloadAfterBrowser() }
-            }
             .navigationDestination(isPresented: $showEditor) {
                 AdsEditorView(viewModel: viewModel)
             }
@@ -96,7 +92,7 @@ struct AdsView: View {
                 Text(viewModel.provisionError.isEmpty ? "Meta ads could not be connected." : viewModel.provisionError)
                     .font(.caption)
                     .foregroundStyle(.red)
-            } else if viewModel.status == "connecting" || viewModel.isWorking {
+            } else if viewModel.isWorking {
                 HStack {
                     ProgressView()
                     Text("Connecting Meta ads…")
@@ -106,7 +102,7 @@ struct AdsView: View {
             Button {
                 Task { await viewModel.connect() }
             } label: {
-                Text(viewModel.status == "off" ? "Connect Meta ads" : "Connect again")
+                Text(viewModel.status == "failed" || viewModel.status == "expired" ? "Connect again" : "Connect Meta ads")
                     .font(.headline)
                     .frame(maxWidth: .infinity)
             }
@@ -677,10 +673,10 @@ final class AdsViewModel: ObservableObject {
     @Published var results = 0
     @Published var isLoading = false
     @Published var isWorking = false
-    @Published var waitingForBrowser = false
     @Published var range: AdsRange = .days30
 
     private let functions = Functions.functions(region: Constants.Firebase.cloudFunctionsRegion)
+    private let loginSession = MetaAdsLoginSession()
 
     var isConnected: Bool { status == "connected" || status == "choose_account" }
 
@@ -758,25 +754,23 @@ final class AdsViewModel: ObservableObject {
         isWorking = true
         errorMessage = nil
         do {
-            let data = try await call("startMetaAdsConnect")
+            let data = try await call("startMetaAdsConnect", ["client": "ios"])
             guard let url = URL(string: string(data["authorizeUrl"])) else {
                 throw NSError(domain: "Ads", code: 1, userInfo: [NSLocalizedDescriptionKey: "Meta did not return a connect link."])
             }
-            waitingForBrowser = true
-            status = "connecting"
-            if await InAppSafari.openInSystemBrowser(url) == false {
-                waitingForBrowser = false
-                errorMessage = "Couldn’t open Meta. Try again."
+            let callback = try await loginSession.start(url)
+            let items = callback.flatMap { URLComponents(url: $0, resolvingAgainstBaseURL: false)?.queryItems } ?? []
+            if items.first(where: { $0.name == "status" })?.value == "failed" {
+                let message = items.first(where: { $0.name == "message" })?.value ?? ""
+                errorMessage = message.isEmpty ? "Meta ads could not be connected." : message
             }
         } catch {
             errorMessage = FirebaseFunctionsErrorHelper.message(from: error)
         }
         isWorking = false
-    }
-
-    func reloadAfterBrowser() async {
-        waitingForBrowser = false
+        let shownError = errorMessage
         await load(isDemoMode: false)
+        if errorMessage == nil { errorMessage = shownError }
     }
 
     func disconnect() async {
@@ -850,4 +844,49 @@ final class AdsViewModel: ObservableObject {
     private func string(_ value: Any?) -> String { (value as? String) ?? "" }
     private func int(_ value: Any?) -> Int { (value as? NSNumber)?.intValue ?? (value as? Int) ?? 0 }
     private func double(_ value: Any?) -> Double { (value as? NSNumber)?.doubleValue ?? (value as? Double) ?? 0 }
+}
+
+/// Facebook Login in Apple's sign-in sheet. The callback function redirects to
+/// `getbookking-meta://meta-ads?status=…`, which closes the sheet.
+final class MetaAdsLoginSession: NSObject, ASWebAuthenticationPresentationContextProviding {
+    static let callbackScheme = "getbookking-meta"
+
+    private var session: ASWebAuthenticationSession?
+    private var anchor: ASPresentationAnchor?
+
+    /// Returns the callback URL, or nil when the owner closes the sheet.
+    func start(_ url: URL) async throws -> URL? {
+        anchor = UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .flatMap(\.windows)
+            .first(where: \.isKeyWindow)
+        defer { session = nil }
+        return try await withCheckedThrowingContinuation { continuation in
+            let session = ASWebAuthenticationSession(url: url, callbackURLScheme: Self.callbackScheme) { @Sendable callback, error in
+                if let error {
+                    if (error as? ASWebAuthenticationSessionError)?.code == .canceledLogin {
+                        continuation.resume(returning: nil)
+                    } else {
+                        continuation.resume(throwing: error)
+                    }
+                    return
+                }
+                continuation.resume(returning: callback)
+            }
+            session.presentationContextProvider = self
+            session.prefersEphemeralWebBrowserSession = false
+            self.session = session
+            if !session.start() {
+                continuation.resume(throwing: NSError(
+                    domain: "Ads",
+                    code: 2,
+                    userInfo: [NSLocalizedDescriptionKey: "Couldn’t open Meta. Try again."]
+                ))
+            }
+        }
+    }
+
+    nonisolated func presentationAnchor(for session: ASWebAuthenticationSession) -> ASPresentationAnchor {
+        MainActor.assumeIsolated { anchor ?? ASPresentationAnchor() }
+    }
 }

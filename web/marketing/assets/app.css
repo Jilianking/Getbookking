@@ -3830,4 +3830,43 @@ body.is-cal-dragging, body.is-cal-dragging * { cursor: grabbing !important; user
 .app-client-edit { display: grid; gap: 8px; margin: 4px 0 12px; }
 .app-client-edit label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); }
 .app-client-edit input { padding: 9px 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--paper); font: inherit; font-size: 15px; color: var(--text); }
+
+/* Ads */
+.app-ads-card { padding: 16px; display: flex; flex-direction: column; gap: 12px; align-items: flex-start; }
+.app-ads-tools { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px; margin: 4px 0 14px; }
+.app-ads-tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin: 0 0 16px; }
+.app-ads-tiles .app-card { padding: 12px 14px; }
+.app-ads-metric { display: block; margin-top: 4px; font-size: 22px; }
+.app-ads-table-wrap { overflow-x: auto; margin-bottom: 16px; }
+.app-ads-table-wrap tr { cursor: pointer; }
+.app-ads-table-wrap tr.is-selected td { background: var(--cream); }
+.app-ads-accounts { display: flex; flex-wrap: wrap; gap: 8px; }
+.app-ads-editor { display: grid; grid-template-columns: 168px minmax(0, 1fr); gap: 20px; align-items: start; }
+.app-ads-editor.is-preview { grid-template-columns: 168px minmax(0, 1fr) 280px; }
+.app-ads-steps { display: flex; flex-direction: column; gap: 6px; }
+.app-ads-steps button, .app-ads-objectives button {
+  border: 1px solid var(--line);
+  background: var(--card);
+  color: var(--text);
+  border-radius: 10px;
+  padding: 10px 12px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+.app-ads-steps button.is-on, .app-ads-objectives button.is-on { background: var(--ink); color: #fff; border-color: var(--ink); }
+.app-ads-objectives { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-bottom: 12px; }
+.app-ads-objectives button { text-align: center; }
+.app-ads-check { display: flex; align-items: center; gap: 8px; margin: 4px 0 12px; font-size: 14px; }
+.app-ads-preview-tabs { flex-wrap: wrap; margin-bottom: 10px; }
+.app-ads-preview-card { padding: 14px; display: flex; flex-direction: column; gap: 8px; }
+.app-ads-preview-card p { margin: 0; color: var(--muted); font-size: 13px; }
+@media (max-width: 960px) {
+  .app-ads-editor, .app-ads-editor.is-preview { grid-template-columns: 1fr; }
+  .app-ads-steps { flex-direction: row; }
+  .app-ads-steps button { flex: 1; text-align: center; }
+  .app-ads-tiles, .app-ads-objectives { grid-template-columns: 1fr 1fr; }
+}
 .app-req-contact .app-client-note-btn { margin-left: 6px; }

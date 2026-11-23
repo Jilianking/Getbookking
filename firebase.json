@@ -120,6 +120,7 @@
         { "source": "/app/clients", "destination": "/app.html" },
         { "source": "/app/shop", "destination": "/app.html" },
         { "source": "/app/payments", "destination": "/app.html" },
+        { "source": "/app/ads", "destination": "/app.html" },
         { "source": "/app/payouts", "destination": "/app.html" },
         { "source": "/app/billing", "destination": "/app.html" },
         { "source": "/app/account", "destination": "/app.html" },

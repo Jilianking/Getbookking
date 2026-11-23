@@ -28,6 +28,7 @@
     "clients",
     "shop",
     "payments",
+    "ads",
     "payouts",
     "website",
     "billing",
@@ -75,6 +76,7 @@
     if (path.indexOf("/app/clients") !== -1) return "clients";
     if (path.indexOf("/app/shop") !== -1) return "shop";
     if (path.indexOf("/app/payouts") !== -1) return "payouts";
+    if (path.indexOf("/app/ads") !== -1) return "ads";
     if (path.indexOf("/app/payments") !== -1) return "payments";
     if (path.indexOf("/app/website") !== -1) return "website";
     if (path.indexOf("/app/billing") !== -1) return "billing";
@@ -164,7 +166,7 @@
     setRailCollapsed(collapsed);
   }
 
-  var ROUTE_ACCESS = { messages: "messages", profile: "websiteProfile", team: "team", clients: "clients", website: "website", billing: "billing", shop: "shop", payments: "payments", payouts: "payments" };
+  var ROUTE_ACCESS = { messages: "messages", profile: "websiteProfile", team: "team", clients: "clients", website: "website", billing: "billing", shop: "shop", payments: "payments", payouts: "payments", ads: "ads" };
 
   function setRoute(route, session) {
     // A link or bookmark to a page this person can't use lands on the dashboard.
@@ -203,6 +205,7 @@
       clients: "Clients",
       shop: "Shop",
       payments: "Payments",
+      ads: "Ads",
       payouts: "Team payouts",
       website: "Website builder",
       billing: "Plan & billing",
@@ -212,6 +215,9 @@
     document.title = (titles[route] || "Shop") + " — Get Bookking";
     if (route === "payments" && window.ShopAppPayments) {
       ShopAppPayments.load(session);
+    }
+    if (route === "ads" && window.ShopAppAds) {
+      ShopAppAds.load(session);
     }
     if (route === "payouts" && window.ShopAppPayouts) {
       ShopAppPayouts.load(session);
@@ -281,6 +287,7 @@
       $("paymentsFlat").classList.add("hidden");
       $("paymentsFolder").classList.add("hidden");
     }
+    navFor("ads").forEach(function (el) { el.classList.toggle("hidden", !session.isOwner); });
 
     var greet = session.salutation;
     if (session.firstName) greet += ", " + session.firstName;

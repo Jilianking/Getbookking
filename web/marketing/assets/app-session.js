@@ -187,6 +187,7 @@
       case "website": return false;
       case "websiteProfile": return a.canEditPortfolio === true || a.canEditPublicBio === true;
       case "billing": return false;
+      case "ads": return false;
       default: return false;
     }
   }

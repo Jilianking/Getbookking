@@ -200,7 +200,9 @@
       host.appendChild(section("Payments", [
         row("Payment settings", "", function () { openScreen("payments"); }),
       ]));
-      // AI assistant: hidden until the shop is on early access (lawyer review pending before everyone).
+      // AI assistant: not available yet. AI_ASSISTANT_AVAILABLE = false hides the row (the iPhone app has the
+      // same switch, AIAssistantViewModel.isAvailable). Set both to true to bring it back.
+      var AI_ASSISTANT_AVAILABLE = false;
       var aiSlot = document.createElement("div");
       host.appendChild(aiSlot);
       var showAi = function () {
@@ -208,7 +210,8 @@
           row("Connect an AI assistant", "", function () { openScreen("ai"); }),
         ]));
       };
-      if (state.aiAllowed === true) showAi();
+      if (!AI_ASSISTANT_AVAILABLE) { /* hidden */ }
+      else if (state.aiAllowed === true) showAi();
       else if (state.aiAllowed !== false) {
         fns.httpsCallable("listMcpKeys")({}).then(function (res) {
           state.aiAllowed = !!(res.data && res.data.allowed);

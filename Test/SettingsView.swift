@@ -31,7 +31,7 @@ struct SettingsView: View {
                     if !authViewModel.isDemoMode && viewModel.hasProfile {
                         businessSection
                         paymentsSection
-                        if viewModel.isTenantOwner && aiViewModel.showRow {
+                        if AIAssistantViewModel.isAvailable && viewModel.isTenantOwner && aiViewModel.showRow {
                             aiSection
                         }
                     }
@@ -340,14 +340,16 @@ struct SettingsView: View {
     /// then independent loads run at the same time instead of one after another.
     private func loadSettings(refresh: Bool) async {
         let demo = authViewModel.isDemoMode
-        if !demo {
+        if !demo && AIAssistantViewModel.isAvailable {
             aiViewModel.restoreCache()
+        }
+        if !demo {
             teamPolicyViewModel.restoreCachedSms()
         }
 
         // AI connections only need a signed-in owner; start right away.
         async let ai: Void = {
-            guard !demo else { return }
+            guard !demo, AIAssistantViewModel.isAvailable else { return }
             if refresh { await aiViewModel.load(quiet: true) } else { await aiViewModel.checkAccess() }
         }()
         async let payments: Void = paymentsViewModel.loadData(isDemoMode: demo, sessionStore: sessionStore)

@@ -21,6 +21,10 @@ struct AIConnection: Identifiable, Equatable {
 
 @MainActor
 final class AIAssistantViewModel: ObservableObject {
+    /// The AI assistant isn't available yet: false hides the Settings row and skips the access check.
+    /// Set to true to bring it back (the website has the same switch in settings.js).
+    static let isAvailable = false
+
     @Published var allowed: Bool?
     @Published var connections: [AIConnection] = []
     @Published var isLoading = false

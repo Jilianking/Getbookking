@@ -7,6 +7,7 @@
 
 import SwiftUI
 import UIKit
+import Combine
 import FirebaseFunctions
 
 struct AdsView: View {

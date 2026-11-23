@@ -6,7 +6,7 @@
 const crypto = require("crypto");
 
 const GRAPH_VERSION = "v27.0";
-const FB_APP_ID = "1548817268385887";
+const FB_APP_ID = "1548817263683587";
 const SCOPES = [
   "ads_read",
   "ads_management",

@@ -3,7 +3,7 @@
 Status: **connection and the Ads page are built.** The server lives in `functions/metaAds.js`. iPhone and the web shop each have an Ads screen under Business, after Payments. Insights is unchanged. A booking sent to Meta as a Schedule conversion is not built yet.
 
 Instagram DMs stay as they are. This is a second connect on the same Meta app
-(`1548817268385887`). Instagram login uses a different app id (`1646058753784138`
+(`1548817263683587`). Instagram login uses a different app id (`1646058753784138`
 in `functions/instagram.js`) and cannot read an ad account.
 
 ## Why

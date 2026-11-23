@@ -915,6 +915,96 @@ const DEMO_ACTIVITY_BY_SLUG = {
         ],
       },
     ],
+    // About two years of trips so Insights has a full chart and a "last year" line to compare with.
+    history: {
+      seed: 13,
+      pastDays: 740,
+      futureDays: 30,
+      perDay: 0.7,
+      growthFrom: 0.72,
+      onlineShare: 0.7,
+      areaCode: "305",
+      clients: 72,
+      // Key West: busy late winter and spring, steady summer, slow in September and October.
+      season: [1.1, 1.25, 1.4, 1.3, 1.1, 1.05, 1.15, 0.85, 0.55, 0.7, 0.85, 1.0],
+      weekday: [1.3, 0.8, 0.8, 0.85, 0.95, 1.15, 1.5],
+      services: [
+        { name: "Half-Day Reef Charter", price: 450, minutes: 240, weight: 30, times: [[7, 0], [12, 30]] },
+        { name: "Full-Day Offshore Charter", price: 950, minutes: 480, weight: 13, times: [[6, 30]] },
+        { name: "Key West Sandbar Day", price: 680, minutes: 360, weight: 16, times: [[10, 0]] },
+        { name: "Mallory Square Sunset Cruise", price: 250, minutes: 120, weight: 17, times: [[17, 30]] },
+        { name: "Night Yellowtail Bite", price: 480, minutes: 240, weight: 8, times: [[19, 0]] },
+        { name: "Family Flats & Harbor Trip", price: 500, minutes: 240, weight: 10, times: [[8, 30], [13, 0]] },
+        { name: "Bachelor / Bachelorette Boat Day", price: 1400, minutes: 480, weight: 6, times: [[10, 30]] },
+      ],
+      firstNames: [
+        "Avery", "Brooke", "Caleb", "Dana", "Ethan", "Faith", "Grant", "Hannah", "Isaac", "Jenna",
+        "Kyle", "Leah", "Mason", "Nora", "Owen", "Paige", "Quinn", "Reid", "Sophie", "Trent",
+        "Uma", "Vince", "Whitney", "Xavier", "Yara", "Zach", "Carly", "Derek", "Megan", "Nolan",
+      ],
+      lastNames: [
+        "Adler", "Barrett", "Cortez", "Dalton", "Ellis", "Fowler", "Garner", "Hayes", "Irwin", "Jensen",
+        "Keller", "Lowry", "Mercer", "Nash", "Osborne", "Pruitt", "Quill", "Rowe", "Sutton", "Tate",
+        "Underwood", "Vance", "Whitlock", "Yates", "Zeller", "Archer", "Bishop", "Crane", "Doyle", "Emery",
+      ],
+    },
+    // Shown as connected in Settings; no real Instagram account behind it, so replies won't send.
+    instagram: {
+      username: "harborcharterskw",
+      igUserId: "demo-harbor-charters-ig",
+      // [direction, minutes ago, text]
+      threads: [
+        {
+          handle: "tara.on.the.water",
+          messages: [
+            ["inbound", 26, "Hi! Do you have room for 6 this Saturday morning? Looking at the half-day reef trip."],
+            ["outbound", 21, "We do. Saturday at 7am is open on Sea Ya Later. Want me to send the booking link?"],
+            ["inbound", 14, "Yes please"],
+            ["outbound", 11, "Here you go. A $90 deposit holds the spot, and the rest is due at the dock."],
+          ],
+        },
+        {
+          handle: "mattandkels",
+          messages: [
+            ["inbound", 135, "How much for a sandbar day for a bachelorette group of 8?"],
+            ["outbound", 120, "Sandbar Day is $680 for up to 8. The Bachelorette Boat Day is $1,400 for 8 hours with music and a lunch stop. Which sounds more like your crew?"],
+            ["inbound", 96, "The boat day for sure. Is June 14 open?"],
+          ],
+        },
+        {
+          handle: "keysfamilytravels",
+          messages: [
+            ["inbound", 1250, "Can we bring our dog on the sunset cruise? He is very calm."],
+            ["outbound", 1230, "Well-behaved dogs are welcome on the sunset cruise. Bring water for him, there is shade on board."],
+            ["inbound", 1215, "Amazing, booking now"],
+          ],
+        },
+        {
+          handle: "offshore_dave",
+          messages: [
+            ["inbound", 4400, "Mahi still running?"],
+            ["outbound", 4380, "They have been on the weedlines about 20 miles out. The full day is your best shot."],
+            ["inbound", 4300, "Booked the full day for the 12th. See you then"],
+            ["outbound", 4290, "See you at Garrison Bight at 6:30."],
+          ],
+        },
+        {
+          handle: "jenn.travels.fl",
+          messages: [
+            ["inbound", 8700, "Is the 8am trip still on with this wind?"],
+            ["outbound", 8650, "We are moving it to the afternoon when it lays down. Same price, I will text you the new time."],
+            ["inbound", 8600, "Perfect, thank you"],
+          ],
+        },
+        {
+          handle: "brookeandben",
+          messages: [
+            ["inbound", 13100, "Do you do proposals on the sunset cruise?"],
+            ["outbound", 13000, "We have done a bunch. Tell me the date and we will make sure the ring gets on and off the boat safely."],
+          ],
+        },
+      ],
+    },
   },
 };
 
@@ -1056,9 +1146,181 @@ function buildPaymentTransactions(customers, servicesByName, now, Timestamp) {
   return charges;
 }
 
+/* ── Screenshot extras: a long booking history (Insights) and Instagram DMs ── */
+
+// Booked online through the shop's site: Insights counts a source containing "web" with no createdByUid.
+const DEMO_SEED_WEB_SOURCE = "demo-seed-web";
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+function seededRandom(seed) {
+  let a = seed >>> 0;
+  return function () {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function pickWeighted(rng, list) {
+  const total = list.reduce((s, x) => s + x.weight, 0);
+  let r = rng() * total;
+  for (const x of list) {
+    r -= x.weight;
+    if (r <= 0) return x;
+  }
+  return list[list.length - 1];
+}
+
+/** Made-up clients (555 numbers, example.com emails). The first dozen are regulars. */
+function historyClients(spec) {
+  const firsts = spec.firstNames;
+  const lasts = spec.lastNames;
+  const out = [];
+  for (let i = 0; i < spec.clients; i++) {
+    const first = firsts[i % firsts.length];
+    const last = lasts[(i + Math.floor(i / firsts.length) * 7) % lasts.length];
+    out.push({
+      name: `${first} ${last}`,
+      email: `${first}.${last}${i}@example.com`.toLowerCase(),
+      phone: `+1${spec.areaCode}555${String(2000 + i).padStart(4, "0")}`,
+      weight: i < 12 ? 6 : i < 30 ? 2 : 1,
+    });
+  }
+  return out;
+}
+
+/** One row per trip from pastDays ago to futureDays ahead, shaped by season, weekday, and growth. */
+function buildHistoryRows(spec, now) {
+  const rng = seededRandom(spec.seed);
+  const clients = historyClients(spec);
+  const rows = [];
+  for (let day = -spec.pastDays; day <= spec.futureDays; day++) {
+    const date = addDays(now, day);
+    const progress = Math.min(1, (day + spec.pastDays) / spec.pastDays);
+    const growth = spec.growthFrom + (1 - spec.growthFrom) * progress;
+    let expected = spec.perDay * spec.season[date.getMonth()] * spec.weekday[date.getDay()] * growth;
+    // Further out, fewer trips are booked yet.
+    if (day > 0) expected *= day <= 14 ? 0.9 : 0.6;
+    let count = Math.floor(expected);
+    if (rng() < expected - count) count += 1;
+    const used = new Set();
+    for (let k = 0; k < count; k++) {
+      const svc = pickWeighted(rng, spec.services);
+      const time = svc.times[Math.floor(rng() * svc.times.length)];
+      const key = `${svc.name}@${time[0]}:${time[1]}`;
+      if (used.has(key)) continue;
+      used.add(key);
+      const start = atHour(date, time[0], time[1]);
+      const past = start < now;
+      const r = rng();
+      let status = "confirmed";
+      let noShow = false;
+      if (past) {
+        if (r < 0.05) status = "cancelled";
+        else if (r < 0.085) noShow = true;
+        else status = "completed";
+      } else if (day <= 7 && r < 0.06) status = "NEW";
+      else if (r < 0.14) status = "pending_deposit";
+      rows.push({
+        client: pickWeighted(rng, clients),
+        svc,
+        start,
+        status,
+        noShow,
+        online: rng() < spec.onlineShare,
+        leadDays: 2 + Math.floor(Math.pow(rng(), 2) * 45),
+        payRoll: rng(),
+        kindRoll: rng(),
+      });
+    }
+  }
+  return { clients, rows };
+}
+
+/** Payments for a history trip: deposit (or paid in full) up front, balance at the dock. */
+function historyPayments(row, priceDollars, createdAt) {
+  const deposit = Math.max(50, Math.round((priceDollars * 0.2) / 10) * 10);
+  const pays = [];
+  if (["cancelled", "NEW", "pending_deposit"].includes(row.status)) return { pays, deposit };
+  const upfront = row.online ? "card" : "link";
+  if (row.payRoll < 0.18 && !row.noShow) {
+    pays.push([upfront, "payment", priceDollars, createdAt]);
+    return { pays, deposit };
+  }
+  pays.push([upfront, "deposit", deposit, createdAt]);
+  if (row.status === "completed") {
+    const k = row.kindRoll;
+    const kind = k < 0.45 ? "tap" : k < 0.7 ? "link" : k < 0.85 ? "cash" : "card";
+    pays.push([kind, "balance", priceDollars - deposit, row.start]);
+  }
+  return { pays, deposit };
+}
+
+function paymentEntry(kind, role, cents, at, now, Timestamp) {
+  return {
+    kind,
+    role,
+    cents,
+    grossCents: kind === "cash" ? cents : Math.round(cents * 1.039 + 30),
+    at: Timestamp.fromDate(at > now ? now : at),
+  };
+}
+
+/**
+ * Weekly revenue rows for the demo payment shim, from what the seeded trips actually took in.
+ * Ids start with txn_ so Insights pages back through all of them (it pages on Stripe-style ids).
+ */
+function buildWeeklyTransactionsFromEntries(entries, now, weeks, Timestamp) {
+  const thisWeek = startOfWeek(now);
+  const sums = new Array(weeks).fill(0);
+  for (const e of entries) {
+    if (e.at > now) continue;
+    const back = Math.round((thisWeek - startOfWeek(e.at)) / (7 * DAY_MS));
+    const idx = weeks - 1 - back;
+    if (idx >= 0 && idx < weeks) sums[idx] += e.cents;
+  }
+  // This week is only partway done: keep it a little ahead of last week so the Home chart reads up.
+  if (weeks > 1) sums[weeks - 1] = Math.max(sums[weeks - 1], Math.round(sums[weeks - 2] * 1.08));
+  const charges = [];
+  for (let index = 0; index < weeks; index++) {
+    const amountCents = sums[index];
+    if (amountCents <= 0) continue;
+    const weeksAgo = weeks - 1 - index;
+    let when;
+    if (weeksAgo === 0) {
+      when = atHour(now, 11, 30);
+      if (when > now) when = atHour(addDays(now, -1), 11, 30);
+    } else {
+      const { weekStart } = weekRangeForWeeksAgo(now, weeksAgo);
+      when = atHour(addDays(weekStart, 3), 11, 30);
+    }
+    const fee = estimateStripeFeeCents(amountCents);
+    const n = String(index + 1).padStart(3, "0");
+    charges.push({
+      id: `txn_demo_wk${n}`,
+      type: "charge",
+      amountCents,
+      fee,
+      netCents: amountCents - fee,
+      customerName: "Charters",
+      description: "Charter trips",
+      createdAt: Timestamp.fromDate(when),
+      created: Math.floor(when.getTime() / 1000),
+      sourceId: `ch_demo_wk${n}`,
+      reportingCategory: "charge",
+    });
+  }
+  charges.sort((a, b) => b.created - a.created);
+  return charges;
+}
+
 async function deleteDemoSeedDocs(db, tenantId) {
   const collections = [
     { path: "bookingRequests", field: "source", value: DEMO_SEED_SOURCE },
+    { path: "bookingRequests", field: "source", value: DEMO_SEED_WEB_SOURCE },
+    { path: "bookingRequests", field: "demoSeed", value: true },
     { path: "customers", field: "source", value: DEMO_SEED_SOURCE },
     { path: "smsLog", field: "source", value: DEMO_SEED_SOURCE },
     { path: "smsThreads", field: "source", value: DEMO_SEED_SOURCE },
@@ -1096,6 +1358,11 @@ async function seedDemoActivity(db, tenantId, slug, Timestamp, opts = {}) {
   const customers = cloneCustomersForSeed(config.customers);
   let batch = db.batch();
   let ops = 0;
+  // Bookings go in as source "seed" so the new-booking alerts and client texts skip them,
+  // then get their real label in a second pass (that update doesn't trigger anything).
+  const relabel = [];
+  // Money taken, for the weekly revenue rows (history shops only).
+  const revenueEntries = [];
 
   const commitIfNeeded = async () => {
     if (ops >= 400) {
@@ -1146,7 +1413,8 @@ async function seedDemoActivity(db, tenantId, slug, Timestamp, opts = {}) {
 
       const booking = {
         status: spec.status === "NEW" ? "NEW" : spec.status,
-        source: DEMO_SEED_SOURCE,
+        source: "seed",
+        demoSeed: true,
         tenantId,
         customerId,
         customerName: person.name,
@@ -1173,6 +1441,7 @@ async function seedDemoActivity(db, tenantId, slug, Timestamp, opts = {}) {
             grossCents: p[0] === "cash" ? cents : Math.round(cents * 1.039 + 30),
             at: Timestamp.fromDate(at > now ? now : at),
           };
+          revenueEntries.push({ cents, at: at > now ? now : at });
         });
         if (Object.keys(payments).length) booking.payments = payments;
         if (spec.depositRequest) booking.depositRequestCents = Math.round(spec.depositRequest * 100);
@@ -1187,6 +1456,7 @@ async function seedDemoActivity(db, tenantId, slug, Timestamp, opts = {}) {
       }
 
       batch.set(bookingRef, booking);
+      relabel.push({ ref: bookingRef, source: DEMO_SEED_SOURCE });
       ops += 1;
       await commitIfNeeded();
     }
@@ -1240,9 +1510,162 @@ async function seedDemoActivity(db, tenantId, slug, Timestamp, opts = {}) {
     await commitIfNeeded();
   }
 
+  let historyCount = 0;
+  if (config.history) {
+    const spec = config.history;
+    const { rows } = buildHistoryRows(spec, now);
+    const perClient = new Map();
+    for (let n = 0; n < rows.length; n++) {
+      const row = rows[n];
+      const resolved = resolveService(row.svc.name, ctx.servicesByName);
+      const priceDollars = resolved.price > 0 ? resolved.price : row.svc.price;
+      let createdAt = addDays(row.start, -row.leadDays);
+      if (createdAt > now) createdAt = new Date(now.getTime() - 60 * 60 * 1000);
+      const customerId = customerDocIdForTenant(row.client.email, row.client.phone);
+      const { pays, deposit } = historyPayments(row, priceDollars, createdAt);
+      const payments = {};
+      pays.forEach((p, k) => {
+        const cents = Math.round(p[2] * 100);
+        payments[`h${n}_${k}`] = paymentEntry(p[0], p[1], cents, p[3], now, Timestamp);
+        revenueEntries.push({ cents, at: p[3] > now ? now : p[3] });
+      });
+      const booking = {
+        status: row.status,
+        source: "seed",
+        demoSeed: true,
+        tenantId,
+        customerId,
+        customerName: row.client.name,
+        customerEmail: row.client.email,
+        customerPhone: row.client.phone,
+        serviceName: resolved.serviceName,
+        durationMinutes: row.svc.minutes,
+        notes: "",
+        assignedMemberName: ctx.ownerDisplayName,
+        createdAt: Timestamp.fromDate(createdAt),
+        requestedStartTime: Timestamp.fromDate(row.start),
+        // A no-show keeps the deposit and owes nothing more.
+        priceCents: Math.round((row.noShow ? deposit : priceDollars) * 100),
+        skipConfirmationSms: true,
+        smsConsentAccepted: true,
+        balanceReminderSentAt: Timestamp.fromDate(now),
+      };
+      if (ctx.ownerEmail) booking.assignedMemberEmail = ctx.ownerEmail;
+      if (ctx.ownerUid) booking.assignedMemberUid = ctx.ownerUid;
+      if (resolved.serviceId) booking.serviceId = resolved.serviceId;
+      if (Object.keys(payments).length) booking.payments = payments;
+      if (row.status === "pending_deposit") booking.depositRequestCents = deposit * 100;
+      if (row.noShow) booking.noShowAt = Timestamp.fromDate(atHour(row.start, row.start.getHours() + 1));
+      if (!row.online && ctx.ownerUid) booking.createdByUid = ctx.ownerUid;
+
+      const ref = db.collection("tenants").doc(tenantId).collection("bookingRequests").doc();
+      batch.set(ref, booking);
+      relabel.push({ ref, source: row.online ? DEMO_SEED_WEB_SOURCE : DEMO_SEED_SOURCE });
+      ops += 1;
+      await commitIfNeeded();
+
+      const c = perClient.get(customerId) || { client: row.client, first: createdAt, last: row.start, visits: 0 };
+      if (createdAt < c.first) c.first = createdAt;
+      if (row.start > c.last && row.start <= now) c.last = row.start;
+      if (["completed", "confirmed"].includes(row.status) && !row.noShow) c.visits += 1;
+      perClient.set(customerId, c);
+    }
+    historyCount = rows.length;
+
+    for (const [customerId, c] of perClient) {
+      batch.set(
+        db.collection("tenants").doc(tenantId).collection("customers").doc(customerId),
+        {
+          name: c.client.name,
+          email: c.client.email,
+          phone: c.client.phone,
+          source: DEMO_SEED_SOURCE,
+          totalAppointments: c.visits,
+          vip: false,
+          notes: "",
+          createdAt: Timestamp.fromDate(c.first),
+          updatedAt: Timestamp.fromDate(now),
+          lastContact: Timestamp.fromDate(c.last),
+          smsOptedIn: true,
+          smsConsentSource: "web_booking",
+          smsConsentAt: Timestamp.fromDate(c.first),
+        },
+        { merge: true }
+      );
+      ops += 1;
+      await commitIfNeeded();
+    }
+  }
+
+  let igThreadCount = 0;
+  if (config.instagram) {
+    const ig = config.instagram;
+    for (let t = 0; t < ig.threads.length; t++) {
+      const thread = ig.threads[t];
+      const scopedId = `demo-ig-${t + 1}`;
+      const threadId = `ig:${ig.igUserId}:${scopedId}`;
+      const handle = `@${thread.handle}`;
+      let last = null;
+      let lastInbound = null;
+      for (const [dir, minutesAgo, body] of thread.messages) {
+        const at = new Date(now.getTime() - minutesAgo * 60 * 1000);
+        const isOut = dir === "outbound";
+        batch.set(db.collection("tenants").doc(tenantId).collection("smsLog").doc(), {
+          channel: "instagram",
+          direction: isOut ? "outbound" : "inbound",
+          from: isOut ? ig.igUserId : scopedId,
+          to: isOut ? scopedId : ig.igUserId,
+          threadId,
+          body,
+          clientName: handle,
+          igScopedUserId: scopedId,
+          igUsername: thread.handle,
+          assignedMemberUid: "",
+          smsLineScope: "tenant",
+          createdAt: Timestamp.fromDate(at),
+          source: DEMO_SEED_SOURCE,
+        });
+        ops += 1;
+        last = { dir, at, body };
+        if (!isOut) lastInbound = at;
+        await commitIfNeeded();
+      }
+      if (!last) continue;
+      const threadDoc = {
+        threadId,
+        channel: "instagram",
+        igScopedUserId: scopedId,
+        igUsername: thread.handle,
+        clientName: handle,
+        lastDirection: last.dir === "outbound" ? "outbound" : "inbound",
+        lastMessageBody: last.body.slice(0, 500),
+        lastMessageAt: Timestamp.fromDate(last.at),
+        assignedMemberUid: "",
+        smsLineScope: "tenant",
+        source: DEMO_SEED_SOURCE,
+        updatedAt: Timestamp.fromDate(now),
+      };
+      // Instagram allows replies for 24 hours after the client's last message.
+      if (lastInbound) threadDoc.igWindowExpiresAt = Timestamp.fromDate(new Date(lastInbound.getTime() + DAY_MS));
+      batch.set(db.collection("tenants").doc(tenantId).collection("smsThreads").doc(threadId), threadDoc);
+      ops += 1;
+      igThreadCount += 1;
+      await commitIfNeeded();
+    }
+  }
+
   if (ops > 0) await batch.commit();
 
-  const transactions = buildShowcaseWeeklyTransactions(slug, now, Timestamp);
+  // Second pass: the bookings' real source labels.
+  for (let i = 0; i < relabel.length; i += 400) {
+    const b2 = db.batch();
+    relabel.slice(i, i + 400).forEach((r) => b2.update(r.ref, { source: r.source }));
+    await b2.commit();
+  }
+
+  const transactions = config.history
+    ? buildWeeklyTransactionsFromEntries(revenueEntries, now, Math.ceil(config.history.pastDays / 7) + 1, Timestamp)
+    : buildShowcaseWeeklyTransactions(slug, now, Timestamp);
   const preset = config.paymentPreset || {};
   const payments = {
     availableBalanceCents: preset.availableBalanceCents ?? 0,
@@ -1258,13 +1681,22 @@ async function seedDemoActivity(db, tenantId, slug, Timestamp, opts = {}) {
         seededAt: Timestamp.fromDate(now),
         payments,
       },
+      ...(config.instagram
+        ? {
+            igStatus: "connected",
+            igUserId: config.instagram.igUserId,
+            igUsername: config.instagram.username,
+            igConnectedAt: Timestamp.fromDate(now),
+            igProvisionError: "",
+          }
+        : {}),
       updatedAt: Timestamp.fromDate(now),
     },
     { merge: true }
   );
 
   const threadCount = customers.filter((c) => (c.sms || []).length).length;
-  const bookingCount = customers.reduce((n, c) => n + (c.bookings || []).length, 0);
+  const bookingCount = customers.reduce((n, c) => n + (c.bookings || []).length, 0) + historyCount;
 
   return {
     tenantId,
@@ -1272,6 +1704,7 @@ async function seedDemoActivity(db, tenantId, slug, Timestamp, opts = {}) {
     customers: customers.length,
     bookings: bookingCount,
     smsThreads: threadCount,
+    instagramThreads: igThreadCount,
     paymentTransactions: transactions.length,
   };
 }

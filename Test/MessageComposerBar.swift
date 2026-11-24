@@ -859,7 +859,8 @@ struct MessageInsertPaymentLinkSheet: View {
                             viewModel.depositLinkUrl = nil
                             await viewModel.createDepositLink(
                                 serviceAmountCents: amountCents,
-                                bookingRequestId: bookingRequestId
+                                bookingRequestId: bookingRequestId,
+                                source: "ios-messages"
                             )
                         }
                     } label: {

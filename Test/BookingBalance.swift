@@ -303,8 +303,9 @@ struct BookingPaymentSection: View {
                         say("Link copied.", ok: true)
                     }
                     .font(.caption.weight(.semibold))
-                    if let url = URL(string: linkURL) {
-                        ShareLink(item: url) { Image(systemName: "square.and.arrow.up") }
+                    if URL(string: linkURL) != nil {
+                        // Share as plain text so Messages keeps a working, tappable link.
+                        ShareLink(item: linkURL) { Image(systemName: "square.and.arrow.up") }
                             .font(.caption.weight(.semibold))
                     }
                 }

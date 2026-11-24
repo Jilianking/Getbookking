@@ -2731,6 +2731,14 @@ async function stripeAccountIdForCheckout(tenantId, tenantData, paymentIntentId)
   return ((tenantData && tenantData.stripeAccountId) || "").toString().trim();
 }
 
+/** Short label from an app (screen name or app version) for logs and Stripe metadata. */
+function linkTag(raw) {
+  return (raw == null ? "" : String(raw))
+    .replace(/[^A-Za-z0-9 ._()\-]/g, "")
+    .trim()
+    .slice(0, 40);
+}
+
 function parseServiceAmountCents(data) {
   if (typeof data?.serviceAmountCents === "number") {
     return Math.round(data.serviceAmountCents);
@@ -3769,6 +3777,9 @@ exports.createDepositLink = functions
       chargeStripeScope: payCtx.scope || "tenant",
       checkoutChannel: "deposit_link",
       ...(data && data.balanceLink === true ? { balanceLink: "true" } : {}),
+      // Which screen and app version made this link (shows in Stripe metadata and the logs).
+      linkSource: linkTag(data?.source) || "unknown",
+      linkAppVersion: linkTag(data?.appVersion) || "unknown",
       ...splitFee.splitMeta,
     };
     const pi = await createCustomerCheckoutPaymentIntent(stripe, stripeAccountId, {
@@ -3777,6 +3788,20 @@ exports.createDepositLink = functions
       application_fee_amount: feeCents,
       metadata: paymentMeta,
       description: productDescription ? `${productName} — ${productDescription}` : productName,
+    });
+    console.log("createDepositLink created", {
+      tenantId: tenantId || "",
+      paymentIntentId: pi.id,
+      source: paymentMeta.linkSource,
+      appVersion: paymentMeta.linkAppVersion,
+      sentServiceAmountCents: data?.serviceAmountCents ?? null,
+      sentAmountCents: data?.amountCents ?? null,
+      serviceCents: checkout.serviceCents,
+      surchargeCents: checkout.surchargeCents,
+      totalCents: checkout.totalCents,
+      paymentKind,
+      bookingRequestId: bookingRequestId || "",
+      balanceLink: data?.balanceLink === true,
     });
     if (tenantId) {
       await db.collection("tenants").doc(tenantId).collection("paymentCheckouts").doc(pi.id).set({
@@ -7547,6 +7572,53 @@ async function depositPayFullInfo(tenantId, meta) {
   return { available: fullCents > depositCents && fullCents <= 5000000, depositCents, fullCents };
 }
 
+/** Service and appointment time for the pay page (shown above the amount and on the receipt). */
+async function payPageBookingInfo(tenantId, tenantData, bookingRequestId) {
+  const id = (bookingRequestId || "").toString().trim();
+  if (!id) return null;
+  const snap = await db.collection("tenants").doc(tenantId).collection("bookingRequests").doc(id).get();
+  if (!snap.exists) return null;
+  const b = snap.data() || {};
+  const serviceName = (b.serviceName || "").toString().trim();
+  const start = b.requestedStartTime && typeof b.requestedStartTime.toDate === "function" ? b.requestedStartTime.toDate() : null;
+  let whenLabel = "";
+  let dateLabel = "";
+  if (start) {
+    const tz = ((tenantData && (tenantData.timeZone || (tenantData.availability && tenantData.availability.timeZone))) || "America/New_York").toString();
+    const fmt = (opts) => {
+      try {
+        return new Intl.DateTimeFormat("en-US", { timeZone: tz, ...opts }).format(start);
+      } catch (e) {
+        return new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", ...opts }).format(start);
+      }
+    };
+    dateLabel = fmt({ weekday: "short", month: "short", day: "numeric" });
+    whenLabel = `${dateLabel} at ${fmt({ hour: "numeric", minute: "2-digit" })}`;
+  }
+  const dur = parseInt(b.durationMinutes, 10);
+  const minutes = Number.isFinite(dur) && dur > 0 ? dur : 60;
+  return {
+    serviceName,
+    whenLabel,
+    startIso: start ? start.toISOString() : "",
+    endIso: start ? new Date(start.getTime() + minutes * 60000).toISOString() : "",
+  };
+}
+
+/** Card, date, and a short code for the paid receipt (latest_charge must be expanded). */
+function payPageReceipt(pi) {
+  const charge = pi.latest_charge && typeof pi.latest_charge === "object" ? pi.latest_charge : null;
+  const card = charge && charge.payment_method_details && charge.payment_method_details.card;
+  const created = charge && charge.created ? charge.created : pi.created;
+  return {
+    brand: card && card.brand ? String(card.brand) : "",
+    last4: card && card.last4 ? String(card.last4) : "",
+    wallet: card && card.wallet && card.wallet.type ? String(card.wallet.type) : "",
+    paidAtMs: created ? created * 1000 : Date.now(),
+    code: String(pi.id || "").slice(-8).toUpperCase(),
+  };
+}
+
 exports.getDepositCheckout = onCall(publicWebCallableOptions, async (request) => {
   const data = request.data || {};
   const tenantSlug = (data.tenantSlug || "").toString().trim().toLowerCase();
@@ -7564,9 +7636,12 @@ exports.getDepositCheckout = onCall(publicWebCallableOptions, async (request) =>
   if (!stripeAccountId) {
     throw new HttpsError("failed-precondition", "This business is not accepting payments yet.");
   }
-  const pi = await stripe.paymentIntents.retrieve(paymentIntentId, {
-    stripeAccount: stripeAccountId,
-  });
+  // latest_charge: the card used and when, for the receipt once it's paid.
+  const pi = await stripe.paymentIntents.retrieve(
+    paymentIntentId,
+    { expand: ["latest_charge"] },
+    { stripeAccount: stripeAccountId }
+  );
   const meta = pi.metadata || {};
   if ((meta.tenantId || "") !== resolved.id) {
     throw new HttpsError("permission-denied", "This payment link is not for this business.");
@@ -7577,11 +7652,19 @@ exports.getDepositCheckout = onCall(publicWebCallableOptions, async (request) =>
   const paid = pi.status === "succeeded";
   const payFull = paid ? { available: false } : await depositPayFullInfo(resolved.id, meta).catch(() => ({ available: false }));
   const payFullOn = meta.payFull === "true";
+  const booking = await payPageBookingInfo(resolved.id, tenantData, meta.bookingRequestId).catch(() => null);
   return {
     paid,
     status: pi.status,
     businessName,
     productName: (meta.productName || "Payment").toString(),
+    // deposit | full | balance | payment: the pay page title ("Pay your deposit", …).
+    kind: meta.balanceLink === "true" ? "balance"
+      : (meta.paymentKind || "") === "deposit" ? (payFullOn ? "full" : "deposit")
+        : "payment",
+    platformFeeCents: priced ? priced.platformFeeCents : 0,
+    booking,
+    receipt: paid ? payPageReceipt(pi) : null,
     clientSecret: paid ? "" : pi.client_secret,
     publishableKey: pk,
     stripeAccountId,

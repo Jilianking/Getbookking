@@ -521,6 +521,8 @@ async function runAction(ctx, name, run, deps) {
       bookingRequestId: run.requestId || undefined,
       paymentKind: run.kind,
       productName: label,
+      source: "ai-assistant",
+      appVersion: "server",
     });
     const url = link && link.url;
     if (!url) throw new Error("No link returned");

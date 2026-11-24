@@ -6876,19 +6876,65 @@ function confirmCheckoutPayment(prepare, stripe, elements, confirmParams, before
     });
   });
 }
+var DEPOSIT_PAY_CSS =
+  '.bk-pay-page{max-width:440px;margin:40px auto 0;padding:0 16px}' +
+  '.bk-pay-card{padding:24px 22px 20px}' +
+  '.bk-pay-shop{display:flex;align-items:center;gap:12px;margin:0 0 18px}' +
+  '.bk-pay-logo{width:40px;height:40px;border-radius:50%;object-fit:cover;flex:none}' +
+  '.bk-pay-initials{width:40px;height:40px;border-radius:50%;flex:none;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;background:rgba(0,0,0,.06);color:inherit}' +
+  '.bk-pay-shop-name{margin:0;font-size:15px;font-weight:600;line-height:1.25}' +
+  '.bk-pay-shop-host{margin:0;font-size:12px;opacity:.6}' +
+  '.bk-pay-page h1{margin:0 0 4px;font-size:24px}' +
+  '.bk-pay-when{margin:0 0 18px;font-size:14px;opacity:.7}' +
+  '.bk-pay-row{display:flex;justify-content:space-between;align-items:center;margin:7px 0}' +
+  '.bk-pay-total{margin:12px 0 0;padding-top:12px;border-top:1px solid rgba(0,0,0,.1);font-weight:650}' +
+  '.bk-pay-fee-label{position:relative;display:inline-flex;align-items:center;gap:6px}' +
+  '.bk-pay-info{width:18px;height:18px;border-radius:50%;border:1px solid currentColor;background:none;color:inherit;opacity:.55;font:600 11px/16px Georgia,serif;padding:0;cursor:pointer}' +
+  '.bk-pay-info[aria-expanded="true"]{opacity:1}' +
+  '.bk-pay-tip{display:none;position:absolute;left:-6px;bottom:calc(100% + 8px);z-index:5;width:min(300px,calc(100vw - 64px));padding:12px 14px;border-radius:14px;background:#fff;color:#2c2018;' +
+  'box-shadow:0 8px 28px rgba(0,0,0,.16),0 1px 3px rgba(0,0,0,.08);font-size:13px;line-height:1.5}' +
+  '.bk-pay-tip.is-open{display:block}' +
+  '.bk-pay-tip .bk-pay-row{margin:2px 0;gap:12px}' +
+  '.bk-pay-tip-note{margin:6px 0 0;opacity:.6}' +
+  '.bk-pay-secure{margin:12px 0 0;text-align:center;font-size:12px;opacity:.6}' +
+  '.bk-pay-done{text-align:center}' +
+  '.bk-pay-check{width:56px;height:56px;margin:4px auto 12px;border-radius:50%;background:#e6f2e6;color:#2f6b34;display:flex;align-items:center;justify-content:center}' +
+  '.bk-pay-done h2{margin:0;font-size:24px}' +
+  '.bk-pay-done-sub{margin:6px 0 18px;opacity:.7}' +
+  '.bk-pay-receipt{text-align:left;border:1px solid rgba(0,0,0,.1);border-radius:12px;padding:8px 14px;font-size:14px}' +
+  '.bk-pay-receipt .bk-pay-row{gap:16px}.bk-pay-receipt .bk-pay-row span:first-child{opacity:.6}' +
+  '.bk-pay-receipt .bk-pay-row span:last-child{text-align:right}' +
+  '.bk-pay-code{font-family:ui-monospace,Menlo,monospace;font-size:13px;letter-spacing:.04em}' +
+  '.bk-pay-actions{display:flex;gap:10px;margin:16px 0 0}' +
+  '.bk-pay-actions a{flex:1;display:flex;align-items:center;justify-content:center;padding:11px 10px;border:1px solid currentColor;border-radius:10px;color:inherit;text-decoration:none;font-size:14px;font-weight:600}' +
+  '.bk-pay-contact{margin:14px 0 0;font-size:13px;opacity:.7}' +
+  '.bk-pay-contact a{color:inherit}' +
+  '.bk-pay-page .bk-powered-wrap{padding:18px 16px 28px}';
+
 function depositPayPageHtml(tenant) {
   var name = tenantSiteDisplayName(tenant, 'Payment');
-  return '<div class="container" style="max-width:440px;margin:48px auto;padding:0 16px">' +
-    '<div class="card" id="bk-pay-card" style="padding:28px 24px">' +
-    '<p id="bk-pay-business" style="margin:0 0 8px;font-size:13px;letter-spacing:.04em;text-transform:uppercase;opacity:.6">' + esc(name) + '</p>' +
-    '<h1 id="bk-pay-title" style="margin:0 0 18px;font-size:22px">Payment</h1>' +
+  var logo = tenant && tenant.logoUrl ? String(tenant.logoUrl) : '';
+  var initials = String(name || '').split(/\s+/).filter(Boolean).slice(0, 2).map(function(w) { return w.charAt(0); }).join('').toUpperCase() || '$';
+  var host = String(location.hostname || '').replace(/^www\./, '');
+  var lock = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-1px"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>';
+  return '<style>' + DEPOSIT_PAY_CSS + '</style>' +
+    '<div class="bk-pay-page">' +
+    '<div class="card bk-pay-card" id="bk-pay-card">' +
+    '<div class="bk-pay-shop">' +
+    (logo ? '<img class="bk-pay-logo" src="' + esc(logo) + '" alt="">' : '<span class="bk-pay-initials" aria-hidden="true">' + esc(initials) + '</span>') +
+    '<div><p class="bk-pay-shop-name" id="bk-pay-business">' + esc(name) + '</p><p class="bk-pay-shop-host">' + esc(host) + '</p></div>' +
+    '</div>' +
+    '<div id="bk-pay-main">' +
+    '<h1 id="bk-pay-title">Payment</h1>' +
+    '<p class="bk-pay-when" id="bk-pay-when" style="display:none"></p>' +
     '<div id="bk-pay-choice" style="display:none;margin:0 0 16px" role="radiogroup" aria-label="How much to pay"></div>' +
     '<div id="bk-pay-summary" style="display:none;margin-bottom:16px;font-size:15px">' +
-    '<div style="display:flex;justify-content:space-between;margin:6px 0"><span>Service</span><span id="bk-pay-service"></span></div>' +
-    '<div style="display:flex;justify-content:space-between;margin:6px 0"><span>Processing &amp; service fees</span><span id="bk-pay-fee"></span></div>' +
-    '<div id="bk-pay-tip-row" style="display:none;justify-content:space-between;margin:6px 0"><span>Tip</span><span id="bk-pay-tip"></span></div>' +
-    '<div style="display:flex;justify-content:space-between;margin:10px 0 0;font-weight:650"><span>Customer pays</span><span id="bk-pay-total"></span></div>' +
-    '<p id="bk-pay-rate" style="margin:8px 0 0;font-size:13px;opacity:.65"></p>' +
+    '<div class="bk-pay-row"><span id="bk-pay-service-label">Service</span><span id="bk-pay-service"></span></div>' +
+    '<div class="bk-pay-row"><span class="bk-pay-fee-label">Processing &amp; service fees' +
+    '<button type="button" class="bk-pay-info" id="bk-pay-info" aria-label="Fee details" aria-expanded="false" aria-controls="bk-pay-fee-tip">i</button>' +
+    '<span class="bk-pay-tip" id="bk-pay-fee-tip" role="tooltip"></span></span><span id="bk-pay-fee"></span></div>' +
+    '<div class="bk-pay-row" id="bk-pay-tip-row" style="display:none"><span>Tip</span><span id="bk-pay-tip"></span></div>' +
+    '<div class="bk-pay-row bk-pay-total"><span>Total</span><span id="bk-pay-total"></span></div>' +
     '</div>' +
     '<div id="bk-pay-tips" style="display:none;margin:0 0 16px">' +
     '<p style="margin:0 0 8px;font-size:14px;font-weight:600">Add a tip?</p>' +
@@ -6901,8 +6947,49 @@ function depositPayPageHtml(tenant) {
     '<div id="bk-pay-element"></div>' +
     '<p id="bk-pay-error" style="display:none;color:#9b2c2c;margin:12px 0 0"></p>' +
     '<button type="button" id="bk-pay-button" style="display:none;width:100%;margin-top:16px" class="btn">Pay</button>' +
-    '</div></div>';
+    '<p class="bk-pay-secure" id="bk-pay-secure" style="display:none">' + lock + ' Secure payment by Stripe</p>' +
+    '</div>' +
+    '<div class="bk-pay-done" id="bk-pay-done" style="display:none"></div>' +
+    '</div>' +
+    '<div id="bk-pay-powered-slot"></div>' +
+    '</div>';
 }
+
+/** Title for the pay page: matches the link preview ("Pay your deposit" / "Pay your balance"). */
+function depositPayTitle(kind, productName) {
+  if (kind === 'deposit') return 'Pay your deposit';
+  if (kind === 'balance') return 'Pay your balance';
+  if (kind === 'full') return 'Pay in full';
+  return productName || 'Payment';
+}
+
+/** Card line on the receipt: "Visa ending 4242", "Apple Pay · Visa ending 4242". */
+function depositPayCardLabel(r) {
+  if (!r || !r.last4) return '';
+  var brands = { visa: 'Visa', mastercard: 'Mastercard', amex: 'Amex', discover: 'Discover', jcb: 'JCB', diners: 'Diners', unionpay: 'UnionPay' };
+  var wallets = { apple_pay: 'Apple Pay', google_pay: 'Google Pay', link: 'Link' };
+  var brand = brands[String(r.brand || '').toLowerCase()] || 'Card';
+  var line = brand + ' ending ' + r.last4;
+  var w = wallets[String(r.wallet || '').toLowerCase()];
+  return w ? w + ' · ' + line : line;
+}
+
+/** "Add to calendar" file for the appointment (opens Calendar on iPhone). */
+function depositPayCalendarHref(booking, shopName) {
+  if (!booking || !booking.startIso || !booking.endIso) return '';
+  var stamp = function(iso) { return String(iso).replace(/[-:]/g, '').replace(/\.\d+Z$/, 'Z'); };
+  var clean = function(t) { return String(t || '').replace(/[\;,]/g, function(c) { return '\\' + c; }).replace(/\r?\n/g, ' '); };
+  var title = (booking.serviceName ? booking.serviceName + ' · ' : '') + (shopName || 'Appointment');
+  var ics = [
+    'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Get Bookking//Pay page//EN', 'BEGIN:VEVENT',
+    'UID:' + stamp(booking.startIso) + '-' + Math.random().toString(36).slice(2) + '@getbookking.com',
+    'DTSTAMP:' + stamp(new Date().toISOString()),
+    'DTSTART:' + stamp(booking.startIso), 'DTEND:' + stamp(booking.endIso),
+    'SUMMARY:' + clean(title), 'END:VEVENT', 'END:VCALENDAR'
+  ].join('\r\n');
+  return 'data:text/calendar;charset=utf-8,' + encodeURIComponent(ics);
+}
+
 function bindDepositPayPage(tenant) {
   var params;
   try { params = new URLSearchParams(location.search || ''); } catch (e) { params = null; }
@@ -6911,6 +6998,89 @@ function bindDepositPayPage(tenant) {
   var errorEl = document.getElementById('bk-pay-error');
   var summaryEl = document.getElementById('bk-pay-summary');
   var button = document.getElementById('bk-pay-button');
+  var shopName = tenantSiteDisplayName(tenant, '') || 'the business';
+  // What this payment is for (service, time) and its kind; kept apart from the repriced amounts.
+  var booking = null;
+  var payKind = 'payment';
+  // "Powered by Get Bookking" right under the card instead of the bottom of the page.
+  var poweredSlot = document.getElementById('bk-pay-powered-slot');
+  var poweredWrap = document.querySelector('.bk-powered-wrap');
+  if (poweredSlot && poweredWrap) poweredSlot.appendChild(poweredWrap);
+  // Fee details: hidden until the ⓘ is tapped; tapping anywhere else closes it.
+  var infoBtn = document.getElementById('bk-pay-info');
+  var feeTip = document.getElementById('bk-pay-fee-tip');
+  function setFeeTip(open) {
+    if (!infoBtn || !feeTip) return;
+    feeTip.classList.toggle('is-open', !!open);
+    infoBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+  }
+  if (infoBtn && feeTip) {
+    infoBtn.addEventListener('click', function(e) {
+      e.stopPropagation();
+      setFeeTip(!feeTip.classList.contains('is-open'));
+    });
+    document.addEventListener('click', function(e) {
+      if (!feeTip.contains(e.target)) setFeeTip(false);
+    });
+    document.addEventListener('keydown', function(e) { if (e.key === 'Escape') setFeeTip(false); });
+  }
+  function setTitle(kind, productName) {
+    var title = document.getElementById('bk-pay-title');
+    if (title) title.textContent = depositPayTitle(kind, productName);
+    var label = document.getElementById('bk-pay-service-label');
+    if (label) label.textContent = kind === 'deposit' ? 'Deposit' : kind === 'balance' ? 'Balance' : 'Service';
+  }
+  function paintBooking() {
+    var when = document.getElementById('bk-pay-when');
+    if (!when) return;
+    var parts = [];
+    if (booking && booking.serviceName) parts.push(booking.serviceName);
+    if (booking && booking.whenLabel) parts.push(booking.whenLabel);
+    when.textContent = parts.join(' · ');
+    when.style.display = parts.length ? '' : 'none';
+  }
+  /** The receipt after paying (and whenever a paid link is opened again). */
+  function renderDone(data) {
+    var main = document.getElementById('bk-pay-main');
+    var done = document.getElementById('bk-pay-done');
+    if (!done) return;
+    var kind = (data && data.kind) || payKind;
+    var b = (data && data.booking) || booking;
+    var r = (data && data.receipt) || null;
+    var heading = kind === 'deposit' ? 'Deposit paid' : kind === 'balance' ? 'Balance paid' : kind === 'full' ? 'Paid in full' : 'Payment received';
+    var sub = kind === 'balance' ? 'You\u2019re all paid up with ' + shopName + '.'
+      : b && b.whenLabel ? 'Your spot with ' + shopName + ' is held.'
+        : shopName + ' has your payment. Thank you.';
+    var rows = [];
+    var row = function(label, value, cls) {
+      if (value) rows.push('<div class="bk-pay-row"><span>' + esc(label) + '</span><span' + (cls ? ' class="' + cls + '"' : '') + '>' + esc(value) + '</span></div>');
+    };
+    row('Appointment', b && b.whenLabel);
+    row('Service', b && b.serviceName);
+    row('Paid', data && data.totalCents != null ? money(data.totalCents) : '');
+    row('Card', depositPayCardLabel(r));
+    row('Date', r && r.paidAtMs ? new Date(r.paidAtMs).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '');
+    row('Confirmation', r && r.code, 'bk-pay-code');
+    var cal = b && b.startIso && new Date(b.startIso).getTime() > Date.now() ? depositPayCalendarHref(b, shopName) : '';
+    var actions = (cal ? '<a href="' + cal + '" download="appointment.ics">Add to calendar</a>' : '') +
+      '<a href="' + esc(tenantBaseUrl(tenant)) + '">Visit website</a>';
+    var tel = tenant.contactPhone ? telHrefFromPhone(tenant.contactPhone) : '';
+    var contact = tel ? '<p class="bk-pay-contact">Questions? Call or text ' + esc(shopName) + ' at <a href="' + esc(tel) + '">' + contactPhoneDisplayEscaped(tenant) + '</a></p>' : '';
+    done.innerHTML =
+      '<div class="bk-pay-check" aria-hidden="true"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></div>' +
+      '<h2>' + esc(heading) + '</h2>' +
+      '<p class="bk-pay-done-sub">' + esc(sub) + '</p>' +
+      (rows.length ? '<div class="bk-pay-receipt">' + rows.join('') + '</div>' : '') +
+      '<div class="bk-pay-actions">' + actions + '</div>' + contact;
+    if (main) main.style.display = 'none';
+    done.style.display = '';
+    try { window.scrollTo(0, 0); } catch (e) { /* ignore */ }
+  }
+  function loadReceipt(fallback) {
+    return functions.httpsCallable('getDepositCheckout')({ tenantSlug: tenant.slug, paymentIntentId: pi })
+      .then(function(res) { renderDone((res && res.data) || fallback); })
+      .catch(function() { renderDone(fallback); });
+  }
   function showPayError(msg) {
     if (!errorEl) return;
     errorEl.style.display = msg ? 'block' : 'none';
@@ -6924,7 +7094,6 @@ function bindDepositPayPage(tenant) {
     var serviceEl = document.getElementById('bk-pay-service');
     var feeEl = document.getElementById('bk-pay-fee');
     var totalEl = document.getElementById('bk-pay-total');
-    var rateEl = document.getElementById('bk-pay-rate');
     if (serviceEl) serviceEl.textContent = money(data.serviceCents);
     if (feeEl) feeEl.textContent = data.surchargeCents == null ? '…' : money(data.surchargeCents);
     var tipRow = document.getElementById('bk-pay-tip-row');
@@ -6933,9 +7102,16 @@ function bindDepositPayPage(tenant) {
     if (tipRow) tipRow.style.display = tip > 0 ? 'flex' : 'none';
     if (tipVal) tipVal.textContent = money(tip);
     if (totalEl) totalEl.textContent = data.totalCents == null ? '…' : money(data.totalCents);
-    if (rateEl) {
-      var method = checkoutMethodTitle(data.method);
-      rateEl.textContent = method + ' · Stripe ' + (data.rateLabel || '2.9% + 30¢') + ' plus a 1% platform fee.';
+    if (feeTip) {
+      var fee = Number(data.surchargeCents) || 0;
+      var platform = Number(data.platformFeeCents);
+      if (!(platform >= 0) || platform > fee) platform = Math.min(fee, Math.max(1, Math.round(((Number(data.serviceCents) || 0) + fee) / 100)));
+      var procName = data.method === 'instant_bank' ? 'Bank processing' : 'Card processing';
+      var amountWord = payKind === 'deposit' ? 'deposit' : payKind === 'balance' ? 'balance' : 'service';
+      feeTip.innerHTML =
+        '<span class="bk-pay-row"><span>' + procName + ' (Stripe ' + esc(data.rateLabel || '2.9% + 30\u00a2') + ')</span><span>' + esc(money(fee - platform)) + '</span></span>' +
+        '<span class="bk-pay-row"><span>Platform fee (1%)</span><span>' + esc(money(platform)) + '</span></span>' +
+        '<span class="bk-pay-tip-note" style="display:block">' + esc(shopName) + ' receives the full ' + amountWord + ' amount.</span>';
     }
     if (button && data.totalCents != null) button.textContent = 'Pay ' + money(data.totalCents);
   }
@@ -6943,10 +7119,8 @@ function bindDepositPayPage(tenant) {
     if (statusEl) statusEl.textContent = 'This payment link is missing its payment.';
     return;
   }
-  if (params && params.get('redirect_status') === 'succeeded') {
-    if (statusEl) statusEl.textContent = 'Payment received. Thank you.';
-    return;
-  }
+  // Back from a bank or wallet redirect: the receipt comes from the payment itself below.
+  var returnedPaid = !!(params && params.get('redirect_status') === 'succeeded');
   ensureAnonymousAuth().then(function() {
     var stripeReady = (window.BKSitePerf && window.BKSitePerf.ensureStripe)
       ? window.BKSitePerf.ensureStripe()
@@ -6959,11 +7133,17 @@ function bindDepositPayPage(tenant) {
     });
   }).then(function(res) {
     var data = (res && res.data) || {};
-    var title = document.getElementById('bk-pay-title');
-    if (title) title.textContent = data.productName || 'Payment';
+    booking = data.booking || null;
+    payKind = data.kind || 'payment';
+    setTitle(payKind, data.productName);
+    paintBooking();
     if (data.paid) {
-      if (statusEl) statusEl.textContent = 'Payment received. Thank you.';
-      paintSummary(data);
+      renderDone(data);
+      return;
+    }
+    if (returnedPaid) {
+      // Stripe can take a moment to mark it paid after the redirect.
+      renderDone(data);
       return;
     }
     if (!data.clientSecret || !data.stripeAccountId) {
@@ -6989,6 +7169,8 @@ function bindDepositPayPage(tenant) {
     var paymentElement = elements.create('payment', { layout: 'tabs' });
     paymentElement.mount('#bk-pay-element');
     if (button) button.style.display = '';
+    var secureEl = document.getElementById('bk-pay-secure');
+    if (secureEl) secureEl.style.display = '';
     var payState = data;
     // Tip choices (15/20/25%/custom/no tip). The tip goes on top with no card fee.
     function applyTip(cents, chosenBtn) {
@@ -7092,8 +7274,8 @@ function bindDepositPayPage(tenant) {
         }).then(function(res) {
           var priced = (res && res.data) || {};
           payState = Object.assign({}, payState, priced);
-          var title = document.getElementById('bk-pay-title');
-          if (title && priced.productName) title.textContent = priced.productName;
+          payKind = full ? 'full' : 'deposit';
+          setTitle(payKind, priced.productName);
           paintSummary(payState);
           // Tips are offered on a full payment (when the shop takes tips), not on a deposit.
           if (full && data.tipsEnabled) showTips(Number(priced.serviceCents) || 0); else hideTips();
@@ -7133,13 +7315,10 @@ function bindDepositPayPage(tenant) {
           { return_url: location.href }
         ).then(function(result) {
           if (result.error) throw result.error;
-          if (statusEl) {
-            statusEl.style.display = '';
-            statusEl.textContent = 'Payment received. Thank you.';
-          }
           if (button) button.style.display = 'none';
           var mount = document.getElementById('bk-pay-element');
           if (mount) mount.innerHTML = '';
+          return loadReceipt(Object.assign({}, payState, { kind: payKind, booking: booking }));
         }).catch(function(err) {
           button.disabled = false;
           showPayError((err && err.message) ? err.message : formatFirebaseHttpsError(err));

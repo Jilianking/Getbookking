@@ -576,7 +576,11 @@ class RequestsViewModel: ObservableObject {
         }
         let rid = (booking.documentId ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         do {
-            var payload: [String: Any] = ["serviceAmountCents": cents]
+            var payload: [String: Any] = [
+                "serviceAmountCents": cents,
+                "source": "ios-booking-request",
+                "appVersion": AppVersionInfo.label,
+            ]
             if !rid.isEmpty {
                 payload["bookingRequestId"] = rid
                 // Remember the amount for "Resend deposit link".

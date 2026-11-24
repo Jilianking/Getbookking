@@ -93,7 +93,7 @@ function registerBookingDepositFunctions(exportsObj, deps) {
       let link;
       try {
         link = await exportsObj.createDepositLink.run(
-          { serviceAmountCents: depositCents, bookingRequestId: requestId, paymentKind: "deposit", productName: label },
+          { serviceAmountCents: depositCents, bookingRequestId: requestId, paymentKind: "deposit", productName: label, source: "online-booking", appVersion: "server" },
           { auth: { uid: ownerUid, token: {} } }
         );
       } catch (e) {

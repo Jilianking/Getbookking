@@ -2731,6 +2731,14 @@ async function stripeAccountIdForCheckout(tenantId, tenantData, paymentIntentId)
   return ((tenantData && tenantData.stripeAccountId) || "").toString().trim();
 }
 
+/** Short label from an app (screen name or app version) for logs and Stripe metadata. */
+function linkTag(raw) {
+  return (raw == null ? "" : String(raw))
+    .replace(/[^A-Za-z0-9 ._()\-]/g, "")
+    .trim()
+    .slice(0, 40);
+}
+
 function parseServiceAmountCents(data) {
   if (typeof data?.serviceAmountCents === "number") {
     return Math.round(data.serviceAmountCents);
@@ -3769,6 +3777,9 @@ exports.createDepositLink = functions
       chargeStripeScope: payCtx.scope || "tenant",
       checkoutChannel: "deposit_link",
       ...(data && data.balanceLink === true ? { balanceLink: "true" } : {}),
+      // Which screen and app version made this link (shows in Stripe metadata and the logs).
+      linkSource: linkTag(data?.source) || "unknown",
+      linkAppVersion: linkTag(data?.appVersion) || "unknown",
       ...splitFee.splitMeta,
     };
     const pi = await createCustomerCheckoutPaymentIntent(stripe, stripeAccountId, {
@@ -3777,6 +3788,20 @@ exports.createDepositLink = functions
       application_fee_amount: feeCents,
       metadata: paymentMeta,
       description: productDescription ? `${productName} — ${productDescription}` : productName,
+    });
+    console.log("createDepositLink created", {
+      tenantId: tenantId || "",
+      paymentIntentId: pi.id,
+      source: paymentMeta.linkSource,
+      appVersion: paymentMeta.linkAppVersion,
+      sentServiceAmountCents: data?.serviceAmountCents ?? null,
+      sentAmountCents: data?.amountCents ?? null,
+      serviceCents: checkout.serviceCents,
+      surchargeCents: checkout.surchargeCents,
+      totalCents: checkout.totalCents,
+      paymentKind,
+      bookingRequestId: bookingRequestId || "",
+      balanceLink: data?.balanceLink === true,
     });
     if (tenantId) {
       await db.collection("tenants").doc(tenantId).collection("paymentCheckouts").doc(pi.id).set({

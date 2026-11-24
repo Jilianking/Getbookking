@@ -1629,13 +1629,17 @@ class PaymentsViewModel: ObservableObject {
     }
 
     /// Creates a Stripe Payment Link for the service/deposit amount (fees grossed up server-side).
-    func createDepositLink(serviceAmountCents: Int, bookingRequestId: String? = nil) async {
+    func createDepositLink(serviceAmountCents: Int, bookingRequestId: String? = nil, source: String) async {
         guard serviceAmountCents >= 50 else { return }
         isCreatingDepositLink = true
         errorMessage = nil
         depositLinkUrl = nil
         do {
-            var payload: [String: Any] = ["serviceAmountCents": serviceAmountCents]
+            var payload: [String: Any] = [
+                "serviceAmountCents": serviceAmountCents,
+                "source": source,
+                "appVersion": AppVersionInfo.label,
+            ]
             if let bookingRequestId, !bookingRequestId.isEmpty {
                 payload["bookingRequestId"] = bookingRequestId
             }
@@ -1840,6 +1844,8 @@ class PaymentsViewModel: ObservableObject {
             "productName": "Payment",
             "productDescription": "Secure online card entry",
             "paymentKind": "service",
+            "source": "ios-manual-link",
+            "appVersion": AppVersionInfo.label,
         ]
         if let bookingRequestId, !bookingRequestId.isEmpty {
             payload["bookingRequestId"] = bookingRequestId
@@ -2181,5 +2187,15 @@ class PaymentsViewModel: ObservableObject {
             errorMessage = FirebaseFunctionsErrorHelper.message(from: error)
             return false
         }
+    }
+}
+
+/// App version for server logs, e.g. "1.1 (22)".
+enum AppVersionInfo {
+    static var label: String {
+        let info = Bundle.main.infoDictionary
+        let version = info?["CFBundleShortVersionString"] as? String ?? "?"
+        let build = info?["CFBundleVersion"] as? String ?? "?"
+        return "\(version) (\(build))"
     }
 }

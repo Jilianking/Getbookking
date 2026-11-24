@@ -1459,6 +1459,8 @@
       paymentKind: "payment",
       productName: v.what || "Payment",
       productDescription: v.name || undefined,
+      source: "web-payments",
+      appVersion: "web",
     }).then(function (res) {
       var url = res && res.data && res.data.url;
       if (!url) throw new Error("Couldn't create the pay link.");

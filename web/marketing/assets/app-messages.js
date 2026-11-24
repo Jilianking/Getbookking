@@ -498,7 +498,7 @@
     var btn = $("msgPaySend");
     if (btn) btn.disabled = true;
     var fns = firebase.app().functions(REGION);
-    fns.httpsCallable("createDepositLink")({ serviceAmountCents: cents }).then(function (res) {
+    fns.httpsCallable("createDepositLink")({ serviceAmountCents: cents, source: "web-messages", appVersion: "web" }).then(function (res) {
       var url = res && res.data && res.data.url;
       if (!url) throw new Error("Couldn't create the pay link.");
       // Same message the app sends: an empty body with the pay link and amount attached.

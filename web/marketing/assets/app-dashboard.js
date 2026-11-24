@@ -785,6 +785,8 @@
       .httpsCallable("createDepositLink")({
         serviceAmountCents: cents,
         bookingRequestId: requestId,
+        source: "web-booking-request",
+        appVersion: "web",
       })
       .then(function (res) {
         var url = res && res.data && res.data.url;

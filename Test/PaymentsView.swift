@@ -1152,7 +1152,7 @@ struct DepositLinkSheet: View {
                     } else {
                         Button(action: {
                             isAmountFocused = false
-                            Task { await viewModel.createDepositLink(serviceAmountCents: serviceAmountCents) }
+                            Task { await viewModel.createDepositLink(serviceAmountCents: serviceAmountCents, source: "ios-payments") }
                         }) {
                             HStack {
                                 if viewModel.isCreatingDepositLink {

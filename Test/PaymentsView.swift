@@ -1136,8 +1136,9 @@ struct DepositLinkSheet: View {
                                 .buttonStyle(.bordered)
                                 .tint(AppDesign.brandWarm)
                                 .frame(maxWidth: .infinity)
-                                // Plain text: sharing a URL with a message makes Messages send unreadable data and a broken link.
-                                ShareLink(item: depositShareText(urlString: urlString)) {
+                                // Just the link, as plain text: a URL plus a message makes Messages send unreadable
+                                // data, and text plus a link leaves an empty bubble. The preview says "Pay your deposit".
+                                ShareLink(item: urlString) {
                                     Label("Share", systemImage: "square.and.arrow.up")
                                         .font(.subheadline.weight(.medium))
                                         .lineLimit(1)

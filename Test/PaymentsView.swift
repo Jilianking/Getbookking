@@ -1112,7 +1112,7 @@ struct DepositLinkSheet: View {
                             .padding(.horizontal, 24)
                     }
 
-                    if let urlString = viewModel.depositLinkUrl, let url = URL(string: urlString) {
+                    if let urlString = viewModel.depositLinkUrl, URL(string: urlString) != nil {
                         VStack(spacing: 16) {
                             Text("Link ready")
                                 .font(.subheadline.weight(.semibold))
@@ -1136,7 +1136,8 @@ struct DepositLinkSheet: View {
                                 .buttonStyle(.bordered)
                                 .tint(AppDesign.brandWarm)
                                 .frame(maxWidth: .infinity)
-                                ShareLink(item: url, subject: Text("Deposit link"), message: Text("Pay your deposit")) {
+                                // Plain text: sharing a URL with a message makes Messages send unreadable data and a broken link.
+                                ShareLink(item: depositShareText(urlString: urlString)) {
                                     Label("Share", systemImage: "square.and.arrow.up")
                                         .font(.subheadline.weight(.medium))
                                         .lineLimit(1)
@@ -1197,11 +1198,16 @@ struct DepositLinkSheet: View {
         }
     }
 
-    private func sendInMessages(urlString: String) {
+    /// Same text for Share and Send in Messages, e.g. "Pay your $100.00 deposit: https://…".
+    private func depositShareText(urlString: String) -> String {
         let amountLabel = CardCheckoutPricing.formatUSD(cents: serviceAmountCents)
+        return "Pay your \(amountLabel) deposit: \(urlString)"
+    }
+
+    private func sendInMessages(urlString: String) {
         drawerState.openExistingMessagesThread(
             phone: nil,
-            body: "Pay your \(amountLabel) deposit: \(urlString)"
+            body: depositShareText(urlString: urlString)
         )
         onDismiss()
     }
